@@ -196,6 +196,8 @@ export interface HideSpot {
   door: Door | null;
   /** The room node it is searched from. */
   node: NavNode | null;
+  /** When an officer last looked in it (the scene's clock), if ever. */
+  inspectedAt?: number;
 }
 
 export interface Room {
@@ -283,81 +285,207 @@ function cvs(w: number, h: number, paint: (g: CanvasRenderingContext2D) => void)
 
 const hx = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
 
-/** Painted plaster: a roller's texture, a few scuffs low down, a darker skirting line. */
+/** Soft blots of a colour all over a canvas: the low, uneven tone of a real surface. */
+function mottle(g: CanvasRenderingContext2D, W: number, H: number, r: () => number, n: number, dark: string, light: string, size: number): void {
+  for (let k = 0; k < n; k++) {
+    const x = r() * W;
+    const y = r() * H;
+    const rad = size * (0.4 + r());
+    const grd = g.createRadialGradient(x, y, 0, x, y, rad);
+    grd.addColorStop(0, r() < 0.5 ? dark : light);
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd;
+    // (wrapped, so the tile has no seam)
+    for (const ox of [-W, 0, W]) for (const oy of [-H, 0, H]) g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
+  }
+}
+
+/** Painted plaster: an uneven tone, a roller's stipple, the odd hairline, scuffs and a grubby foot. */
 function plasterTex(tint: number, seed: number): HTMLCanvasElement {
   const r = seeded(seed);
-  return cvs(256, 256, (g) => {
+  const S = 512;
+  return cvs(S, S, (g) => {
     g.fillStyle = hx(tint);
-    g.fillRect(0, 0, 256, 256);
-    for (let k = 0; k < 2200; k++) {
-      g.fillStyle = r() < 0.6 ? 'rgba(0,0,0,0.035)' : 'rgba(255,255,255,0.06)';
-      g.fillRect(r() * 256, r() * 256, 2, 1);
+    g.fillRect(0, 0, S, S);
+    mottle(g, S, S, r, 46, 'rgba(70,55,40,0.07)', 'rgba(255,250,240,0.08)', 90);
+    // the roller: a fine stipple, and its faint vertical laps
+    for (let k = 0; k < 16000; k++) {
+      g.fillStyle = r() < 0.55 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.07)';
+      g.fillRect(r() * S, r() * S, 1 + (r() < 0.2 ? 1 : 0), 1);
     }
-    for (let k = 0; k < 6; k++) {
-      const x = r() * 256;
-      const y = 200 + r() * 50;
-      g.fillStyle = 'rgba(60,50,40,0.08)';
-      g.fillRect(x, y, 10 + r() * 30, 1 + r() * 2);
+    for (let x = 0; x < S; x += 48 + r() * 40) {
+      g.fillStyle = 'rgba(0,0,0,0.025)';
+      g.fillRect(x, 0, 18 + r() * 14, S);
     }
-    const grd = g.createLinearGradient(0, 220, 0, 256);
+    // a hairline crack or two
+    g.strokeStyle = 'rgba(60,48,36,0.18)';
+    g.lineWidth = 0.8;
+    for (let k = 0; k < 2; k++) {
+      let x = r() * S;
+      let y = r() * S * 0.6;
+      g.beginPath();
+      g.moveTo(x, y);
+      for (let i = 0; i < 14; i++) {
+        x += (r() - 0.5) * 14;
+        y += 4 + r() * 8;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    // scuffs low down where furniture has been pushed against it
+    for (let k = 0; k < 12; k++) {
+      g.fillStyle = `rgba(60,50,40,${0.05 + r() * 0.08})`;
+      g.fillRect(r() * S, S * 0.8 + r() * S * 0.16, 14 + r() * 50, 1 + r() * 3);
+    }
+    const grd = g.createLinearGradient(0, S * 0.84, 0, S);
     grd.addColorStop(0, 'rgba(0,0,0,0)');
-    grd.addColorStop(1, 'rgba(40,30,20,0.12)');
+    grd.addColorStop(1, 'rgba(40,30,20,0.16)');
     g.fillStyle = grd;
-    g.fillRect(0, 220, 256, 36);
+    g.fillRect(0, S * 0.84, S, S * 0.16);
   });
 }
 
-/** Boards: planks with their grain, their joints, a little wear down the middle. */
+/** Floorboards: narrow planks each its own tone, a wavy grain, knots, butt joints, nail heads, a worn sheen. */
 function boardsTex(base: number, seed: number): HTMLCanvasElement {
   const r = seeded(seed);
-  return cvs(256, 256, (g) => {
+  const S = 512;
+  const PW = 32;
+  return cvs(S, S, (g) => {
     const col = new THREE.Color(base);
-    for (let y = 0; y < 256; y += 32) {
-      const shade = 0.85 + r() * 0.25;
-      g.fillStyle = hx(col.clone().multiplyScalar(shade).getHex());
-      g.fillRect(0, y, 256, 32);
-      for (let k = 0; k < 40; k++) {
-        g.fillStyle = `rgba(40,20,5,${0.05 + r() * 0.08})`;
-        g.fillRect(0, y + r() * 32, 256, 1);
+    for (let y = 0; y < S; y += PW) {
+      // each run of boards, broken by butt joints at random
+      let x = -r() * 200;
+      while (x < S) {
+        const len = 140 + r() * 220;
+        const shade = 0.78 + r() * 0.34;
+        const c = col.clone().multiplyScalar(shade);
+        c.offsetHSL((r() - 0.5) * 0.02, 0, 0);
+        g.fillStyle = hx(c.getHex());
+        g.fillRect(x, y, len, PW);
+        // the grain: long wavering lines down the board
+        for (let k = 0; k < 9; k++) {
+          const gy = y + 2 + r() * (PW - 4);
+          const amp = 0.6 + r() * 2.2;
+          const freq = 0.01 + r() * 0.03;
+          const ph = r() * 6;
+          g.strokeStyle = `rgba(50,24,6,${0.07 + r() * 0.13})`;
+          g.lineWidth = 0.6 + r() * 0.9;
+          g.beginPath();
+          for (let xx = Math.max(0, x); xx <= Math.min(S, x + len); xx += 6) {
+            const yy = gy + Math.sin(xx * freq + ph) * amp;
+            if (xx === Math.max(0, x)) g.moveTo(xx, yy);
+            else g.lineTo(xx, yy);
+          }
+          g.stroke();
+        }
+        // a knot, now and then, with the grain swirling round it
+        if (r() < 0.35) {
+          const kx = x + 20 + r() * (len - 40);
+          const ky = y + 6 + r() * (PW - 12);
+          for (let ring = 5; ring > 0; ring--) {
+            g.strokeStyle = `rgba(60,30,8,${0.08 + ring * 0.03})`;
+            g.beginPath();
+            g.ellipse(kx, ky, ring * 2.6, ring * 1.1, 0, 0, Math.PI * 2);
+            g.stroke();
+          }
+          g.fillStyle = 'rgba(50,24,6,0.45)';
+          g.beginPath();
+          g.ellipse(kx, ky, 2.2, 1.2, 0, 0, Math.PI * 2);
+          g.fill();
+        }
+        // its end: a dark joint, and the two nail heads by it
+        g.fillStyle = 'rgba(20,10,2,0.55)';
+        g.fillRect(x, y, 1.5, PW);
+        g.fillStyle = 'rgba(30,26,22,0.7)';
+        g.fillRect(x + 5, y + 6, 2, 2);
+        g.fillRect(x + 5, y + PW - 8, 2, 2);
+        x += len;
       }
-      g.fillStyle = 'rgba(0,0,0,0.45)';
-      g.fillRect(0, y, 256, 1);
-      const off = r() * 256;
-      g.fillRect(off, y, 1, 32);
-      g.fillRect((off + 128) % 256, y, 1, 32);
+      // the gap between rows, with its shadow and the lit edge of the next
+      g.fillStyle = 'rgba(10,5,0,0.6)';
+      g.fillRect(0, y, S, 1.5);
+      g.fillStyle = 'rgba(255,240,220,0.08)';
+      g.fillRect(0, y + 1.5, S, 1);
     }
-    g.fillStyle = 'rgba(255,255,255,0.04)';
-    g.fillRect(0, 96, 256, 64);
+    // the varnish worn and glossy down the middle of the floor
+    const sheen = g.createLinearGradient(0, 0, 0, S);
+    sheen.addColorStop(0, 'rgba(255,245,230,0)');
+    sheen.addColorStop(0.5, 'rgba(255,245,230,0.07)');
+    sheen.addColorStop(1, 'rgba(255,245,230,0)');
+    g.fillStyle = sheen;
+    g.fillRect(0, 0, S, S);
+    mottle(g, S, S, r, 14, 'rgba(30,15,5,0.06)', 'rgba(255,240,220,0.04)', 70);
   });
 }
 
-/** Carpet in a flat: a short pile in one colour, flecked. */
+/** Carpet in a flat: a dense pile, its fibres catching the light, faintly patterned, worn in a path. */
 function pileTex(base: number, seed: number): HTMLCanvasElement {
   const r = seeded(seed);
-  return cvs(128, 128, (g) => {
+  const S = 256;
+  return cvs(S, S, (g) => {
     g.fillStyle = hx(base);
-    g.fillRect(0, 0, 128, 128);
-    for (let k = 0; k < 2400; k++) {
-      g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)';
-      g.fillRect(r() * 128, r() * 128, 1, 1);
+    g.fillRect(0, 0, S, S);
+    mottle(g, S, S, r, 20, 'rgba(0,0,0,0.08)', 'rgba(255,255,255,0.05)', 40);
+    for (let k = 0; k < 14000; k++) {
+      const v = r();
+      g.fillStyle = v < 0.45 ? 'rgba(0,0,0,0.12)' : v < 0.9 ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.16)';
+      g.fillRect(r() * S, r() * S, 1, 1 + (r() < 0.3 ? 1 : 0));
+    }
+    // a faint woven diamond in the pile
+    g.strokeStyle = 'rgba(0,0,0,0.06)';
+    g.lineWidth = 2;
+    for (let d = -S; d < S * 2; d += 32) {
+      g.beginPath();
+      g.moveTo(d, 0);
+      g.lineTo(d + S, S);
+      g.moveTo(d + S, 0);
+      g.lineTo(d, S);
+      g.stroke();
     }
   });
 }
 
-/** Glazed tiles with grout, each tile its own faint tone, a gloss on its top edge. */
+/** Glazed tiles: each its own tone, a gloss on the top edge, grout that is grubby in places. */
 function tileTex(base: number, seed: number, size = 32): HTMLCanvasElement {
   const r = seeded(seed);
-  return cvs(256, 256, (g) => {
-    g.fillStyle = '#9a9a94';
-    g.fillRect(0, 0, 256, 256);
+  const S = 512;
+  const T = size * 2;
+  return cvs(S, S, (g) => {
+    g.fillStyle = '#8e8e88';
+    g.fillRect(0, 0, S, S);
     const col = new THREE.Color(base);
-    for (let y = 0; y < 256; y += size) {
-      for (let x = 0; x < 256; x += size) {
-        g.fillStyle = hx(col.clone().multiplyScalar(0.94 + r() * 0.08).getHex());
-        g.fillRect(x + 1, y + 1, size - 2, size - 2);
-        g.fillStyle = 'rgba(255,255,255,0.25)';
-        g.fillRect(x + 2, y + 2, size - 4, 2);
+    for (let y = 0; y < S; y += T) {
+      for (let x = 0; x < S; x += T) {
+        g.fillStyle = hx(col.clone().multiplyScalar(0.93 + r() * 0.09).getHex());
+        g.fillRect(x + 2, y + 2, T - 4, T - 4);
+        const gl = g.createLinearGradient(x, y, x + T, y + T);
+        gl.addColorStop(0, 'rgba(255,255,255,0.28)');
+        gl.addColorStop(0.35, 'rgba(255,255,255,0)');
+        gl.addColorStop(1, 'rgba(0,0,0,0.06)');
+        g.fillStyle = gl;
+        g.fillRect(x + 2, y + 2, T - 4, T - 4);
+        g.fillStyle = 'rgba(255,255,255,0.45)';
+        g.fillRect(x + 4, y + 3, T - 10, 1.5);
+        if (r() < 0.06) {
+          g.fillStyle = 'rgba(60,70,60,0.18)';
+          g.fillRect(x, y + T - 3, T, 3);
+        }
       }
+    }
+  });
+}
+
+/** A ceiling: textured paint, a fine stipple and a soft unevenness. */
+function ceilTex(): HTMLCanvasElement {
+  const r = seeded(77);
+  const S = 256;
+  return cvs(S, S, (g) => {
+    g.fillStyle = '#eceae4';
+    g.fillRect(0, 0, S, S);
+    mottle(g, S, S, r, 18, 'rgba(60,50,40,0.05)', 'rgba(255,255,255,0.06)', 50);
+    for (let k = 0; k < 9000; k++) {
+      g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)';
+      g.fillRect(r() * S, r() * S, 1, 1);
     }
   });
 }
@@ -453,24 +581,134 @@ function nightWindowTex(seed: number): HTMLCanvasElement {
   });
 }
 
-/** Brick for the alley: courses of brick, darker mortar, the odd stain. */
+/** Brick: courses of it, each brick its own tone and edge, recessed mortar, rain streaks and grime. */
 function brickTex(seed: number): HTMLCanvasElement {
   const r = seeded(seed);
-  return cvs(256, 256, (g) => {
-    g.fillStyle = '#3a2a26';
-    g.fillRect(0, 0, 256, 256);
-    for (let y = 0; y < 256; y += 16) {
-      const off = (y / 16) % 2 ? 16 : 0;
-      for (let x = -32; x < 256; x += 32) {
-        const t = 0.7 + r() * 0.35;
-        g.fillStyle = `rgb(${Math.round(120 * t)},${Math.round(62 * t)},${Math.round(48 * t)})`;
-        g.fillRect(x + off + 1, y + 1, 30, 14);
+  const S = 512;
+  const BH = 16;
+  const BW = 40;
+  return cvs(S, S, (g) => {
+    g.fillStyle = '#2e2420';
+    g.fillRect(0, 0, S, S);
+    for (let y = 0; y < S; y += BH) {
+      const off = (y / BH) % 2 ? BW / 2 : 0;
+      for (let x = -BW; x < S + BW; x += BW) {
+        const t = 0.62 + r() * 0.42;
+        const burnt = r() < 0.12;
+        const R = Math.round((burnt ? 80 : 128) * t);
+        const G2 = Math.round((burnt ? 44 : 64) * t);
+        const B = Math.round((burnt ? 38 : 50) * t);
+        const bx = x + off + 1.5;
+        const by = y + 1.5;
+        g.fillStyle = `rgb(${R},${G2},${B})`;
+        g.fillRect(bx, by, BW - 3, BH - 3);
+        // its face: a little pitting, a lit top edge, a shadowed foot
+        for (let k = 0; k < 14; k++) {
+          g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.18)' : 'rgba(255,220,200,0.08)';
+          g.fillRect(bx + r() * (BW - 4), by + r() * (BH - 4), 1 + r() * 2, 1);
+        }
+        g.fillStyle = 'rgba(255,220,200,0.12)';
+        g.fillRect(bx, by, BW - 3, 1);
+        g.fillStyle = 'rgba(0,0,0,0.25)';
+        g.fillRect(bx, by + BH - 4, BW - 3, 1);
+        // a chipped corner, now and then
+        if (r() < 0.15) {
+          g.fillStyle = '#2e2420';
+          g.fillRect(bx + (r() < 0.5 ? 0 : BW - 7), by + (r() < 0.5 ? 0 : BH - 6), 4, 3);
+        }
       }
     }
-    for (let k = 0; k < 10; k++) {
-      g.fillStyle = 'rgba(0,0,0,0.18)';
-      g.fillRect(r() * 256, r() * 256, 20 + r() * 40, 60 + r() * 80);
+    // the rain down it, from the sills, and the grime
+    for (let k = 0; k < 26; k++) {
+      const x = r() * S;
+      const w = 4 + r() * 18;
+      const grd = g.createLinearGradient(0, 0, 0, S);
+      grd.addColorStop(0, 'rgba(10,8,6,0.22)');
+      grd.addColorStop(1, 'rgba(10,8,6,0)');
+      g.fillStyle = grd;
+      g.fillRect(x, r() * S * 0.5, w, S * (0.3 + r() * 0.6));
     }
+    mottle(g, S, S, r, 20, 'rgba(0,0,0,0.12)', 'rgba(120,100,90,0.05)', 80);
+  });
+}
+
+/**
+ * A window in the building's face, seen from outside at night: a frame and
+ * sash bars, and behind the glass either the dark with the moon on it, or a
+ * room still up -- warm, with a drawn curtain.  `lit` picks which.
+ */
+function outWindowTex(seed: number, lit: boolean): HTMLCanvasElement {
+  const r = seeded(seed);
+  return cvs(64, 64, (g) => {
+    g.fillStyle = '#c8c2b6';
+    g.fillRect(0, 0, 64, 64);
+    const grd = g.createLinearGradient(0, 4, 0, 60);
+    if (lit) {
+      grd.addColorStop(0, '#e8b868');
+      grd.addColorStop(1, '#a8703a');
+    } else {
+      grd.addColorStop(0, '#24324a');
+      grd.addColorStop(1, '#0a1020');
+    }
+    g.fillStyle = grd;
+    g.fillRect(4, 4, 56, 56);
+    if (lit) {
+      // the curtain, half drawn, in folds
+      const cw = 14 + r() * 20;
+      for (let x = 4; x < 4 + cw; x += 4) {
+        g.fillStyle = x % 8 ? 'rgba(120,60,30,0.55)' : 'rgba(160,90,50,0.55)';
+        g.fillRect(x, 4, 4, 56);
+      }
+    } else {
+      // the moon's light on the glass, a diagonal sheen
+      g.fillStyle = 'rgba(160,180,220,0.18)';
+      g.beginPath();
+      g.moveTo(10, 4);
+      g.lineTo(24, 4);
+      g.lineTo(4, 34);
+      g.lineTo(4, 20);
+      g.fill();
+    }
+    // the sash bars and the sill
+    g.fillStyle = '#d8d2c6';
+    g.fillRect(30, 4, 4, 56);
+    g.fillRect(4, 30, 56, 3);
+    g.fillStyle = '#8a8478';
+    g.fillRect(0, 60, 64, 4);
+  });
+}
+
+/**
+ * A town block's face at night: concrete or render in floors, a grid of
+ * windows with most dark and some lit, a cornice at the top.
+ */
+function facadeTex(seed: number, tone: string): HTMLCanvasElement {
+  const r = seeded(seed);
+  const W = 128;
+  const H = 256;
+  return cvs(W, H, (g) => {
+    g.fillStyle = tone;
+    g.fillRect(0, 0, W, H);
+    mottle(g, W, H, r, 10, 'rgba(0,0,0,0.25)', 'rgba(255,255,255,0.03)', 40);
+    for (let y = 8; y < H - 8; y += 22) {
+      g.fillStyle = 'rgba(0,0,0,0.35)';
+      g.fillRect(0, y + 17, W, 2);
+      for (let x = 6; x < W - 10; x += 20) {
+        const on = r() < 0.22;
+        g.fillStyle = on ? (r() < 0.5 ? '#e0a858' : '#c8d0e0') : r() < 0.5 ? '#0a0c12' : '#141a26';
+        g.fillRect(x, y, 12, 14);
+        if (on) {
+          g.fillStyle = 'rgba(255,220,150,0.15)';
+          g.fillRect(x - 2, y - 2, 16, 18);
+          g.fillStyle = 'rgba(80,40,20,0.4)';
+          g.fillRect(x, y, 4 + r() * 4, 14);
+        }
+        g.fillStyle = 'rgba(0,0,0,0.5)';
+        g.fillRect(x + 5.5, y, 1, 14);
+      }
+    }
+    g.fillStyle = 'rgba(0,0,0,0.5)';
+    g.fillRect(0, 0, W, 4);
   });
 }
 
@@ -539,6 +777,8 @@ export class PoliceBuilding {
   readonly root = new THREE.Group();
   readonly well = new THREE.Group();
   readonly exterior = new THREE.Group();
+  /** The night sky over the river: the scene's background while it is in view. */
+  skyTex: THREE.Texture | null = null;
 
   readonly floors: Floor[] = [];
   readonly doors: Door[] = [];
@@ -580,7 +820,7 @@ export class PoliceBuilding {
     M.brass = new THREE.MeshLambertMaterial({ color: 0xa8aeb4, emissive: 0x101214 });
     M.lamp = new THREE.MeshBasicMaterial({ color: 0xfff2d0 });
     M.dark = new THREE.MeshBasicMaterial({ color: 0x05070e });
-    M.ceil = new THREE.MeshLambertMaterial({ color: 0xeceae4 });
+    M.ceil = new THREE.MeshLambertMaterial({ color: 0xffffff, map: tex(ceilTex(), 3, 3) });
     M.cream = new THREE.MeshLambertMaterial({ color: 0xf0e6cc });
     M.walnut = new THREE.MeshLambertMaterial({ map: tex(veneerTex(0x6a4428, 3)) });
     M.oak = new THREE.MeshLambertMaterial({ map: tex(veneerTex(0xa07a4a, 5)) });
@@ -753,8 +993,12 @@ export class PoliceBuilding {
         box(w, 2.24, fz, frameMat, S, x, y0 + 1.12, SDOOR.z);
       box(SDOOR.x1 - SDOOR.x0 + 0.17, 0.12, fz, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.18, SDOOR.z);
       // the stops the leaf shuts against, inside the jambs and under the head
-      for (const x of [SDOOR.x0 + 0.012, SDOOR.x1 - 0.012]) box(0.03, 2.1, 0.04, frameMat, S, x, y0 + 1.07, SDOOR.z - 0.05);
-      box(SDOOR.x1 - SDOOR.x0, 0.03, 0.04, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.115, SDOOR.z - 0.05);
+      // (not at G: there is no leaf there now, and with nothing to shut
+      // against them they read as a second, smaller frame inside the first)
+      if (f > 0) {
+        for (const x of [SDOOR.x0 + 0.012, SDOOR.x1 - 0.012]) box(0.03, 2.1, 0.04, frameMat, S, x, y0 + 1.07, SDOOR.z - 0.05);
+        box(SDOOR.x1 - SDOOR.x0, 0.03, 0.04, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.115, SDOOR.z - 0.05);
+      }
       // the threshold
       box(SDOOR.x1 - SDOOR.x0 + 0.1, 0.015, fz, this.mats.steel, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 0.008, SDOOR.z);
     }
@@ -796,9 +1040,11 @@ export class PoliceBuilding {
     S.add(flash);
     // ---- the door, where it came down: out on the lobby floor, face up,
     // its top end on the lip of the runner and the push bar towards you
+    // (its length out across the lobby floor, away from the wall: laid the
+    // other way it ran back through the wall it came out of)
     const leaf = new THREE.Group();
-    leaf.position.set(SDOOR.x0 - 0.15, 0.03, LZ(0.55));
-    leaf.rotation.set(-Math.PI / 2 + 0.05, -0.42, 0, 'YXZ');
+    leaf.position.set(SDOOR.x1 + 0.35, 0.03, LZ(0.45));
+    leaf.rotation.set(-Math.PI / 2 + 0.03, Math.PI - 0.35, 0, 'YXZ');
     S.add(leaf);
     box(w - 0.02, 2.08, 0.045, [edge, edge, edge, edge, fireMat, fireMat], leaf, w / 2, 1.04, 0);
     box(0.7, 0.04, 0.04, this.mats.steel, leaf, w / 2, 1.0, 0.04);
@@ -813,12 +1059,10 @@ export class PoliceBuilding {
       const bit = box(0.03 + rnd() * 0.08, 0.02, 0.02 + rnd() * 0.05, k % 3 ? plaster : wood, S, SDOOR.x0 - 0.3 + rnd() * 1.6, 0.012, LZ(0.15 + rnd() * 1.4));
       bit.rotation.y = rnd() * Math.PI;
     }
-    // the frame where the hinges were: split, splinters standing out
-    for (const [y, l, a] of [[0.35, 0.18, 0.5], [1.05, 0.12, -0.4], [1.9, 0.22, 0.7]] as const) {
-      const sp = box(0.025, l, 0.02, wood, S, SDOOR.x1 - 0.02, y, WZ1 + 0.03);
-      sp.rotation.z = a;
-    }
-    box(0.04, 2.1, 0.06, new THREE.MeshLambertMaterial({ color: 0x2a2826 }), S, SDOOR.x1 - 0.01, 1.05, WZ1 - 0.02);
+    // the frame where the hinges were: three torn hinge plates on the steel
+    // jamb's face, on the lobby side (a dark strip and splinters set inside
+    // the jamb stuck through it, in the wall)
+    for (const y of [0.25, 1.05, 1.85]) box(0.035, 0.11, 0.008, this.mats.steel, S, SDOOR.x1 + 0.005, y, WZ1 + 0.105);
     let t = 0;
     this.addTicker((dt) => {
       t += dt;
@@ -1268,7 +1512,9 @@ export class PoliceBuilding {
     const bar = box(0.05, 0.05, W.w * 0.5, frame, g, RD + 0.08, sill + W.h * 0.35, wb + half - 0.12);
     bar.rotation.x = 1.25;
     // the glass that is left: jagged teeth round the frame, each its own shard
-    const glass = new THREE.MeshPhongMaterial({ color: 0xc8dce6, specular: 0xffffff, shininess: 160, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, emissive: 0x1a2630 });
+    // (a dull, dark pane: a white-hot specular under their torches turned each
+    // tooth into a flat white triangle right across the view out)
+    const glass = new THREE.MeshPhongMaterial({ color: 0x6a8290, specular: 0x2a343c, shininess: 40, transparent: true, opacity: 0.24, side: THREE.DoubleSide, depthWrite: false, emissive: 0x0c1218 });
     const edgeGlass = new THREE.MeshBasicMaterial({ color: 0xe8f4ff, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
     const shard = (pts: Array<[number, number]>): void => {
       const s = new THREE.Shape();
@@ -1281,7 +1527,7 @@ export class PoliceBuilding {
       m.renderOrder = 7;
       g.add(m);
       // a bright edge along the break
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map(([u, v]) => new THREE.Vector3(u, v, 0))), new THREE.LineBasicMaterial({ color: 0xf0f8ff, transparent: true, opacity: 0.95 }));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map(([u, v]) => new THREE.Vector3(u, v, 0))), new THREE.LineBasicMaterial({ color: 0xc0d4e0, transparent: true, opacity: 0.55 }));
       line.position.copy(m.position);
       line.rotation.copy(m.rotation);
       g.add(line);
@@ -1452,11 +1698,16 @@ export class PoliceBuilding {
       streaks.push(s);
     };
     // ---- the building's own face: brick, wet and dark to the waterline
-    const brick = new THREE.MeshLambertMaterial({ map: tex(brickTex(9), 8, 9) });
     const faceH = FH * TOP + 3 - WY;
     // (and the buildings either side of it carry the same wall on along the
     // water, so there is no corner to see round on the way down)
     const faceL = END_Z - AZ + 70;
+    // (at a brick's real size: one repeat is 2.4m of wall)
+    const brick = new THREE.MeshLambertMaterial({ map: tex(brickTex(9), faceL / 2.4, faceH / 2.4) });
+    // its windows from outside, most dark, a few still up
+    const winDark = [41, 42, 43].map((k) => new THREE.MeshBasicMaterial({ map: tex(outWindowTex(k, false)) }));
+    const winLit = [44, 45].map((k) => new THREE.MeshBasicMaterial({ map: tex(outWindowTex(k, true)) }));
+    const pickWin = (rr: () => number): THREE.Material => (rr() < 0.16 ? winLit[Math.floor(rr() * winLit.length)] : winDark[Math.floor(rr() * winDark.length)]);
     plane(faceL, faceH, brick, X, wallX, WY + faceH / 2 - 0.3, zMid, Math.PI / 2);
     const wet = new THREE.MeshBasicMaterial({ color: 0x050a0c, transparent: true, opacity: 0.6 });
     plane(faceL, 1.6, wet, X, wallX + 0.01, WY + 0.8, zMid, Math.PI / 2);
@@ -1464,28 +1715,47 @@ export class PoliceBuilding {
       const rr = seeded(18);
       for (let z = AZ - 34; z < END_Z + 34; z += 3.2) {
         if (z > AZ - 1 && z < END_Z + 1) continue;
-        for (let f = 0; f <= TOP; f++) if (rr() < 0.6) plane(1.1, 1.1, rr() < 0.15 ? new THREE.MeshBasicMaterial({ color: 0x8a6a40 }) : this.mats.glassNight, X, wallX + 0.02, f * FH + 1.5, z, Math.PI / 2);
+        for (let f = 0; f <= TOP; f++) if (rr() < 0.6) plane(1.1, 1.1, pickWin(rr), X, wallX + 0.02, f * FH + 1.5, z, Math.PI / 2);
       }
     }
-    for (let f = 0; f <= TOP; f++) {
-      for (let k = 0; k < SLOTS; k++) {
-        const z = AZ + k * SLOT + SLOT / 2;
-        if (f === TOP && k === SLOTS - 1) continue;
-        plane(1.2, 1.1, this.mats.glassNight, X, wallX + 0.02, f * FH + 1.5, z, Math.PI / 2);
+    {
+      const rr = seeded(19);
+      for (let f = 0; f <= TOP; f++) {
+        for (let k = 0; k < SLOTS; k++) {
+          const z = AZ + k * SLOT + SLOT / 2;
+          if (f === TOP && k === SLOTS - 1) continue;
+          plane(1.2, 1.1, pickWin(rr), X, wallX + 0.02, f * FH + 1.5, z, Math.PI / 2);
+          // a stone sill under each, catching the light off the water
+          box(1.34, 0.08, 0.12, new THREE.MeshLambertMaterial({ color: 0x8a8478 }), X, wallX + 0.06, f * FH + 0.92, z);
+        }
       }
     }
     // ---- the far embankment: a stone wall out of the water, a walk along
     // the top with its lamps, and the town behind it
-    const stone = new THREE.MeshLambertMaterial({ map: tex(cvs(64, 64, (g) => {
+    const stone = new THREE.MeshLambertMaterial({ map: tex(cvs(256, 128, (g) => {
       const r = seeded(35);
-      g.fillStyle = '#3a3a3c';
-      g.fillRect(0, 0, 64, 64);
-      for (let y = 0; y < 64; y += 8)
-        for (let x = (y / 8) % 2 ? 0 : 8; x < 64; x += 16) {
-          g.fillStyle = `rgb(${60 + r() * 24},${60 + r() * 22},${62 + r() * 20})`;
-          g.fillRect(x + 1, y + 1, 14, 6);
+      g.fillStyle = '#2a2a2c';
+      g.fillRect(0, 0, 256, 128);
+      // dressed stone in courses, each block its own grey, worn at the edges
+      for (let y = 0; y < 128; y += 32)
+        for (let x = (y / 32) % 2 ? -32 : 0; x < 256; x += 64) {
+          const t = 0.8 + r() * 0.3;
+          g.fillStyle = `rgb(${Math.round(78 * t)},${Math.round(78 * t)},${Math.round(80 * t)})`;
+          g.fillRect(x + 2, y + 2, 60, 28);
+          for (let k = 0; k < 40; k++) {
+            g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.06)';
+            g.fillRect(x + 2 + r() * 58, y + 2 + r() * 26, 1 + r() * 2, 1);
+          }
+          g.fillStyle = 'rgba(255,255,255,0.08)';
+          g.fillRect(x + 2, y + 2, 60, 1);
         }
-    }), 30, 2), color: 0x5a5e66 });
+      // green weed and the wet line along the water
+      const wet = g.createLinearGradient(0, 70, 0, 128);
+      wet.addColorStop(0, 'rgba(20,40,30,0)');
+      wet.addColorStop(1, 'rgba(20,40,30,0.6)');
+      g.fillStyle = wet;
+      g.fillRect(0, 70, 256, 58);
+    }), 140 / 8, 1), color: 0x6a6e76 });
     // (lit by its own lamps, not by anything here: a basic material, dim)
     const stoneLit = new THREE.MeshBasicMaterial({ map: stone.map, color: 0x4a4e56 });
     plane(140, 2.2, stoneLit, X, far, WY + 1.1, zMid, -Math.PI / 2);
@@ -1511,20 +1781,51 @@ export class PoliceBuilding {
       // its light down the water, broken by the current
       streak(far - 4, z, 8, 3.2, 0xffc890, 0.26);
     }
-    // the town behind it: blocks against the sky, a few windows still lit
-    const blockMat = new THREE.MeshLambertMaterial({ color: 0x15171c });
-    const lit = new THREE.MeshBasicMaterial({ color: 0xc89a58 });
-    const dim = new THREE.MeshBasicMaterial({ color: 0x4a4030 });
+    // the town behind it: blocks against the sky, their faces in floors of
+    // windows, most dark, a few still lit; a taller, dimmer row behind them
+    const tones = ['#2a2c32', '#30302e', '#262a30', '#34302c'];
     const r = seeded(17);
-    for (let z = AZ - 30; z < END_Z + 24; ) {
-      const w = 5 + r() * 7;
-      const h = 6 + r() * 12;
-      const dx = far + 7 + r() * 4;
-      box(6, h, w, blockMat, X, dx + 3, WY + 2.2 + h / 2, z + w / 2);
-      for (let k = 0; k < Math.floor(h / 2.2); k++)
-        for (let j = 0; j < Math.floor(w / 1.8); j++) if (r() < 0.25) plane(0.7, 0.9, r() < 0.5 ? lit : dim, X, dx - 0.01, WY + 2.2 + 1.4 + k * 2.2, z + 0.9 + j * 1.8, -Math.PI / 2);
-      z += w + 0.4 + r() * 2;
+    const roofMat = new THREE.MeshBasicMaterial({ color: 0x0c0d10 });
+    for (const row of [0, 1]) {
+      for (let z = AZ - 40; z < END_Z + 34; ) {
+        const w = 5 + r() * 8;
+        const h = row ? 16 + r() * 18 : 6 + r() * 12;
+        const dx = far + 7 + r() * 4 + row * 12;
+        const ft = facadeTex(Math.floor(r() * 9999), tones[Math.floor(r() * tones.length)]);
+        // (a window is about 1.8m across and a floor 3m up: 128 by 256 is 11.5m by 35m)
+        const face = new THREE.MeshBasicMaterial({ map: tex(ft, w / 11.5, h / 35), color: row ? 0x7a7e88 : 0xb4b8c0, fog: true });
+        const side = new THREE.MeshBasicMaterial({ map: tex(ft, 6 / 11.5, h / 35), color: row ? 0x5a5e66 : 0x8a8e96, fog: true });
+        // (faces: +x, -x, top, bottom, +z, -z; the one that looks at us is -x)
+        box(6, h, w, [side, face, roofMat, roofMat, side, side], X, dx + 3, WY + 2.2 + h / 2, z + w / 2);
+        // a water tank or a plant room on some of the roofs
+        if (r() < 0.4) box(2 + r() * 2, 1.4 + r() * 1.4, 2 + r() * 2, roofMat, X, dx + 3, WY + 2.2 + h + 0.9, z + w / 2);
+        z += w + 0.4 + r() * 2;
+      }
     }
+    // the sky: deep blue going to black overhead, and stars in it
+    const skyT = tex(cvs(512, 256, (g) => {
+      const rs = seeded(91);
+      const grd = g.createLinearGradient(0, 0, 0, 256);
+      grd.addColorStop(0, '#02040a');
+      grd.addColorStop(0.6, '#0a1430');
+      grd.addColorStop(1, '#1a2848');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 512, 256);
+      for (let k = 0; k < 420; k++) {
+        const y = Math.pow(rs(), 1.6) * 200;
+        g.fillStyle = `rgba(230,235,255,${0.25 + rs() * 0.7})`;
+        g.fillRect(rs() * 512, y, rs() < 0.1 ? 2 : 1, rs() < 0.1 ? 2 : 1);
+      }
+      // the town's glow along the bottom
+      const glowT = g.createLinearGradient(0, 200, 0, 256);
+      glowT.addColorStop(0, 'rgba(200,140,80,0)');
+      glowT.addColorStop(1, 'rgba(200,140,80,0.22)');
+      g.fillStyle = glowT;
+      g.fillRect(0, 200, 512, 56);
+    }));
+    skyT.wrapS = skyT.wrapT = THREE.ClampToEdgeWrapping;
+    // (behind everything, as the scene's background, while the outside is in view)
+    this.skyTex = skyT;
     // ---- the bridge, downstream, with the police on it
     const bz = END_Z + 48;
     const deck = new THREE.MeshBasicMaterial({ color: 0x1e2026 });
@@ -1563,9 +1864,9 @@ export class PoliceBuilding {
     const pol = new THREE.PointLight(0xff2030, 0, 30, 1.1);
     pol.position.set(wallX + 10, 8, bz - 3);
     X.add(pol);
-    const pol2 = new THREE.PointLight(0x2a50ff, 0, 30, 1.1);
-    pol2.position.set(wallX + 14, 8, bz - 3);
-    X.add(pol2);
+    // (one light, turning red and blue, not one of each: every light in the
+    // scene is paid for on every pixel of every frame, lit or not)
+    pol.position.set(wallX + 12, 8, bz - 3);
     const polRed = new THREE.MeshBasicMaterial({ color: 0xff2030 });
     const polBlue = new THREE.MeshBasicMaterial({ color: 0x2a50ff });
     const barR = box(0.4, 0.12, 0.2, polRed, X, wallX + 10, 7.5, bz - 1.5);
@@ -1589,8 +1890,8 @@ export class PoliceBuilding {
         m.map!.offset.x = Math.sin(t * 2.3 + i) * 0.04;
       }
       const ph = Math.floor(t * 6) % 4;
-      pol.intensity = ph < 2 ? 18 : 0;
-      pol2.intensity = ph < 2 ? 0 : 18;
+      pol.intensity = 18;
+      pol.color.setHex(ph < 2 ? 0xff2030 : 0x2a50ff);
       barR.visible = ph < 2;
       barB.visible = ph >= 2;
       polStreak.color.setHex(ph < 2 ? 0xff2030 : 0x2a50ff);
@@ -2353,14 +2654,21 @@ class RoomCtx {
     this.picture(4.4, 0, 'b1');
   }
 
-  /** B: a separate WC off the entry (a 0..1.8, b SLOT-1.5..SLOT) and a bedroom. */
+  /**
+   * B: a separate WC off the entry (a 0..WC_A, b SLOT-WC_B..SLOT) and a
+   * bedroom.  Big enough to walk into and shut the door behind you: the door
+   * opens in, and in a WC 1.5 m deep you were standing where it swings, so it
+   * stopped against you and would not shut.
+   */
   planB(): void {
     const r = this.r;
-    const wb = SLOT - 1.5;
-    this.tiles(0, 1.8, wb, SLOT);
+    const WC_A = 2.3;
+    const WC_B = 2.2;
+    const wb = SLOT - WC_B;
+    this.tiles(0, WC_A, wb, SLOT);
     this.wall(0, wb, 0.55, wb);
-    this.wall(1.33, wb, 1.8, wb);
-    this.wall(1.8, wb, 1.8, SLOT);
+    this.wall(1.33, wb, WC_A, wb);
+    this.wall(WC_A, wb, WC_A, SLOT);
     const above = new THREE.Mesh(new THREE.BoxGeometry(0.78, CEIL - 2.1, 0.08), this.wallMat);
     above.position.set(0.94, 2.1 + (CEIL - 2.1) / 2, this.B(wb));
     this.g.add(above);
@@ -2375,7 +2683,7 @@ class RoomCtx {
     // the WC door hinged at its wall end: open, it leaves a pocket against the corridor wall
     const door = this.bathDoor(0.55, wb, 0, Math.PI / 2, { a: 0.29, b: wb + 0.38, peekA: 0.47, peekB: wb + 0.06, lookA: 1.45, lookB: wb - 2.1, fromA: 1.0, fromB: wb + 0.48 }, 'wi');
     this.link('wo', 'wi', door);
-    this.toilet(1.4, SLOT - 0.3, Math.PI);
+    this.toilet(WC_A - 0.4, SLOT - 0.3, Math.PI);
     this.sink(0.85, SLOT - 0.22, Math.PI, false);
     const under = r() < 0.85;
     this.bed(RD - 2.0, 0.18, 1.78, true, under, 'c');
@@ -2389,11 +2697,14 @@ class RoomCtx {
     this.picture(3.0, 0, 'b0');
   }
 
-  /** C: a studio, its bathroom in the far corner (a RD-1.6..RD, b SLOT-1.6..SLOT) with a bath. */
+  /**
+   * C: a studio, its bathroom in the far corner (a RD-2..RD, b SLOT-2..SLOT)
+   * with a bath -- room enough inside, past the door's swing, to shut it.
+   */
   planC(): void {
     const r = this.r;
-    const ba = RD - 1.6;
-    const bb = SLOT - 1.6;
+    const ba = RD - 2.0;
+    const bb = SLOT - 2.0;
     this.tiles(ba, RD, bb, SLOT);
     this.wall(ba, bb, ba + 0.1, bb);
     this.wall(ba + 0.88, bb, RD, bb);

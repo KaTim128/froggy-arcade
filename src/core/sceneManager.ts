@@ -21,6 +21,7 @@ import { CreatureArena } from '../scenes2d/CreatureArena';
 import { StreetEast } from '../scenes2d/StreetEast';
 import { installLifeTicker } from '../game/lifeTicker';
 import { capturePlace } from '../game/place';
+import { captureGame } from './session';
 import Phaser from 'phaser';
 import { attachLandscapeFill } from '../render/landscapeFill';
 import { PALETTE } from '../render/palette';
@@ -36,7 +37,7 @@ import { Boot } from '../scenes2d/Boot';
 import { StartScreen } from '../scenes2d/StartScreen';
 import { SettingsModal } from '../scenes2d/SettingsModal';
 import { InventoryModal } from '../scenes2d/InventoryModal';
-import { installPause } from './pause';
+import { installPause, pauseIfInGame } from './pause';
 import { ProfileModal } from '../scenes2d/ProfileModal';
 import { ArcadeHub } from '../scenes2d/ArcadeHub';
 import { ArcadeAnnex } from '../scenes2d/ArcadeAnnex';
@@ -174,6 +175,7 @@ export function bootGame(): void {
   // Where the player is standing goes with it.
   const saveNow = (): void => {
     capturePlace();
+    captureGame();
     store.flush();
   };
   window.addEventListener('beforeunload', saveNow);
@@ -186,7 +188,11 @@ export function bootGame(): void {
     } else audio.release('hidden');
     if (!game) return;
     if (document.hidden) game.loop.sleep();
-    else game.loop.wake();
+    else {
+      game.loop.wake();
+      // back to a game in the middle of play: the settings, paused (log #50)
+      setTimeout(() => pauseIfInGame(), 60);
+    }
   });
   // The music, through every way of leaving and coming back: another window
   // or app (blur / focus), and the page put away and restored from the

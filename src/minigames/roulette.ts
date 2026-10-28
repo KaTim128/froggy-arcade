@@ -137,6 +137,10 @@ let cashBtn: Phaser.GameObjects.Container | null = null;
 let rigged: 'clean' | 'live' | null = null;
 
 export const roulette: MinigameModule = {
+  // (the play starts at the first pull: until then, LEAVE and nothing lost;
+  // once there is something on the machine, the way out is CASH OUT)
+  inPlay: () => survived > 0 || phase === 'firing' || over,
+  pauseExit: () => (pot > 0 && !over ? { label: 'CASH OUT', run: () => cashOut() } : null),
   id: 'roulette',
   title: 'CHAMBER',
   music: 'game_roulette',
@@ -355,6 +359,30 @@ export const roulette: MinigameModule = {
         refresh();
       }
     }
+  },
+
+  // ---- A RELOAD (log #87): the clean pulls, the pot on the machine, and the
+  // barrel.  A pull the page cut off mid-hammer is not drawn: the cylinder is
+  // back where it had stopped, the same decision handed back.  A round that
+  // had already ended ends again the way it did (cashed out, or the live one).
+  snapshot() {
+    return { survived, pot, phase, spin, spinVel };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { survived: number; pot: number; phase: Phase; spin: number; spinVel: number };
+    survived = v.survived;
+    pot = v.pot;
+    spin = v.spin;
+    spinVel = v.spinVel;
+    if (v.phase === 'over') {
+      phase = 'over';
+      refresh();
+      finish(pot > 0);
+      return;
+    }
+    phase = v.phase === 'firing' ? 'stopped' : v.phase;
+    refresh();
   },
 
   destroy() {

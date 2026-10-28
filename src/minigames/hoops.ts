@@ -611,6 +611,45 @@ export const hoops: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): the clock, the score, the streak, the hoop where
+  // it is and how fast, the bonus ring, the aim, and the fly in the air.
+  snapshot() {
+    return {
+      makes, timeLeft, streak, onFire, hoopPhase, hoopRate, hoopX, hoopW,
+      ring: { ...ring }, ringTimer, power, aim, charging, chargeDir,
+      inFlight, scoredThisFlight, vel: { ...ballVel }, ball: ball ? { x: ball.x, y: ball.y } : null,
+    };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as {
+      makes: number; timeLeft: number; streak: number; onFire: boolean; hoopPhase: number; hoopRate: number; hoopX: number; hoopW: number;
+      ring: typeof ring; ringTimer: number; power: number; aim: number; charging: boolean; chargeDir: number;
+      inFlight: boolean; scoredThisFlight: boolean; vel: { x: number; y: number }; ball: { x: number; y: number } | null;
+    };
+    makes = v.makes;
+    timeLeft = v.timeLeft;
+    streak = v.streak;
+    onFire = v.onFire;
+    hoopPhase = v.hoopPhase;
+    hoopRate = v.hoopRate;
+    hoopX = v.hoopX;
+    hoopW = v.hoopW;
+    ring = { ...v.ring };
+    ringTimer = v.ringTimer;
+    ringBody?.setVisible(ring.up);
+    power = v.power;
+    aim = v.aim;
+    charging = v.charging;
+    chargeDir = v.chargeDir;
+    inFlight = v.inFlight;
+    scoredThisFlight = v.scoredThisFlight;
+    ballVel = { ...v.vel };
+    if (ball && v.ball) ball.setPosition(v.ball.x, v.ball.y);
+    meterFill?.setSize(6, charging ? power * 38 : 0);
+    refreshHud();
+  },
+
   destroy() {
     ball = null;
     arrow = null;

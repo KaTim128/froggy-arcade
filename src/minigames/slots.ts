@@ -282,6 +282,22 @@ export const slots: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): the reels as they last stood.  A spin the page
+  // cut off is not played out: its price is handed back (`refund`).
+  snapshot() {
+    return { shown: shown.map((r) => [...r]), firstSpin, refund: busy ? SPIN_COST : 0 };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { shown: Grid; firstSpin: boolean };
+    shown = v.shown.map((r) => [...r]);
+    firstSpin = v.firstSpin;
+    busy = false;
+    spinning = spinning.map(() => false);
+    paint(shown);
+    refresh();
+  },
+
   destroy() {
     temple = null;
     cells = [];
@@ -453,6 +469,7 @@ function settle(): void {
   const got = best(shown);
   if (got.pays > 0) {
     apiRef.payout(got.pays);
+    apiRef.record(got.pays);
     paidCount++;
     const sym = SYMBOLS[got.sym];
     const big = got.sym === FROG || got.n >= 5 || got.wins.length > 1;

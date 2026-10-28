@@ -97,7 +97,8 @@ const GAMES = [
 const cardUp = (page) =>
   page.evaluate(() => {
     const s = window.__froggy.game().scene.getScene('Minigame');
-    return !!s && s.children.list.some((o) => typeof o.text === 'string' && o.text.startsWith('HOW TO PLAY'));
+    // (the machine's screen or its HOW TO PLAY page: either is the card)
+    return !!s && !!s.card && !s.started;
   });
 
 /**
@@ -265,9 +266,10 @@ for (const g of GAMES) {
       return {
         titled: lines.some((t) => t.startsWith('HOW TO PLAY')),
         controls: lines.includes('CONTROLS'),
-        play: lines.some((t) => t === 'PLAY' || t === 'CANT PLAY'),
-        leave: lines.includes('LEAVE'),
-        price: lines.some((t) => t.includes('TO PLAY') || t.includes('A GO')),
+        play: lines.some((t) => t.startsWith('PLAY - ') || t === 'CANT PLAY'),
+        leave: lines.includes('LEAVE') || lines.includes('BACK'),
+        // (the price is on the PLAY button: "PLAY - 10 TOKENS", "PLAY - 3 TOKENS A GO")
+        price: lines.some((t) => /^PLAY - \d+ TOKENS?/.test(t) || t === 'CANT PLAY'),
       };
     });
     const tutorial = card.titled && card.controls && card.play && card.leave && card.price;
@@ -1398,7 +1400,13 @@ for (const g of [
     // Esc is the card's LEAVE only once the card is up; a press before it
     // exists goes to the pause menu instead, which is not what this checks.
     await page.waitForFunction(() => !!window.__froggy.game().scene.getScene('Minigame')?.card, { timeout: 8000 }).catch(() => {});
-    await page.keyboard.press('Escape'); // forfeit
+    // (a first go opens on HOW TO PLAY, where Esc is back to the machine
+    // first, and then LEAVE)
+    for (let i = 0; i < 3; i++) {
+      if (!(await page.evaluate(() => window.__froggy.activeScenes().includes('Minigame')))) break;
+      await page.keyboard.press('Escape');
+      await sleep(400);
+    }
     await sceneUp(page, 'Minigame', false);
     await sleep(2500); // the fade back, and the walk to the machine
 
@@ -1432,11 +1440,14 @@ for (const g of [
   await page.setViewport({ width: 1280, height: 720 });
   const tokens = () => page.evaluate(() => window.__froggy.state().tokens);
   const scenes = () => page.evaluate(() => window.__froggy.activeScenes().join(','));
-  // TIC-TAC-TOE, wherever it is standing today: far from the spawn point, and
-  // the card's two buttons are at y 163, either side of the middle.
+  // TIC-TAC-TOE, wherever it is standing today: far from the spawn point.  A
+  // first go opens on HOW TO PLAY, whose BACK and PLAY are along y 163; the
+  // machine's own LEAVE is at the right of the same row (ui/tutorialCard).
   const PLAY_Y = 163;
-  const PLAY = [640 + (108 - 160) * 4, 360 + (PLAY_Y - 90) * 4];
-  const LEAVE = [640 + (212 - 160) * 4, 360 + (PLAY_Y - 90) * 4];
+  const at = (x) => [640 + (x - 160) * 4, 360 + (PLAY_Y - 90) * 4];
+  const PLAY = at(210);
+  const BACK = at(70);
+  const LEAVE = at(258);
 
   await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
   await sleep(2500);
@@ -1461,6 +1472,8 @@ for (const g of [
   if (!opened) failures++;
 
   // LEAVE puts you back on the floor with everything you walked up with.
+  await page.mouse.click(...BACK);
+  await sleep(400);
   await page.mouse.click(...LEAVE);
   await sleep(2600);
   const left = { scenes: await scenes(), tokens: await tokens() };
@@ -2769,6 +2782,7 @@ for (const g of [
     out.push(r.submit('donkeykong', 50.04), r.submit('donkeykong', 61), r.submit('donkeykong', 44.26));
     out.push(r.submit('bowling', 120), r.submit('bowling', 90), r.submit('bowling', 0));
     out.push(r.submit('battleship', 30), r.submit('battleship', 31), r.submit('battleship', 22));
+    // (and the slots keep one now too: the biggest single spin)
     out.push(r.submit('slots', 5));
     return { out, dk: r.best('donkeykong'), bowl: r.best('bowling'), pond: r.best('battleship'), slots: r.best('slots') };
   });
@@ -2779,10 +2793,10 @@ for (const g of [
     r.clearRecords();
     return v;
   });
-  const want = [true, false, true, true, false, false, true, false, true, false];
+  const want = [true, false, true, true, false, false, true, false, true, true];
   const ok =
     JSON.stringify(got.out) === JSON.stringify(want) &&
-    got.dk === 44.3 && got.bowl === 120 && got.pond === 22 && got.slots === null &&
+    got.dk === 44.3 && got.bowl === 120 && got.pond === 22 && got.slots === 5 &&
     JSON.stringify(kept) === JSON.stringify([44.3, 120, 22]);
   console.log(
     `${ok ? 'PASS' : 'FAIL'}  records: faster times, higher scores and fewer clicks replace a best, worse never do, and they survive a reload  — ` +
@@ -3507,10 +3521,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=20&game=grudge`, { waitUntil: 'networkidle2' });
   await sleep(1800);
   await startGame(page);
-  // PLAY on the card is the choice of PLAY or PRACTICE (see practice.mjs):
-  // this wants the real fight
-  await sleep(600);
-  await page.mouse.click((160 - 56) * 4, 84 * 4);
+  // (SPACE on the card is PLAY for real; PRACTICE is its own button: see practice.mjs)
   await bridge(page, '__grudge');
   await sleep(2400); // READY / FIGHT
 

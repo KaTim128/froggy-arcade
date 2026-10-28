@@ -405,6 +405,38 @@ try {
     await start(page, 'Hotel', { area: 'lobby' });
     const lobby = await until(page, () => window.__froggy.game().scene.getScene('Hotel').police?.present, 8000);
     check("an officer looks round Lily's lobby", !!lobby);
+    // stepping into the lift with him there: out of his reach, never seen or caught in it
+    const safe = await page.evaluate(async () => {
+      const s = window.__froggy.game().scene.getScene('Hotel');
+      const pol = s.police;
+      if (!pol?.present) return 'no officer';
+      // him right beside you, facing you
+      s.inLift = true;
+      const p = s.player;
+      const c = pol.cop;
+      c.x = p.x + 10;
+      c.y = p.y;
+      pol.ang = Math.PI;
+      await new Promise((r) => setTimeout(r, 600));
+      const sees = pol.sees();
+      const caught = window.__froggy.activeScenes().includes('DeathScreen') || pol.info?.state === 'arrest';
+      return { sees, caught };
+    });
+    check('in the lift, its doors closing: he neither sees nor catches you', safe && safe.sees === 0 && !safe.caught, JSON.stringify(safe));
+    await page.close();
+  }
+  {
+    // your flat (213): the police never come in, even when they are doing the rounds of Lily's
+    const page = await newPage('?intro=1&charity=1&key=1&scene=Hotel');
+    await hunt(page, { disguised: true });
+    await page.evaluate(() => window.__froggy.stealth.visits.put('lily', 60000));
+    await start(page, 'Condo', { area: 'room' });
+    await sleep(6000);
+    const inFlat = await page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('Condo');
+      return { police: !!s.police, present: !!s.police?.present };
+    });
+    check('no officer ever comes into your flat', !inFlat.police && !inFlat.present, JSON.stringify(inFlat));
     await page.close();
   }
 
@@ -425,6 +457,11 @@ try {
     const before = await page.evaluate(() => window.__froggy.state().tokens ?? null);
     await start(page, 'Minigame', { id, from: 'ArcadeHub', straight: true });
     await until(page, () => !!window.__minigame, 8000);
+    // (the machine's screen comes up first, even from E: SPACE is PLAY)
+    await until(page, () => !!window.__froggy.game().scene.getScene('Minigame').card, 8000);
+    await sleep(300);
+    await page.keyboard.press('Space');
+    await until(page, () => window.__froggy.game().scene.getScene('Minigame').started, 8000);
     const paidBal = await page.evaluate(() => ({ stake: window.__minigame.stake() }));
     await page.evaluate(() => window.__minigame.cop(0.6));
     await sleep(2500);
@@ -440,7 +477,9 @@ try {
     check('no FORFEIT on the screen', !/FORFEIT/.test(panel.texts));
     await page.screenshot({ path: `${SHOTS}/cabinet_interrupt.png` });
     // through the line, back to the room: they are stood right there
+    // (only while the line is up: back in the room, E at the machine opens it again)
     for (let i = 0; i < 4; i++) {
+      if (!(await page.evaluate(() => window.__froggy.activeScenes().includes('Minigame')))) break;
       await page.keyboard.press('KeyE');
       await sleep(500);
     }

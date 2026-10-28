@@ -628,7 +628,10 @@ class TouchControls {
     this.wireHold(this.quit as HTMLElement, ['ESC']);
 
     window.addEventListener('resize', () => this.relayout());
-    window.addEventListener('orientationchange', () => window.setTimeout(() => this.relayout(), 120));
+    window.addEventListener('orientationchange', () => {
+      for (const ms of [120, 400, 900]) window.setTimeout(() => this.relayout(), ms);
+    });
+    window.visualViewport?.addEventListener('resize', () => this.relayout());
     // A finger lifted outside the button it started on must not leave a key
     // stuck down for the rest of the round.
     window.addEventListener('blur', () => this.releaseAll());
@@ -680,6 +683,22 @@ class TouchControls {
     }
   }
 
+  /**
+   * What the INTERACT button says it will do, read from the prompt on screen
+   * (core/keyWords): PLAY, OPEN, HIDE...  null: INTERACT.  Only a button the
+   * layout calls INTERACT takes it, and it outlasts a layout swap.
+   */
+  private word: string | null = null;
+
+  actionWord(word: string | null): void {
+    if (word === this.word) return;
+    this.word = word;
+    if (!this.root) return;
+    for (const el of Array.from(this.root.querySelectorAll('.tc-btn')) as HTMLElement[]) {
+      if (el.dataset.base === 'INTERACT') setLabel(el, word ?? 'INTERACT');
+    }
+  }
+
   /** Swap what is on screen.  Called as scenes and cabinets come and go. */
   private hiddenKeys = new Set<KeyName>();
 
@@ -705,8 +724,9 @@ class TouchControls {
       const el = document.createElement('button');
       el.type = 'button';
       el.className = 'tc-btn' + (b.primary ? ' primary' : '');
-      setLabel(el, b.label, b.icon);
+      setLabel(el, b.label === 'INTERACT' && this.word ? this.word : b.label, b.icon);
       el.dataset.key = b.key;
+      el.dataset.base = b.label;
       el.hidden = this.hiddenKeys.has(b.key);
       pads.appendChild(el);
       this.wireHold(el, b.also ? [b.key, b.also] : [b.key]);

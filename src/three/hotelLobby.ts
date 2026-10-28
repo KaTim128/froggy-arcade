@@ -21,7 +21,6 @@ import {
   texCarpet,
   texLiftDoors,
   texMarble,
-  texRoomDoor,
   texSign,
   texWainscot,
   texWallpaper,
@@ -37,6 +36,14 @@ export const DEPTH = 7;
 export const CEIL = 6.6;
 /** The gallery floors along the back wall, either side of the middle bay. */
 export const GALLERY_Y = [3.0, 5.0];
+/**
+ * The police scene's lobby is the ground floor of a building of 3 m floors,
+ * not an atrium: its ceiling sits just under floor 1's, and no gallery,
+ * column or wall of it goes on up through the corridors above (the atrium's
+ * 6.6 m ceiling stood across floor 2's corridor, and its galleries came
+ * through the stairwell wall at floor 1).
+ */
+export const POLICE_CEIL = 2.95;
 export const DADO = 1;
 export const DESK_X = lx(160);
 export const STAIR_X = lx(238);
@@ -195,6 +202,7 @@ export function buildHotelLobby(
   S: THREE.Object3D,
   opts: LobbyOpts = {},
 ): LobbyParts {
+  const CEIL_H = opts.police ? POLICE_CEIL : CEIL;
   const parts: LobbyParts = {
     stairDoor: null,
     frontPanes: [],
@@ -228,7 +236,7 @@ export function buildHotelLobby(
     a: number,
     b: number,
     at: (m: THREE.Mesh, mid: number) => void,
-    top = CEIL,
+    top = CEIL_H,
     bottom = 0,
   ): void => {
     const len = b - a;
@@ -264,7 +272,7 @@ export function buildHotelLobby(
   const sd1 = STAIR_X + 0.55;
   wall(X0, sd0, back);
   wall(sd1, X1, back);
-  wall(sd0, sd1, back, CEIL, 2.25);
+  wall(sd0, sd1, back, CEIL_H, 2.25);
   // the front wall
   wall(X0, X1, (m, mid) => {
     m.position.x = mid;
@@ -281,7 +289,7 @@ export function buildHotelLobby(
   };
   wall(0, fd0, left);
   wall(fd1, DEPTH, left);
-  wall(fd0, fd1, left, CEIL, 2.7);
+  wall(fd0, fd1, left, CEIL_H, 2.7);
   // the storage room's end, with its door's opening
   const sr0 = DOOR_Z - DOOR_W / 2;
   const sr1 = DOOR_Z + DOOR_W / 2;
@@ -300,7 +308,7 @@ export function buildHotelLobby(
     shut.rotation.y = -Math.PI / 2;
     S.add(shut);
   }
-  wall(sr0, sr1, right, CEIL, DOOR_H);
+  wall(sr0, sr1, right, CEIL_H, DOOR_H);
 
   // floor, runner, ceiling, crown
   const floor = new THREE.Mesh(
@@ -326,11 +334,11 @@ export function buildHotelLobby(
     new THREE.MeshLambertMaterial({ color: 0xeceae4 }),
   );
   ceil.rotation.x = Math.PI / 2;
-  ceil.position.set((X0 + X1) / 2, CEIL, DEPTH / 2);
+  ceil.position.set((X0 + X1) / 2, CEIL_H, DEPTH / 2);
   S.add(ceil);
   for (const z of [0.04, DEPTH - 0.04]) {
     const c = new THREE.Mesh(new THREE.BoxGeometry(X1 - X0, 0.14, 0.08), cream);
-    c.position.set((X0 + X1) / 2, CEIL - 0.07, z);
+    c.position.set((X0 + X1) / 2, CEIL_H - 0.07, z);
     S.add(c);
     const r = new THREE.Mesh(new THREE.BoxGeometry(X1 - X0, 0.05, 0.05), brass);
     r.position.set((X0 + X1) / 2, DADO, z);
@@ -384,6 +392,11 @@ export function buildHotelLobby(
     new THREE.MeshLambertMaterial({ map: tex(texPigeonholes()) }),
   );
   holes.position.set(DESK_X, 2.25, 0.02);
+  // (under the police scene's low ceiling: the wall behind the desk is shorter)
+  if (opts.police) {
+    holes.scale.y = 0.72;
+    holes.position.y = 2.0;
+  }
   S.add(holes);
   const sign = new THREE.Mesh(
     new THREE.PlaneGeometry(2.8, 0.5),
@@ -392,27 +405,32 @@ export function buildHotelLobby(
     }),
   );
   sign.position.set(DESK_X, 3.45, 0.02);
+  if (opts.police) {
+    sign.scale.set(0.7, 0.55, 1);
+    sign.position.y = 2.79;
+  }
   S.add(sign);
   for (const dx of [-1.9, 1.9]) {
     const clock = new THREE.Mesh(
       new THREE.CircleGeometry(0.22, 20),
       new THREE.MeshLambertMaterial({ color: 0xf0e8d8 }),
     );
-    clock.position.set(DESK_X + dx, 2.9, 0.02);
+    const cy = opts.police ? 2.55 : 2.9;
+    clock.position.set(DESK_X + dx, cy, 0.02);
     S.add(clock);
     const rim = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.26, 20), brass);
-    rim.position.set(DESK_X + dx, 2.9, 0.021);
+    rim.position.set(DESK_X + dx, cy, 0.021);
     S.add(rim);
   }
   // columns framing the desk
   for (const px of [104, 216]) {
     const col = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.24, 0.26, CEIL, 16),
+      new THREE.CylinderGeometry(0.24, 0.26, CEIL_H, 16),
       cream,
     );
-    col.position.set(lx(px), CEIL / 2, 0.32);
+    col.position.set(lx(px), CEIL_H / 2, 0.32);
     S.add(col);
-    for (const y of [0.1, CEIL - 0.15]) {
+    for (const y of [0.1, CEIL_H - 0.15]) {
       const cap = new THREE.Mesh(
         new THREE.BoxGeometry(0.62, 0.22, 0.62),
         y < 1 ? cream : brass,
@@ -1042,8 +1060,7 @@ function buildAtrium(
   cream: THREE.Material,
   opts: LobbyOpts,
 ): void {
-  const doorT = tex(texRoomDoor(""));
-  const doorM = new THREE.MeshLambertMaterial({ map: doorT });
+  const CEIL_H = opts.police ? POLICE_CEIL : CEIL;
   const bays: Array<[number, number]> = [
     [X0, lx(104) - 0.32],
     [lx(216) + 0.32, X1],
@@ -1051,7 +1068,8 @@ function buildAtrium(
   for (const [a, b] of bays) {
     const len = b - a;
     const mid = (a + b) / 2;
-    for (const gy of GALLERY_Y) {
+    // (none in the police scene's single-height lobby: see POLICE_CEIL)
+    for (const gy of opts.police ? [] : GALLERY_Y) {
       const slab = new THREE.Mesh(new THREE.BoxGeometry(len, 0.2, 1.0), cream);
       slab.position.set(mid, gy - 0.1, 0.5);
       S.add(slab);
@@ -1078,11 +1096,7 @@ function buildAtrium(
       );
       pane.position.set(mid, gy + 0.47, 0.96);
       S.add(pane);
-      for (let x = a + 1.1; x < b - 0.6; x += 2.3) {
-        const door = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 2.1), doorM);
-        door.position.set(x, gy + 1.05, 0.015);
-        S.add(door);
-      }
+      // (no doors along the galleries: plain wall behind the rail)
     }
   }
   // the pendant lights: clusters of glass globes on long black flexes
@@ -1105,10 +1119,10 @@ function buildAtrium(
       const pz = z + Math.sin(a) * r * 0.6;
       const py = y - (k % 3) * 0.25;
       const cord = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.008, 0.008, CEIL - py, 4),
+        new THREE.CylinderGeometry(0.008, 0.008, CEIL_H - py, 4),
         flex,
       );
-      cord.position.set(px, (CEIL + py) / 2, pz);
+      cord.position.set(px, (CEIL_H + py) / 2, pz);
       S.add(cord);
       const globe = new THREE.Mesh(
         new THREE.SphereGeometry(0.11 + r * 0.05, 12, 8),
@@ -1122,7 +1136,8 @@ function buildAtrium(
     light.position.set(x, y - 0.3, z);
     S.add(light);
   };
-  chandelier(DESK_X, 4.4, 2.0, 0.85, 5.5);
-  chandelier(lx(36), 2.55, 2.4, 0.5, 2.8);
-  chandelier(lx(360), 2.55, 2.4, 0.5, 2.8);
+  // (under the low ceiling, the great one hangs as low as the small ones)
+  chandelier(DESK_X, opts.police ? 2.55 : 4.4, 2.0, 0.85, 5.5);
+  chandelier(lx(36), opts.police ? 2.45 : 2.55, 2.4, 0.5, 2.8);
+  chandelier(lx(360), opts.police ? 2.45 : 2.55, 2.4, 0.5, 2.8);
 }

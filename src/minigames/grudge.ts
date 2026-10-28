@@ -427,6 +427,8 @@ let wins2 = 0;
 let roundMs = ROUND_MS;
 let roundOver = true;
 let over = false;
+/** Fighting time across the rounds of this match: a win's is the best to beat (core/records). */
+let fightMs = 0;
 let apiRef: MinigameApi | null = null;
 let sceneRef: Phaser.Scene | null = null;
 let keys: Record<string, Phaser.Input.Keyboard.Key> = {};
@@ -494,6 +496,7 @@ export const grudge: MinigameModule = {
     apiRef = api;
     sceneRef = scene;
     wins1 = 0;
+    fightMs = 0;
     wins2 = 0;
     over = false;
 
@@ -744,6 +747,7 @@ export const grudge: MinigameModule = {
 
     if (roundOver) return;
 
+    fightMs += delta;
     roundMs -= delta;
     timerText?.setText(`${Math.ceil(roundMs / 1000)}`);
     if (roundMs <= 0) {
@@ -1384,6 +1388,7 @@ function endRound(playerWon: boolean): void {
   if (wins1 >= ROUNDS_TO_WIN || wins2 >= ROUNDS_TO_WIN) {
     over = true;
     const won = wins1 >= ROUNDS_TO_WIN;
+    if (won) apiRef?.record(fightMs / 1000);
     sceneRef?.time.delayedCall(1100, () => (won ? apiRef?.win() : apiRef?.lose()));
     return;
   }

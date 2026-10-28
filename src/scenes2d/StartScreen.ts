@@ -7,6 +7,7 @@
 
 import Phaser from 'phaser';
 import { resumePoint } from '../core/resume';
+import { markLive } from '../core/session';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
@@ -99,7 +100,9 @@ export class StartScreen extends Phaser.Scene {
       this.lockedNotice();
       return;
     }
-    // Resume where the run left off (PRD EC-3): see core/resume.
+    // Resume where the run left off (PRD EC-3): see core/resume.  From here a
+    // reload of this tab comes straight back to the run (core/session).
+    markLive();
     const at = resumePoint();
     fadeToScene(this, at.key, at.data);
   }

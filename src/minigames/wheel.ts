@@ -224,6 +224,8 @@ export function faceAt(rot: number): Slice {
 }
 
 export const wheelOfFortune: MinigameModule = {
+  // (in play from the first spin: walking up and away again is LEAVE)
+  inPlay: () => spins > 0 || spinning,
   id: ID,
   title: 'WHEEL OF FORTUNE',
   music: 'game_wheel',
@@ -359,6 +361,24 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
     }
   },
 
+  // ---- A RELOAD (log #87): the wheel where it stopped, and what it has paid.
+  // A spin the page cut off mid-turn is not played out: its price comes back.
+  snapshot() {
+    return { rotation, spins: spins - (spinning ? 1 : 0), won, refund: spinning ? SPIN_COST : 0 };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { rotation: number; spins: number; won: number };
+    rotation = v.rotation;
+    spins = v.spins;
+    won = v.won;
+    spinning = false;
+    lastFace = -1;
+    draw();
+    setButtons(true);
+    refresh();
+  },
+
   destroy() {
     froggyLayer.clear();
     face = null;
@@ -476,6 +496,7 @@ function settleSpin(): void {
   const landed = faceAt(rotation);
   if (landed.pays > 0) {
     apiRef.payout(landed.pays);
+    apiRef.record(landed.pays);
     won += landed.pays;
     audio.sfx(landed.pays >= 50 ? 'chime' : landed.pays >= 20 ? 'bell_ding' : 'ui_blip');
     statusText

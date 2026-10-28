@@ -106,6 +106,7 @@ export const ticTacToe: MinigameModule = {
     current = null;
     // the entry cost pays for the first game picked
     paidGo = true;
+    streak = 0;
 
     // A wooden table, and the board a cream card on it.
     backdrop(scene, 0x3b2a1c, 0x2a1d14, { speckleColor: 0xffd9a0 });
@@ -145,6 +146,41 @@ export const ticTacToe: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87).  Noughts and crosses comes back square for
+  // square, with Froggy's move still to come if it was; a rock-paper-scissors
+  // throw in the air, or a game just settled, comes back to the choice of
+  // games -- the go given back if it was unfinished, as MENU does.
+  snapshot() {
+    return { current, board: [...board], paidGo, settled, streak };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { current: 'ttt' | 'rps' | null; board: Cell[]; paidGo: boolean; settled: boolean; streak: number };
+    streak = v.streak;
+    if (v.current === 'ttt' && !v.settled) {
+      startTicTacToe();
+      board = [...v.board];
+      render();
+      paidGo = v.paidGo;
+      const xs = board.filter((c) => c === 'X').length;
+      const os = board.filter((c) => c === 'O').length;
+      // (his move was on its way when the page went)
+      if (xs > os && !settle()) {
+        busy = true;
+        sceneRef?.time.delayedCall(360, () => {
+          const move = aiMove();
+          if (move >= 0) board[move] = 'O';
+          render();
+          busy = false;
+          settle();
+        });
+      }
+      return;
+    }
+    paidGo = v.current !== null && !v.settled ? true : v.paidGo;
+    showPicker();
+  },
+
   destroy() {
     cells = [];
     marks = [];
@@ -171,6 +207,8 @@ let current: 'ttt' | 'rps' | null = null;
 let paidGo = false;
 /** The game on screen has been settled (won, lost or drawn). */
 let settled = false;
+/** Wins in a row this sitting, either game: the cabinet's best (core/records). */
+let streak = 0;
 
 /** Pay for a go if one is not already paid for.  False if they cannot. */
 function spendGo(): boolean {
@@ -437,6 +475,9 @@ function roundOver(result: 'win' | 'lose' | 'draw', detail = ''): void {
   busy = true;
   settled = true;
   const def = cabinetById('tictactoe');
+  // (a draw neither adds to the run nor ends it)
+  if (result === 'win') api.record(++streak);
+  else if (result === 'lose') streak = 0;
   if (result === 'win') {
     api.payout(def.reward);
     audio.sfx('chime');

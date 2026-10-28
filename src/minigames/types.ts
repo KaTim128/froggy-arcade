@@ -132,6 +132,31 @@ export interface MinigameModule {
    * that pay hand by hand, where that is the number the player is deciding on.
    */
   reportsSitting?: boolean;
+  /**
+   * Has the play actually begun?  Some cabinets have a part before it -- the
+   * bets before the race, the barrel before its first pull -- and until it is
+   * true the way out is LEAVE: the stake comes back and there is no result.
+   * Left out, the play begins the moment the game does.
+   */
+  inPlay?(): boolean;
+  /**
+   * The cabinet's own way out of a game in play, in place of QUIT GAME (the
+   * Chamber's CASH OUT), or null for the usual one.
+   */
+  pauseExit?(): { label: string; run: () => void } | null;
+  /**
+   * ---- A RELOAD, PUT BACK EXACTLY (log #87).  Everything this go needs to
+   * carry on from where it stood -- positions, health, the clock, the score,
+   * the round -- as plain data.  Written into the save every second of play
+   * and on the way out of the page; handed to `restore` right after `create`
+   * when the page comes back.  A cabinet without these is put back at the
+   * start of a fresh go instead, still charged nothing again.
+   *
+   * A snapshot taken mid-spin can say `refund: n`: that spin is not played
+   * out after the reload, and the shell hands its n tokens back.
+   */
+  snapshot?(): unknown;
+  restore?(snap: unknown): void;
   create(scene: Phaser.Scene, api: MinigameApi): void;
   update?(time: number, delta: number): void;
   destroy?(): void;

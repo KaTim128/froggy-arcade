@@ -213,6 +213,8 @@ let turn: Team = 'green';
 let shots: Record<Team, number> = { green: 0, red: 0 };
 let score: Record<Team, number> = { green: 0, red: 0 };
 let sudden = false;
+/** Who scored last: a reload during the goal goes on to the right kick-off (log #87). */
+let lastGoal: Team = 'green';
 let selected: Body | null = null;
 let dragging = false;
 let pullX = 0;
@@ -390,6 +392,60 @@ export const bogBall: MinigameModule = {
     render(delta);
   },
 
+  // ---- A RELOAD (log #87): every frog and the ball, where they are and how
+  // fast, whose turn, the shots taken and the score.  A shot in flight goes
+  // on flying; a turn being lined up is lined up again; a goal just scored
+  // goes on to its kick-off.
+  snapshot() {
+    return {
+      frogs: frogs.map((f) => ({ x: f.x, y: f.y, vx: f.vx, vy: f.vy })),
+      ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },
+      phase, turn, shots: { ...shots }, score: { ...score }, sudden, stillMs, movingMs, clock, lastGoal,
+    };
+  },
+
+  restore(snap: unknown) {
+    type B = { x: number; y: number; vx: number; vy: number };
+    const v = snap as { frogs: B[]; ball: B; phase: Phase; turn: Team; shots: Record<Team, number>; score: Record<Team, number>; sudden: boolean; stillMs: number; movingMs: number; clock: number; lastGoal: Team };
+    lastGoal = v.lastGoal;
+    v.frogs.forEach((b, i) => frogs[i] && Object.assign(frogs[i], b));
+    Object.assign(ball, v.ball);
+    shots = { ...v.shots };
+    score = { ...v.score };
+    sudden = v.sudden;
+    clock = v.clock;
+    turn = v.turn;
+    refreshHud();
+    if (v.phase === 'moving') {
+      phase = 'moving';
+      stillMs = v.stillMs;
+      movingMs = v.movingMs;
+      acc = 0;
+      return;
+    }
+    if (v.phase === 'over') {
+      finish();
+      return;
+    }
+    if (v.phase === 'goal') {
+      // (the goal is on the board: on to the kick-off, as `scored` goes)
+      if (sudden) {
+        finish();
+        return;
+      }
+      kickoff();
+      const scorer = lastGoal;
+      const next: Team = scorer === 'green' ? 'red' : 'green';
+      if (shots.green >= SHOTS_EACH && shots.red >= SHOTS_EACH) {
+        finish();
+        return;
+      }
+      beginTurn(shots[next] >= SHOTS_EACH ? scorer : next);
+      return;
+    }
+    beginTurn(v.turn);
+  },
+
   destroy() {
     sceneRef = null;
     apiRef = null;
@@ -466,6 +522,7 @@ function endTurn(): void {
 function scored(team: Team): void {
   if (!sceneRef) return;
   phase = 'goal';
+  lastGoal = team;
   score[team] += 1;
   refreshHud();
   say('GOAL!', team === 'green' ? PALETTE.mossLight : PALETTE.ember);
@@ -513,6 +570,7 @@ function finish(): void {
   phase = 'over';
   const won = score.green > score.red;
   const tie = score.green === score.red;
+  if (won) apiRef?.record(score.green - score.red);
   say(tie ? 'A DRAW' : won ? 'YOU WIN' : 'YOU LOSE', tie ? PALETTE.cream : won ? PALETTE.mossLight : PALETTE.ember);
   centerText(sceneRef, GAME_W / 2, CY - 8, `${score.green} - ${score.red}`, PALETTE.cream, 16).setDepth(30);
   sceneRef.time.delayedCall(1600, () => (tie ? apiRef?.draw() : won ? apiRef?.win() : apiRef?.lose()));

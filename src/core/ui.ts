@@ -182,13 +182,37 @@ export function button(
   onClick: () => void,
   opts: ButtonOpts = {},
 ): Phaser.GameObjects.Container {
-  const w = opts.width ?? Math.max(48, label.length * 6 + 12);
-  const h = opts.height ?? 15;
+  // THE LABEL IN THE MIDDLE, BY ITS INK.  A glyph's cell is six wide with a
+  // blank last column and eight tall with capitals in the top six, so the
+  // text's own middle is half a pixel right of the ink and a row and a half
+  // under it: "centred" labels sat low and to the left, and in a tight box
+  // touched its edge.  Here the ink is measured and put on whole pixels, with
+  // at least 4 clear either side -- a label too long for the width it was
+  // given widens its box rather than running into the outline (log #49/#51).
+  const lines = label.split('\n');
+  const inkW = Math.max(0, ...lines.map((l) => [...l].length * FONT_ADVANCE - 1));
+  const inkH = lines.length * 9 - 3;
+  const w = Math.max(opts.width ?? Math.max(48, label.length * 6 + 12), label ? inkW + 8 : 0);
+  const h = Math.max(opts.height ?? 15, label ? inkH + 4 : 0);
   const fill = opts.fill ?? PALETTE.plum;
   const hoverFill = opts.hoverFill ?? PALETTE.neonDim;
 
-  const box = scene.add.rectangle(0, 0, w, h, fill).setStrokeStyle(1, PALETTE.neon);
-  const lbl = centerText(scene, 0, 0, label, opts.textColor ?? PALETTE.cream);
+  const left = -Math.floor(w / 2);
+  const top = -Math.floor(h / 2);
+  const box = scene.add.rectangle(left, top, w, h, fill).setOrigin(0, 0).setStrokeStyle(1, PALETTE.neon);
+  const lbl = text(scene, left + Math.floor((w - inkW) / 2), top + Math.floor((h - inkH) / 2), label, opts.textColor ?? PALETTE.cream).setOrigin(0, 0);
+  if (lines.length > 1) lbl.setCenterAlign();
+  // (a label changed later -- CASH OUT 5, a countdown -- is put back in the
+  // middle by its new ink, as the old centred origin used to do)
+  const setText = lbl.setText.bind(lbl);
+  lbl.setText = (v: string | string[]): Phaser.GameObjects.BitmapText => {
+    setText(v);
+    const ls = String(Array.isArray(v) ? v.join('\n') : v).split('\n');
+    const iw = Math.max(0, ...ls.map((l) => [...l].length * FONT_ADVANCE - 1));
+    lbl.x = left + Math.floor((w - iw) / 2);
+    lbl.y = top + Math.floor((h - (ls.length * 9 - 3)) / 2);
+    return lbl;
+  };
   const c = scene.add.container(x, y, [box, lbl]);
   c.setSize(w, h);
   // Phaser normalises the local point by the display origin BEFORE testing it

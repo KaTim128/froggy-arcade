@@ -46,6 +46,14 @@ export interface EscapeAware {
 
 let game: Phaser.Game | null = null;
 let frozen: string | null = null;
+/**
+ * RESUME counts 3, 2, 1 first: the player is coming back to something that
+ * was under way -- after a reload (core/session) or back from another tab --
+ * and gets a moment to find the keys before it moves (log #87).
+ */
+let countNext = false;
+/** The count is on screen: the scene is still frozen, and Esc waits for it. */
+let counting = false;
 /** Which scene holds the mouse lock, if any. */
 let lockOwner: string | null = null;
 
@@ -84,6 +92,7 @@ export function installPause(g: Phaser.Game): void {
       open: () => openPause(),
       resume: () => resumePause(),
       paused: () => frozen,
+      counting: () => counting,
     };
   }
 }
@@ -108,7 +117,7 @@ export function pausedScene(): Phaser.Scene | null {
 }
 
 export function togglePause(): void {
-  if (!game) return;
+  if (!game || counting) return;
   if (frozen) {
     const menu = game.scene.getScene('SettingsModal') as unknown as EscapeAware | null;
     if (game.scene.isActive('SettingsModal') && menu?.handleEscape?.()) return;
@@ -126,6 +135,92 @@ function topScene(): Phaser.Scene | null {
   if (!game) return null;
   const running = game.scene.getScenes(true);
   return running.length ? running[running.length - 1] : null;
+}
+
+/** The scenes that are an arcade game being played (log #50: a tab away pauses them). */
+const IN_GAME = new Set(['Minigame', 'CraneGame', 'CreatureArena']);
+
+/**
+ * BACK FROM ANOTHER TAB, MID-GAME: the pause menu, open over the game where
+ * it stood (the loop already slept while the tab was away, so nothing moved).
+ * Not outside a game -- a room, a street, a cabinet's card -- and not when
+ * the menu is already up.
+ */
+export function pauseIfInGame(): void {
+  if (!game || frozen) return;
+  const top = topScene();
+  if (!top || !IN_GAME.has(top.scene.key)) return;
+  // (at the card a cabinet is not yet being played)
+  const started = (top as unknown as { started?: boolean }).started;
+  if (top.scene.key === 'Minigame' && !started) return;
+  openPause();
+  if (frozen) countNext = true;
+}
+
+/**
+ * ---- BACK AFTER A RELOAD.  `key` is about to start with the run's saved
+ * state; once it is up (and has finished fading in) it is paused with the
+ * settings open, and RESUME counts it back in.
+ */
+export function pauseOnArrival(key: string): void {
+  if (!game) return;
+  const sc = game.scene.getScene(key);
+  if (!sc) return;
+  sc.events.once('create', () => {
+    let tries = 0;
+    const tryOpen = (): void => {
+      if (!game || frozen) return;
+      const top = topScene();
+      if (top?.scene.key === key) {
+        openPause();
+        if (frozen) {
+          countNext = true;
+          return;
+        }
+      }
+      // (still fading in, or something else came first: try again shortly)
+      if (++tries < 60) window.setTimeout(tryOpen, 100);
+    };
+    window.setTimeout(tryOpen, 250);
+  });
+}
+
+/** 3, 2, 1 over the frozen picture, then `done`. */
+function countIn(done: () => void): void {
+  const root = document.getElementById('game-root');
+  const canvas = root?.querySelector('canvas');
+  const r = canvas?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+  const el = document.createElement('div');
+  el.id = 'resume-count';
+  Object.assign(el.style, {
+    position: 'fixed',
+    left: `${r.left}px`,
+    top: `${r.top}px`,
+    width: `${r.width}px`,
+    height: `${r.height}px`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: '50',
+    pointerEvents: 'none',
+    background: 'rgba(0, 0, 0, 0.35)',
+    color: '#ffd45e',
+    font: `bold ${Math.round(r.height * 0.32)}px ui-monospace, "Courier New", monospace`,
+    textShadow: '0 0 12px #000, 4px 4px 0 #000',
+  } as Partial<CSSStyleDeclaration>);
+  document.body.appendChild(el);
+  let n = 3;
+  const tick = (): void => {
+    if (n === 0) {
+      el.remove();
+      done();
+      return;
+    }
+    el.textContent = String(n);
+    n--;
+    window.setTimeout(tick, 700);
+  };
+  tick();
 }
 
 export function openPause(): void {
@@ -149,7 +244,18 @@ export function openPause(): void {
 }
 
 export function resumePause(): void {
-  if (!game || !frozen) return;
+  if (!game || !frozen || counting) return;
+  if (countNext) {
+    // the menu goes, the scene stays frozen while it counts
+    countNext = false;
+    counting = true;
+    if (game.scene.isActive('SettingsModal') || game.scene.isPaused('SettingsModal')) game.scene.stop('SettingsModal');
+    countIn(() => {
+      counting = false;
+      resumePause();
+    });
+    return;
+  }
   const key = frozen;
   frozen = null;
   store.flush();
@@ -185,6 +291,7 @@ export function leaveToMenu(): void {
 export function jumpToScene(key: string, data?: object): void {
   if (!game) return;
   frozen = null;
+  countNext = false;
   store.flush();
   touchControls.releaseAll();
   ThreeStage.current?.setPaused(false);

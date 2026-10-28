@@ -232,6 +232,8 @@ let hunt: number[] = [];
 let tried: Set<number> = new Set();
 /** The player's own searches, every click that looked under a pad: the record. */
 let clicks = 0;
+/** Whose move it is, between the searches: what a reload goes back to (log #87). */
+let stage: 'you' | 'afterYou' | 'them' = 'you';
 
 const kindOf = (key: string): FrogKind => KINDS.find((k) => k.key === key)!;
 
@@ -278,6 +280,8 @@ export function canPlace(pond: Pond, kind: FrogKind, anchor: number): boolean {
 // ----------------------------------------------------------------- the module
 
 export const battleship: MinigameModule = {
+  // (placing your frogs is not yet the hunt: LEAVE, the stake back)
+  inPlay: () => phase !== 'place',
   // The id stays `battleship`: the cabinet, its price, its reward,
   // the registry and the high score table all key off it.  Nothing the player
   // ever reads says that word.
@@ -313,6 +317,7 @@ export const battleship: MinigameModule = {
     hunt = [];
     tried = new Set();
     clicks = 0;
+    stage = 'you';
     toPlace = [...ROSTER];
     holding = 0;
 
@@ -397,6 +402,64 @@ export const battleship: MinigameModule = {
         delete (window as unknown as Record<string, unknown>).__pond;
       });
     }
+  },
+
+  // ---- A RELOAD (log #87): both ponds frog for frog -- where each sits,
+  // what has been found, seen and searched, the cooldowns -- the opponent's
+  // trail, your searches, and whose move it was.  Placing, the frogs you had
+  // put down stay down.
+  snapshot() {
+    const pond = (p: Pond | null) =>
+      p && {
+        frogs: p.frogs.map((f) => ({ k: f.kind.key, at: [...f.at], found: [...f.found], cool: f.cool, seen: [...f.seen], hidden: f.hidden })),
+        searched: [...p.searched],
+        stale: [...p.stale],
+      };
+    return { phase, clicks, hunt: [...hunt], tried: [...tried], stage, toPlace: [...toPlace], mine: pond(mine), theirs: pond(theirs) };
+  },
+
+  restore(snap: unknown) {
+    type P = { frogs: Array<{ k: string; at: number[]; found: number[]; cool: number; seen: number[]; hidden: boolean }>; searched: Array<[number, 'water' | 'frog']>; stale: number[] };
+    const v = snap as { phase: Phase; clicks: number; hunt: number[]; tried: number[]; stage: typeof stage; toPlace: string[]; mine: P; theirs: P };
+    const put = (p: Pond | null, sv: P) => {
+      if (!p) return;
+      p.frogs = sv.frogs.map((f) => ({ kind: kindOf(f.k), at: [...f.at], found: new Set(f.found), cool: f.cool, seen: new Set(f.seen), hidden: f.hidden }));
+      p.searched = new Map(sv.searched);
+      p.stale = new Set(sv.stale);
+    };
+    put(mine, v.mine);
+    put(theirs, v.theirs);
+    clicks = v.clicks;
+    hunt = [...v.hunt];
+    tried = new Set(v.tried);
+    if (v.phase === 'place') {
+      toPlace = [...v.toPlace];
+      holding = 0;
+      buildPicker(sceneRef!);
+      refreshPicker();
+      if (mine) repaint(mine, true);
+      return;
+    }
+    // into the hunt, as the START button does
+    phase = 'place';
+    toPlace = [];
+    startHunt();
+    if (mine) repaint(mine, true);
+    if (theirs) repaint(theirs, false);
+    refreshScore();
+    // (it had already been decided: it is decided again)
+    if (v.phase === 'done' && theirs && mine) {
+      finish(theirs.frogs.every((f) => f.found.size >= f.kind.size));
+      return;
+    }
+    stage = v.stage;
+    if (stage === 'afterYou') {
+      busy = true;
+      sceneRef?.time.delayedCall(720, betweenTurns);
+    } else if (stage === 'them') {
+      busy = true;
+      sceneRef?.time.delayedCall(520, opponentTurn);
+    } else busy = false;
   },
 
   destroy() {
@@ -781,6 +844,7 @@ function search(at: number): void {
     return;
   }
   // turn ends -- then, and only then, the ponds settle
+  stage = 'afterYou';
   sceneRef?.time.delayedCall(720, betweenTurns);
 }
 
@@ -798,6 +862,7 @@ function betweenTurns(): void {
   stepFrogs(theirs);
   stepFrogs(mine);
   repaint(mine, true);
+  stage = 'them';
   sceneRef?.time.delayedCall(520, opponentTurn);
 }
 
@@ -849,6 +914,7 @@ function opponentTurn(): void {
     status?.setText('POND SEARCH');
     subStatus?.setText(`${isTouch() ? 'TAP' : 'CLICK'} A PAD IN THEIR POND`);
     busy = false;
+    stage = 'you';
     refreshScore();
   });
 }

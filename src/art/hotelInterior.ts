@@ -404,11 +404,12 @@ export const STORAGE_X = 372;
 export const DESK = { x: 124, w: 72, top: 135 };
 
 /**
- * One gallery of the atrium, its floor at `floor`: the guest doors along the
- * back of it, the slab edge, and a brass-capped balustrade in front.
+ * One gallery of the atrium, its floor at `floor`: plain wall along the back
+ * of it (no guest doors: they were only ever painted on, and read as doors
+ * you should be able to use), the slab edge, and a brass-capped balustrade
+ * in front.  `doors` still spaces its sconces.
  */
 function gallery(g: Ctx, W: number, floor: number, doors: number[]): void {
-  for (const dx of doors) roomDoor(g, dx, '', { floor });
   // the balcony runs across the side bays only; the middle bay is open
   for (const sx of doors.filter((_, k) => k % 2 === 0)) sconce(g, sx + 14, floor - 26);
   // the slab edge, with the light along its underside

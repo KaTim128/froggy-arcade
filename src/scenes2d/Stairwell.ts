@@ -15,9 +15,11 @@
  *   climbing, down if you were going down).
  *
  *   THE DOOR on each floor's landing goes through to that floor: the lobby
- *   on 1, your corridor on 2, the old one on 6.  3 to 5 are other people's
- *   floors, their doors locked from this side.  At the foot of the well the
- *   basement steps are caged off; at the top, the roof door is alarmed.
+ *   on G, your corridor on 2, the old one on 6.  1 and 3 to 5 are other
+ *   people's floors, their doors locked from this side.  The foot of the well
+ *   is G's landing.  At the top, the roof door opens on to the roof: out
+ *   there you walk along it, the town all round, and come back in the same
+ *   way.
  */
 
 import Phaser from 'phaser';
@@ -32,15 +34,19 @@ import { Player, PLAYER_SPEED } from '../art/player';
 import { froggyLayer } from '../render/froggyLayer';
 import { backPlate, fitPrompt, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
+import { store } from '../core/state';
+import { clock as lifeClock } from '../game/life';
 
 export const TOP_FLOOR = 6;
+/** The bottom of the well: G, the lobby's landing. */
+export const G_FLOOR = 0;
 /** One floor to the next, in pixels up the well. */
 const FLOOR_H = 92;
 /** Above the sixth: the last flight up to the roof door, and some ceiling. */
 const HEAD = 96;
-/** Below the lobby's landing: the basement cage and the bottom of the well. */
-const FOOT = 40;
-const WORLD_H = HEAD + FLOOR_H * (TOP_FLOOR - 1) + FOOT + 40;
+/** Below G's landing: just the bottom of the well (no basement: G is the bottom). */
+const FOOT = 20;
+const WORLD_H = HEAD + FLOOR_H * (TOP_FLOOR - G_FLOOR) + FOOT + 40;
 /**
  * THE WELL'S SIDES: solid walls, the dark of a lift shaft's (see paintLift),
  * left of WALL_L and right of WALL_R.  Nothing is walked past them.
@@ -79,7 +85,7 @@ interface Piece {
 
 function buildPath(): Piece[] {
   const out: Piece[] = [];
-  for (let f = 1; f <= TOP_FLOOR; f++) {
+  for (let f = G_FLOOR; f <= TOP_FLOOR; f++) {
     const y = floorY(f);
     out.push({ kind: 'landing', floor: f, x0: FL.x0, y0: y, x1: FL.x1, y1: y });
     // up and away to the right, to the half-landing
@@ -102,12 +108,12 @@ const FLEN = HL.x0 - FL.x1;
 const TOTAL = FLEN * FLIGHTS.length;
 /**
  * Where two flights meet there is a landing off to the side: at the even
- * joins (0 = the lobby's, 2 = level 2's, ... 12 = the roof door's) the
+ * joins (0 = G's, 2 = level 1's, ... 12 = level 6's, 14 = the roof door's) the
  * floor's landing out to the left, at the odd ones a half-landing out to
  * the right.
  */
 const JOINS = FLIGHTS.length;
-const joinY = (j: number): number => (j % 2 === 0 ? floorY(1) - (j / 2) * FLOOR_H : floorY(1) - ((j - 1) / 2) * FLOOR_H - FLOOR_H / 2);
+const joinY = (j: number): number => (j % 2 === 0 ? floorY(G_FLOOR) - (j / 2) * FLOOR_H : floorY(G_FLOOR) - ((j - 1) / 2) * FLOOR_H - FLOOR_H / 2);
 const joinX = (j: number): number => (j % 2 === 0 ? FL.x1 : HL.x0);
 /** Which way is out on to a join's landing: left for a floor's, right for a half's. */
 const outward = (j: number): 1 | -1 => (j % 2 === 0 ? -1 : 1);
@@ -128,7 +134,12 @@ export function feetAt(s: number): { x: number; y: number } {
   return { x, y: Math.round(p.y0 + ((p.y1 - p.y0) * (step + 0.5)) / n) };
 }
 
-type Spot = 'door' | 'roof' | 'basement' | null;
+type Spot = 'door' | 'roof' | 'roofdoor' | null;
+
+/** The roof, out of the roof door: where the feet stand, and how far along it you can go. */
+const ROOF = { y: 150, x0: 30, x1: GAME_W - 26, door: 40 };
+/** Floors whose doors are locked from the stairs (other people's). */
+const LOCKED = new Set([1, 3, 4, 5]);
 
 export class Stairwell extends Phaser.Scene {
   private floor = 1;
@@ -152,8 +163,14 @@ export class Stairwell extends Phaser.Scene {
     super('Stairwell');
   }
 
+  /** Out on the roof (through the roof door), and the picture of it. */
+  private onRoof = false;
+  private roofImg: Phaser.GameObjects.Image | null = null;
+  private wellImg: Phaser.GameObjects.Image | null = null;
+  private rail: Phaser.GameObjects.Graphics | null = null;
+
   init(data: { floor?: number } = {}): void {
-    this.floor = Phaser.Math.Clamp(Math.round(data.floor ?? 1), 1, TOP_FLOOR);
+    this.floor = Phaser.Math.Clamp(Math.round(data.floor ?? G_FLOOR), G_FLOOR, TOP_FLOOR);
   }
 
   create(): void {
@@ -163,7 +180,8 @@ export class Stairwell extends Phaser.Scene {
     this.locked = false;
     this.spot = null;
     this.stepT = 0;
-    const key = 'stairwell_well_v3';
+    this.onRoof = false;
+    const key = 'stairwell_well_v4';
     if (!this.textures.exists(key)) {
       const t = this.textures.createCanvas(key, GAME_W, WORLD_H);
       if (t) {
@@ -172,10 +190,10 @@ export class Stairwell extends Phaser.Scene {
       }
     }
     // (each floor's number is painted in, on its little white square by the door)
-    this.add.image(0, 0, key).setOrigin(0, 0).setDepth(0);
+    this.wellImg = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(0);
 
     // in at this floor's door, facing the stairs
-    this.spur = (this.floor - 1) * 2;
+    this.spur = this.floor * 2;
     this.sx = DOOR_X;
     this.s = this.spur * FLEN;
     this.player = new Player(this, this.sx, joinY(this.spur), false);
@@ -188,6 +206,7 @@ export class Stairwell extends Phaser.Scene {
 
     // the rails up the front of every flight, over the feet
     const rail = this.add.graphics().setDepth(700);
+    this.rail = rail;
     for (const p of PATH) {
       if (p.kind !== 'flight') continue;
       const a = Math.min(p.x0, p.x1);
@@ -222,13 +241,13 @@ export class Stairwell extends Phaser.Scene {
     this.keys = { up: bind(KEYS.up), down: bind(KEYS.down), left: bind(KEYS.left), right: bind(KEYS.right) };
     kb?.on('keydown-E', () => this.interact());
     // a tap on a door goes through it (once you are at it)
-    for (let f = 1; f <= TOP_FLOOR; f++) {
+    for (let f = G_FLOOR; f <= TOP_FLOOR; f++) {
       this.add
         .zone(DOOR_X - 12, floorY(f) - 40, 24, 42)
         .setOrigin(0, 0)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
-          if (this.spot === 'door' && this.landingFloor() === f) this.interact();
+          if (this.spot === 'door' && this.landingFloor() === f && !this.onRoof) this.interact();
           else this.say('WALK UP TO THE DOOR.');
         });
     }
@@ -257,9 +276,9 @@ export class Stairwell extends Phaser.Scene {
     }
   }
 
-  /** The floor whose landing you are on, or 0 for anywhere else (7: the roof door's). */
+  /** The floor whose landing you are on (0 is G), or -1 for anywhere else (7: the roof door's). */
   private landingFloor(): number {
-    return this.spur !== null && this.spur % 2 === 0 ? this.spur / 2 + 1 : 0;
+    return this.spur !== null && this.spur % 2 === 0 ? this.spur / 2 : -1;
   }
 
   private feet(): { x: number; y: number } {
@@ -284,7 +303,7 @@ export class Stairwell extends Phaser.Scene {
   update(_t: number, delta: number): void {
     const cam = this.cameras.main;
     // the view follows you up and down the well, a little behind
-    const want = Phaser.Math.Clamp(this.player.y - GAME_H * 0.62, 0, WORLD_H - GAME_H);
+    const want = this.onRoof ? 0 : Phaser.Math.Clamp(this.player.y - GAME_H * 0.62, 0, WORLD_H - GAME_H);
     cam.scrollY += (want - cam.scrollY) * Math.min(1, (delta / 1000) * 5);
     if (this.locked) {
       this.prompt.setVisible(false);
@@ -293,6 +312,7 @@ export class Stairwell extends Phaser.Scene {
     }
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
+    if (this.onRoof) return this.roofFrame(dx, delta);
     const was = this.feet();
     if (dx || dy) this.walk(dx, dy, (PLAYER_SPEED * delta) / 1000);
     const now = this.feet();
@@ -309,14 +329,13 @@ export class Stairwell extends Phaser.Scene {
 
     const lf = this.landingFloor();
     const at = this.feet();
-    this.spot =
-      lf >= 1 && lf <= TOP_FLOOR && Math.abs(at.x - DOOR_X) < 12 ? 'door' : lf === TOP_FLOOR + 1 && at.x < FL.x0 + 30 ? 'roof' : lf === 1 && at.x < FL.x0 + 12 ? 'basement' : null;
+    this.spot = lf >= G_FLOOR && lf <= TOP_FLOOR && Math.abs(at.x - DOOR_X) < 12 ? 'door' : lf === TOP_FLOOR + 1 && at.x < FL.x0 + 30 ? 'roof' : null;
     if (!this.spot) {
       this.prompt.setVisible(false);
       this.promptPlate.setVisible(false);
       return;
     }
-    const label = this.spot === 'roof' ? '[E] ROOF DOOR' : this.spot === 'basement' ? '[E] BASEMENT' : lf === 1 ? '[E] TO THE LOBBY' : `[E] TO LEVEL ${lf}`;
+    const label = this.spot === 'roof' ? '[E] OUT ON TO THE ROOF' : lf === G_FLOOR ? '[E] TO THE LOBBY' : `[E] TO LEVEL ${lf}`;
     this.prompt.setText(label).setPosition(Phaser.Math.Clamp(this.player.x, 50, GAME_W - 50), this.player.y - 36).setVisible(true);
     fitPrompt(this.promptPlate, this.prompt);
   }
@@ -410,26 +429,91 @@ export class Stairwell extends Phaser.Scene {
 
   private interact(): void {
     if (this.locked || !this.spot) return;
-    if (this.spot === 'roof') {
-      audio.sfx('door_rattle', 0.6);
-      this.say('ROOF ACCESS. ALARMED. NOT AGAIN.');
-      return;
-    }
-    if (this.spot === 'basement') {
-      audio.sfx('door_rattle', 0.6);
-      this.say('A CAGE DOOR OVER THE STEPS DOWN. PADLOCKED.');
-      return;
-    }
+    if (this.spot === 'roof') return this.toRoof(true);
+    if (this.spot === 'roofdoor') return this.toRoof(false);
     const f = this.landingFloor();
-    if (f >= 3 && f <= 5) {
+    if (LOCKED.has(f)) {
       audio.sfx('door_rattle', 0.6);
       this.say(`LEVEL ${f}. RESIDENTS' CARDS ONLY. LOCKED FROM THIS SIDE.`);
       return;
     }
     this.locked = true;
     audio.sfx('door_creak', 0.5);
-    if (f === 1) fadeToScene(this, 'Hotel', { area: 'lobby', from: 'stairwell' });
+    if (f === G_FLOOR) fadeToScene(this, 'Hotel', { area: 'lobby', from: 'stairwell' });
     else fadeToScene(this, 'Hotel', { area: 'corridor', from: 'stairwell', level: f });
+  }
+
+  // ------------------------------------------------------------- the roof
+
+  /** Through the roof door: out on to the roof, or back in to the top landing. */
+  private toRoof(out: boolean): void {
+    this.locked = true;
+    audio.sfx('door_creak', 0.5);
+    const cam = this.cameras.main;
+    cam.fadeOut(220, 0, 0, 0);
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.onRoof = out;
+      if (out) {
+        const sky = this.roofSky();
+        const key = `stairwell_roof_${sky}`;
+        if (!this.textures.exists(key)) {
+          const t = this.textures.createCanvas(key, GAME_W, GAME_H);
+          if (t) {
+            paintRoof(t.getContext(), sky);
+            t.refresh();
+          }
+        }
+        this.roofImg?.destroy();
+        this.roofImg = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(1).setScrollFactor(0);
+        cam.setBounds(0, 0, GAME_W, GAME_H);
+        cam.scrollY = 0;
+        this.sx = ROOF.door + 14;
+        this.player.setPosition(this.sx, ROOF.y);
+      } else {
+        this.roofImg?.destroy();
+        this.roofImg = null;
+        cam.setBounds(0, 0, GAME_W, WORLD_H);
+        this.spur = JOINS;
+        this.sx = FL.x0 + 10;
+        this.place();
+        cam.scrollY = Phaser.Math.Clamp(this.player.y - GAME_H * 0.62, 0, WORLD_H - GAME_H);
+      }
+      this.wellImg?.setVisible(!out);
+      this.rail?.setVisible(!out);
+      cam.fadeIn(260);
+      this.locked = false;
+      if (out) this.say('THE ROOF. THE WHOLE TOWN, AND NOWHERE TO GO.');
+    });
+  }
+
+  private roofSky(): 'day' | 'evening' | 'night' {
+    const c = lifeClock();
+    if (store.get().timeOfDay !== 'day' || c.dark) return 'night';
+    return c.phase === 'evening' ? 'evening' : 'day';
+  }
+
+  /** On the roof: along it, left and right, and the roof door at the left end. */
+  private roofFrame(dx: number, delta: number): void {
+    const before = this.sx;
+    if (dx) this.sx = Phaser.Math.Clamp(this.sx + (dx * PLAYER_SPEED * delta) / 1000, ROOF.x0, ROOF.x1);
+    const moved = this.sx - before;
+    this.player.setPosition(Math.round(this.sx), ROOF.y);
+    if (moved) {
+      this.player.stride(Math.sign(moved), delta);
+      this.stepT += delta;
+      if (this.stepT > 300) {
+        this.stepT = 0;
+        audio.sfx('footstep_concrete', 0.45);
+      }
+    } else this.player.stand();
+    this.spot = Math.abs(this.sx - ROOF.door) < 14 ? 'roofdoor' : null;
+    if (!this.spot) {
+      this.prompt.setVisible(false);
+      this.promptPlate.setVisible(false);
+      return;
+    }
+    this.prompt.setText('[E] BACK IN').setPosition(Phaser.Math.Clamp(this.player.x, 50, GAME_W - 50), this.player.y - 36).setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 }
 
@@ -479,7 +563,7 @@ function paintWell(g: Ctx): void {
   g.fillRect(0, 0, W, H);
 
   // each floor: the green dado behind its landing, its strip light and glow
-  for (let f = 1; f <= TOP_FLOOR + 1; f++) {
+  for (let f = G_FLOOR; f <= TOP_FLOOR + 1; f++) {
     const y = f <= TOP_FLOOR ? floorY(f) : floorY(TOP_FLOOR) - FLOOR_H;
     rect(g, WALL_L, y - 22, FL.x1 + 6 - WALL_L, 22, '#7a8a7e');
     rect(g, WALL_L, y - 23, FL.x1 + 6 - WALL_L, 1, '#5a6a5e');
@@ -540,12 +624,12 @@ function paintWell(g: Ctx): void {
   }
 
   // ---- the doors: a fire door with wired glass and its EXIT box on every floor
-  for (let f = 1; f <= TOP_FLOOR; f++) {
+  for (let f = G_FLOOR; f <= TOP_FLOOR; f++) {
     const y = floorY(f);
     const dx = DOOR_X;
     rect(g, dx - 10, y - 38, 20, 38, '#d8d4c8');
     rect(g, dx - 9, y - 36, 18, 36, '#14100c');
-    rect(g, dx - 8, y - 35, 16, 35, f >= 3 && f <= 5 ? '#7a8078' : '#8a9088');
+    rect(g, dx - 8, y - 35, 16, 35, LOCKED.has(f) ? '#7a8078' : '#8a9088');
     rect(g, dx - 8, y - 35, 16, 1, '#b0b6ae');
     rect(g, dx + 7, y - 35, 1, 35, '#6a7068');
     rect(g, dx - 3, y - 31, 7, 9, '#3a4440');
@@ -575,14 +659,10 @@ function paintWell(g: Ctx): void {
     }
   }
 
-  // ---- the foot: the cage over the steps down to the basement, padlocked
+  // ---- the foot: G's slab is the bottom of the well (nothing below it)
   {
-    const y = floorY(1);
+    const y = floorY(G_FLOOR);
     rect(g, 0, y + 9, W, H - y - 9, '#1c1e22');
-    rect(g, FL.x0, y - 34, 16, 34, '#2a2a2e');
-    for (let x = FL.x0; x < FL.x0 + 16; x += 3) rect(g, x, y - 34, 1, 34, '#8a8e94');
-    for (let yy = y - 34; yy < y; yy += 6) rect(g, FL.x0, yy, 16, 1, '#8a8e94');
-    rect(g, FL.x0 + 13, y - 10, 3, 4, '#c8a838');
   }
   // ---- the head: the roof door, red, with its alarm bar
   {
@@ -593,12 +673,14 @@ function paintWell(g: Ctx): void {
     rect(g, rx, y - 36, 16, 36, '#7a2a2a');
     rect(g, rx, y - 36, 16, 1, '#a84a4a');
     rect(g, rx + 2, y - 18, 12, 2, '#e8e8e0');
-    rect(g, rx + 3, y - 28, 10, 5, '#f0d020');
-    rect(g, rx + 4, y - 27, 8, 3, '#141414');
+    // ROOF, on a plate on the door
+    rect(g, rx + 3, y - 29, 10, 6, '#e8e4d8');
+    rect(g, rx + 3, y - 23, 10, 1, '#8a867c');
   }
 
   // ---- each floor's number: black, on a small white square beside its door
   const DIGITS: Record<string, string[]> = {
+    G: ['111', '100', '101', '101', '111'],
     '1': ['010', '110', '010', '010', '111'],
     '2': ['111', '001', '111', '100', '111'],
     '3': ['111', '001', '011', '001', '111'],
@@ -606,13 +688,13 @@ function paintWell(g: Ctx): void {
     '5': ['111', '100', '111', '001', '111'],
     '6': ['111', '100', '111', '101', '111'],
   };
-  for (let f = 1; f <= TOP_FLOOR; f++) {
+  for (let f = G_FLOOR; f <= TOP_FLOOR; f++) {
     const sx = SIGN.x;
     const sy = floorY(f) - SIGN.up;
     rect(g, sx - 1, sy - 1, SIGN.w + 2, SIGN.h + 2, '#6a6a66');
     rect(g, sx, sy, SIGN.w, SIGN.h, '#f4f4f0');
     rect(g, sx, sy + SIGN.h - 1, SIGN.w, 1, '#c8c8c0');
-    DIGITS[String(f)].forEach((row, r) => [...row].forEach((b, c) => b === '1' && rect(g, sx + 3 + c, sy + 2 + r, 1, 1, '#101010')));
+    DIGITS[f === G_FLOOR ? 'G' : String(f)].forEach((row, r) => [...row].forEach((b, c) => b === '1' && rect(g, sx + 3 + c, sy + 2 + r, 1, 1, '#101010')));
   }
 
   // ---- THE SIDES OF THE WELL: solid, the dark of a lift shaft -- concrete
@@ -634,4 +716,97 @@ function paintWell(g: Ctx): void {
   ]) {
     for (let k = 0; k < 6; k++) rect(g, d > 0 ? x + k : x - 1 - k, 0, 1, H, '#000000', 0.22 - k * 0.035);
   }
+}
+
+/**
+ * THE ROOF, side-on: the sky (by the time of day), the town's roofs and
+ * towers behind, and in front the roof itself -- its gravel, the parapet
+ * along the front edge, a water tank on legs, the air-conditioning boxes
+ * and a vent stack, and at the left the little stair house with the roof
+ * door in it.
+ */
+function paintRoof(g: Ctx, sky: 'day' | 'evening' | 'night'): void {
+  const W = GAME_W;
+  const H = GAME_H;
+  const night = sky === 'night';
+  const top = night ? '#0a1024' : sky === 'evening' ? '#3a2a52' : '#6aa8d8';
+  const low = night ? '#1c2440' : sky === 'evening' ? '#e8906a' : '#bcdcf0';
+  const sg = g.createLinearGradient(0, 0, 0, ROOF.y - 20);
+  sg.addColorStop(0, top);
+  sg.addColorStop(1, low);
+  g.fillStyle = sg;
+  g.fillRect(0, 0, W, ROOF.y);
+  // stars by night, a sun or a low one otherwise
+  let seed = 7;
+  const r = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  if (night) {
+    for (let k = 0; k < 70; k++) rect(g, r() * W, r() * (ROOF.y - 50), 1, 1, '#ffffff', 0.3 + r() * 0.6);
+    rect(g, W - 70, 18, 8, 8, '#e8ecf4');
+    rect(g, W - 68, 18, 6, 1, '#ffffff');
+  } else {
+    const sunY = sky === 'evening' ? 70 : 24;
+    const gl = g.createRadialGradient(60, sunY, 2, 60, sunY, 40);
+    gl.addColorStop(0, 'rgba(255,250,220,0.95)');
+    gl.addColorStop(0.2, 'rgba(255,240,200,0.5)');
+    gl.addColorStop(1, 'rgba(255,240,200,0)');
+    g.fillStyle = gl;
+    g.fillRect(20, sunY - 40, 80, 80);
+  }
+  // the town behind: two rows of blocks, the far one paler, windows in them
+  for (const [base, tone, alpha] of [
+    [ROOF.y - 34, night ? '#141a2c' : sky === 'evening' ? '#5a4a6a' : '#8aa0b8', 1],
+    [ROOF.y - 20, night ? '#0c1020' : sky === 'evening' ? '#3a2e48' : '#5a7088', 1],
+  ] as const) {
+    let x = -4;
+    while (x < W) {
+      const w = 14 + Math.floor(r() * 22);
+      const h = 20 + Math.floor(r() * 46);
+      rect(g, x, base - h, w, h + 30, tone, alpha);
+      for (let wy = base - h + 4; wy < base - 2; wy += 6)
+        for (let wx = x + 2; wx < x + w - 2; wx += 4) {
+          const lit = night ? r() < 0.35 : r() < 0.08;
+          if (lit || r() < 0.5) rect(g, wx, wy, 2, 3, lit ? '#f0d890' : '#000000', lit ? 0.9 : 0.18);
+        }
+      x += w + 1;
+    }
+  }
+  // the roof: gravel, to the bottom of the picture
+  rect(g, 0, ROOF.y - 6, W, H - ROOF.y + 6, night ? '#3a3a40' : '#8a8680');
+  for (let k = 0; k < 600; k++) rect(g, r() * W, ROOF.y - 6 + r() * (H - ROOF.y + 6), 1, 1, r() < 0.5 ? '#000000' : '#ffffff', 0.12);
+  // the parapet along the front edge, its coping
+  rect(g, 0, H - 14, W, 14, night ? '#4a4844' : '#a8a298');
+  rect(g, 0, H - 15, W, 2, night ? '#6a6862' : '#c8c2b6');
+  for (let x = 0; x < W; x += 16) rect(g, x, H - 14, 1, 14, '#000000', 0.15);
+  // the water tank on its legs, and its ladder
+  const tx = 210;
+  rect(g, tx, ROOF.y - 66, 40, 34, night ? '#4a3c30' : '#8a6a4a');
+  for (let y = ROOF.y - 64; y < ROOF.y - 32; y += 6) rect(g, tx, y, 40, 1, '#000000', 0.25);
+  rect(g, tx - 2, ROOF.y - 70, 44, 5, night ? '#3a3028' : '#6a5038');
+  for (const lx of [tx + 3, tx + 35]) rect(g, lx, ROOF.y - 32, 2, 26, '#2a2a2e');
+  rect(g, tx + 3, ROOF.y - 20, 34, 1, '#2a2a2e');
+  // the air-conditioning boxes, their fans
+  for (const ax of [118, 150]) {
+    rect(g, ax, ROOF.y - 22, 26, 16, night ? '#6a6e74' : '#b4b8bc');
+    rect(g, ax, ROOF.y - 22, 26, 1, '#e0e4e8', 0.6);
+    rect(g, ax + 6, ROOF.y - 19, 14, 10, '#2a2c30');
+    rect(g, ax + 12, ROOF.y - 19, 1, 10, '#6a6e74');
+    rect(g, ax + 6, ROOF.y - 14, 14, 1, '#6a6e74');
+  }
+  // a vent stack
+  rect(g, 272, ROOF.y - 34, 6, 28, night ? '#4a4c50' : '#8a8c90');
+  rect(g, 270, ROOF.y - 36, 10, 3, '#2a2c30');
+  // the stair house at the left, with the roof door
+  rect(g, 0, ROOF.y - 58, 62, 52, night ? '#5a564e' : '#c4bcae');
+  rect(g, 0, ROOF.y - 61, 66, 4, night ? '#3a3832' : '#8a8478');
+  rect(g, ROOF.door - 9, ROOF.y - 40, 18, 34, '#d8d4c8');
+  rect(g, ROOF.door - 8, ROOF.y - 38, 16, 32, '#7a2a2a');
+  rect(g, ROOF.door - 8, ROOF.y - 38, 16, 1, '#a84a4a');
+  rect(g, ROOF.door + 4, ROOF.y - 22, 2, 3, '#e8e8e0');
+  // a light over it
+  rect(g, ROOF.door - 4, ROOF.y - 46, 8, 3, '#f0e8c8');
+  const lg = g.createRadialGradient(ROOF.door, ROOF.y - 44, 1, ROOF.door, ROOF.y - 44, 26);
+  lg.addColorStop(0, 'rgba(255,240,200,0.35)');
+  lg.addColorStop(1, 'rgba(255,240,200,0)');
+  g.fillStyle = lg;
+  g.fillRect(ROOF.door - 30, ROOF.y - 70, 60, 60);
 }

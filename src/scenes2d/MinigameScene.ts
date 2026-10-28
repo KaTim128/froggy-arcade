@@ -27,14 +27,16 @@ import { PALETTE } from '../render/palette';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
-import { store, type GameId } from '../core/state';
-import { button, centerText, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
+import { store, type GameId, type SavedGame } from '../core/state';
+import { trackGame } from '../core/session';
+import { centerText, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { TokenHud } from '../ui/hud';
+import { floatDeduct, TokenHud } from '../ui/hud';
 import { cabinetById } from '../game/content';
 import { getMinigame } from '../minigames/registry';
 import type { MinigameApi, MinigameModule } from '../minigames/types';
-import { showTutorial, type TutorialCard } from '../ui/tutorialCard';
+import { keyPlan, showTutorial, type TutorialCard } from '../ui/tutorialCard';
+import { gameKeys, setKeyScope } from '../core/keymap';
 import { froggyLayer } from '../render/froggyLayer';
 import { setCabinetTouch } from '../game/touchLayouts';
 import { patrolsOut, stealthPhase } from '../game/patrol';
@@ -63,7 +65,11 @@ export class MinigameScene extends Phaser.Scene {
    * the game.  `started` is what `update` waits on.
    */
   private started = false;
-  /** Opened straight into the game, with no how-to-play card.  See `create`. */
+  /** The go a reload interrupted, to put back rather than start (core/session). */
+  private restoring: SavedGame | null = null;
+  /** Put back after a reload and not yet RESUMEd: held exactly as it was saved. */
+  private held = false;
+  /** Started from the floor (E, a tap) rather than by clicking the cabinet.  The card comes up either way. */
   private straight = false;
   private card: TutorialCard | null = null;
   /** Where the result card goes afterwards, when it is not back to the room. */
@@ -78,11 +84,14 @@ export class MinigameScene extends Phaser.Scene {
     super('Minigame');
   }
 
-  init(data: { id: GameId; from?: string; straight?: boolean; chooser?: boolean }): void {
+  init(data: { id: GameId; from?: string; straight?: boolean; chooser?: boolean; restore?: SavedGame }): void {
     this.gameId = data.id;
-    // back from a practice go: straight to the choice of PLAY or PRACTICE
+    // back after a reload, mid-game: straight into it, charged nothing (core/session)
+    this.restoring = data.restore ?? null;
+    this.held = false;
+    // back from a practice go: the machine's screen, not its HOW TO PLAY page
     this.chooser = data.chooser === true;
-    // Walked up and pressed play in one motion: see `straight` below.
+    // Walked up and pressed play in one motion: the card still comes up.
     this.straight = data.straight === true;
     // Which room's floor to put the player back on.  Sending everyone to the
     // hub meant playing a cabinet in the back room spat you out two rooms away.
@@ -147,6 +156,7 @@ export class MinigameScene extends Phaser.Scene {
   private copInterrupts(): void {
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.copT = null;
     this.card?.destroy();
     this.card = null;
@@ -216,6 +226,12 @@ export class MinigameScene extends Phaser.Scene {
 
     this.hud = new TokenHud(this);
     this.hud.setVisible(false); // the title bar already carries the balance line
+    // (tokens going out mid-game -- the play itself, a raise, a spin -- the
+    // red amount under the title bar, where the counter would be)
+    const offSpend = ledger.onChange((next, prev) => {
+      if (next < prev) floatDeduct(this, 4, 19, prev - next, ' TOKENS');
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, offSpend);
     // Right-aligned a clear gap short of the gear rather than pinned to a
     // fixed left edge: the note is the cabinet's own wording and some of them
     // are twice as long as others.
@@ -250,7 +266,13 @@ export class MinigameScene extends Phaser.Scene {
         // (a practice go sets no records)
         if (this.practicing) return;
         const rec = RECORDS[this.gameId];
-        if (rec && submitRecord(this.gameId, value)) this.newBest = `NEW BEST!  ${rec.format(bestRecord(this.gameId) ?? value)}`;
+        // (and only when it is now the best shown: a cabinet whose run kept an
+        // older, higher score is not beaten by a first record under it)
+        if (rec && submitRecord(this.gameId, value)) {
+          const now = bestRecord(this.gameId);
+          const v = rec.lower ? Math.round(value * 10) / 10 : Math.floor(value);
+          if (now === v) this.newBest = `NEW BEST!  ${rec.format(v)}`;
+        }
       },
       area: AREA,
     };
@@ -263,17 +285,7 @@ export class MinigameScene extends Phaser.Scene {
     // where the tokens move and where the module is constructed.
     const mod = this.mod;
 
-    // ---- STRAIGHT IN, WITH NO CARD.
-    //
-    // Clicking the cabinet itself asks what it is, so it gets the card.
-    // Everything else that starts a game from the floor -- the E key, or a
-    // click anywhere else while stood at a machine -- is somebody who already
-    // knows and wants to play, so it goes straight to the game.  The charge is
-    // identical either way: the same debit, the same ledger reason, once.
-    //
-    // It is the same `onPlay` the card's own button runs, called directly, so
-    // there is exactly one route into a built game and no second copy of the
-    // charging rule to drift out of step with this one.
+    // PLAY: the one route into a built game, and the one place a go is charged.
     const start = (): void => {
       this.card = null;
       if (this.settled) return;
@@ -293,6 +305,7 @@ export class MinigameScene extends Phaser.Scene {
       store.flush();
       mod.create(this, api);
       this.started = true;
+      this.saveGame(true);
       // the cabinet's finish over its picture: its light, its corners, its grain
       applyFinish(this, this.gameId);
       this.armPolice();
@@ -319,42 +332,41 @@ export class MinigameScene extends Phaser.Scene {
       void tag;
       mod.create(this, api);
       this.started = true;
+      this.saveGame(true);
       // the cabinet's finish over its picture: its light, its corners, its grain
       applyFinish(this, this.gameId);
       this.armPolice();
       setCabinetTouch(mod.touch);
     };
 
-    // A cabinet with a practice go: PLAY on the card (or walking straight up
-    // to it, or coming back from a practice go) opens the choice -- PLAY for
-    // real, which takes the tokens, or PRACTICE, which takes nothing.
-    if (mod.practice && (this.chooser || (this.straight && !firstGo))) {
-      this.showChooser(start, startPractice);
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-        this.card?.destroy();
-        this.card = null;
-        setCabinetTouch(null);
-      });
-      this.devBridge();
-      return;
-    }
+    // ---- THIS GO, KEPT IN THE SAVE as it is played (log #87): every second,
+    // and on the way out of the page (core/session captureGame).
+    trackGame(() => this.saveGame(true));
+    this.time.addEvent({ delay: 1000, loop: true, callback: () => this.saveGame() });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => trackGame(null));
 
-    if (this.straight && !firstGo && !mod.practice) {
-      // The affordability check the card would have made.  Without it a player
-      // who cannot cover the cabinet gets dropped into a built game that then
-      // refuses to charge them, which is the accidental loop this whole change
-      // is meant to close.
-      if (!def.freeToEnter && ledger.balance() < def.cost) {
-        audio.sfx('buzzer');
-        this.leave();
-        return;
-      }
-      start();
+    // This game's own keys (Grudge's J...) are live from here until it goes,
+    // so any the player moved are moved for it and for nothing else.
+    gameKeys(this.gameId, [...keyPlan(mod.tutorial.controls).reserved]);
+    setKeyScope(this.gameId);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setKeyScope(null));
+
+    // Back after a reload, mid-go: straight into it, no card, no charge.
+    if (this.restoring) {
+      const r = this.restoring;
+      this.restoring = null;
+      this.resumeGo(r, api);
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
       this.devBridge();
       return;
     }
 
+    // ---- THE MACHINE'S SCREEN, BEFORE EVERY GO (log #49b, #70, #79).
+    //
+    // However the go was started -- the cabinet clicked, E at it, a tap, or
+    // back from a practice go -- the card comes up first: YOUR BEST, PLAY and
+    // its price, PRACTICE beside it where there is one, TUTORIAL, CONTROLS
+    // and LEAVE.  The first go at a cabinet opens on its HOW TO PLAY page.
     this.card = showTutorial(this, {
       title: def.title,
       // The keys on a keyboard, the arrows and buttons on a phone.
@@ -362,6 +374,10 @@ export class MinigameScene extends Phaser.Scene {
         objective: deviceObjective(mod.tutorial.objective, mod.touch),
         controls: deviceControls(mod.tutorial.controls, mod.touch),
       },
+      // (again after a key is changed on CONTROLS, and the keys as written for it)
+      liveControls: () => deviceControls(mod.tutorial.controls, mod.touch),
+      keyRows: mod.tutorial.controls,
+      keyScope: this.gameId,
       cost: def.cost,
       balance: ledger.balance(),
       chargesInside: def.freeToEnter === true,
@@ -371,9 +387,10 @@ export class MinigameScene extends Phaser.Scene {
         const was = bestRecord(this.gameId);
         return rec && was !== null ? rec.long(was) : undefined;
       })(),
-      // (where the cabinet has a practice go, PLAY first asks which: see `showChooser`)
-      onPlay: mod.practice ? () => this.showChooser(start, startPractice) : start,
-      choose: !!mod.practice,
+      keepsRecord: !!RECORDS[this.gameId],
+      howToFirst: firstGo && !this.chooser,
+      onPlay: start,
+      onPractice: mod.practice ? startPractice : undefined,
       onLeave: () => {
         this.card = null;
         this.leave();
@@ -386,6 +403,80 @@ export class MinigameScene extends Phaser.Scene {
     });
 
     this.devBridge();
+  }
+
+  /**
+   * ---- THIS GO, IN THE SAVE (log #87).  What a reload needs to put it back:
+   * the stake, what has been paid out, practice or not, and the game's own
+   * snapshot where it keeps one.
+   */
+  private saveGame(now = false): void {
+    if (!this.started || this.settled || !this.mod) return;
+    let snap: unknown;
+    try {
+      snap = this.mod.snapshot?.();
+    } catch {
+      snap = undefined;
+    }
+    const atRisk = Math.max(0, Math.floor(this.mod.atRisk?.() ?? 0));
+    store.setGame({ id: this.gameId, from: this.from, stake: this.stake, paid: this.paid, practicing: this.practicing, atRisk, snap, at: Date.now() }, now);
+  }
+
+  /** The go is over (won, lost, left, quit): nothing to come back to. */
+  private endSession(): void {
+    if (store.get().game) store.setGame(null, true);
+  }
+
+  /**
+   * ---- BACK INTO A GO A RELOAD INTERRUPTED.  No card and no charge: the
+   * stake it had is the stake it has.  A cabinet that keeps a snapshot is put
+   * back exactly; one that does not starts a fresh go, paid for.  Either way
+   * it comes up paused with the settings open (core/pause pauseOnArrival).
+   */
+  private resumeGo(r: SavedGame, api: MinigameApi): void {
+    const mod = this.mod!;
+    this.stake = r.stake;
+    this.paid = r.paid;
+    if (r.practicing) {
+      this.practicing = true;
+      (api as { practice: boolean }).practice = true;
+      this.add.rectangle(GAME_W / 2, 8, 112, 12, 0x1f4a5a).setStrokeStyle(1, PALETTE.tealLight).setDepth(1002);
+      centerText(this, GAME_W / 2, 8, 'PRACTICE - FREE', PALETTE.tealLight).setDepth(1003);
+    }
+    mod.create(this, api);
+    let back = false;
+    if (r.snap !== undefined && mod.restore) {
+      try {
+        mod.restore(r.snap);
+        back = true;
+      } catch {
+        back = false;
+      }
+    }
+    this.started = true;
+    // not a frame of it moves until the player has the pause menu and says RESUME
+    // (its clock and its tweens too: a delayed call or a tween is the game moving)
+    this.held = true;
+    this.time.paused = true;
+    this.tweens.pauseAll();
+    this.events.once(Phaser.Scenes.Events.RESUME, () => {
+      this.held = false;
+      this.time.paused = false;
+      this.tweens.resumeAll();
+    });
+    applyFinish(this, this.gameId);
+    this.armPolice();
+    setCabinetTouch(mod.touch);
+    // (a fresh go: whatever was on the felt mid-hand comes back to the pocket;
+    // put back exactly, a spin or a pull the page cut off mid-air is handed
+    // back by the snapshot's own `refund` rather than played out)
+    const told = back && r.snap && typeof (r.snap as { refund?: unknown }).refund === 'number' ? (r.snap as { refund: number }).refund : 0;
+    const owed = r.practicing ? 0 : back ? Math.max(0, Math.floor(told)) : (r.atRisk ?? 0);
+    if (owed > 0) {
+      ledger.credit(owed, 'game.refund');
+      this.stake = Math.max(0, this.stake - owed);
+    }
+    this.saveGame(true);
   }
 
   /** PRD §6.9: force win / force loss in the active minigame. */
@@ -407,7 +498,7 @@ export class MinigameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
-    if (this.settled || !this.started) return;
+    if (this.settled || !this.started || this.held) return;
     this.stepPolice(delta / 1000);
     if (this.settled) return;
     this.mod?.update?.(time, delta);
@@ -426,6 +517,7 @@ export class MinigameScene extends Phaser.Scene {
   private leave(): void {
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
     fadeToScene(this, this.exitTo ?? this.from, { atCabinet: this.gameId });
@@ -438,9 +530,19 @@ export class MinigameScene extends Phaser.Scene {
    * felt this moment; every other cabinet forfeits its whole stake.
    */
   forfeitAmount(): number | null {
-    if (this.settled || !this.started) return null;
+    if (this.settled || !this.started || !this.inPlay()) return null;
     if (this.practicing) return 0;
     return Math.max(0, Math.floor(this.mod?.atRisk?.() ?? this.stake));
+  }
+
+  /** This cabinet's objective, as its card says it on this device (the pause menu's HOW TO PLAY). */
+  howToLines(): string[] {
+    return this.mod ? deviceObjective(this.mod.tutorial.objective, this.mod.touch) : [];
+  }
+
+  /** The cabinet's name. */
+  title(): string {
+    return cabinetById(this.gameId).title;
   }
 
   /** This cabinet's controls, as this device will actually work them. */
@@ -459,10 +561,36 @@ export class MinigameScene extends Phaser.Scene {
     // At the how-to-play card nothing has been paid and nothing is being
     // played, so Esc is its LEAVE button, as it always was.
     if (this.card && !this.started && !this.settled) {
+      // (back from HOW TO PLAY or CONTROLS first, or stop waiting for a key)
+      if (this.card.escape()) return true;
       this.leave();
       return true;
     }
     return false;
+  }
+
+  /**
+   * Under way: past the part before the play (see MinigameModule.inPlay).
+   * Before it -- the card, a practice go, the bets before a race -- walking
+   * out is LEAVE, and nothing is lost.
+   */
+  inPlay(): boolean {
+    if (!this.started || this.settled || this.practicing) return false;
+    return this.mod?.inPlay?.() ?? true;
+  }
+
+  /**
+   * What the way out is called right now: LEAVE until the play is under way,
+   * then QUIT GAME, or the cabinet's own (the Chamber's CASH OUT).
+   */
+  exitLabel(): string {
+    if (!this.inPlay()) return 'LEAVE';
+    return this.mod?.pauseExit?.()?.label ?? 'QUIT GAME';
+  }
+
+  /** The cabinet's own way out, if it has one now (see MinigameModule.pauseExit). */
+  ownExit(): { label: string; run: () => void } | null {
+    return this.inPlay() ? this.mod?.pauseExit?.() ?? null : null;
   }
 
   /** Whether this is a practice go (nothing paid, LEAVE goes back to the choice). */
@@ -481,6 +609,15 @@ export class MinigameScene extends Phaser.Scene {
       this.leave();
       return;
     }
+    // BEFORE THE PLAY: the stake back, and out, with no result to show
+    // ("YOU BREAK EVEN" for walking away from a race you never ran)
+    if (!this.practicing && !this.inPlay()) {
+      if (this.stake > 0) ledger.credit(this.stake, 'game.refund');
+      this.stake = 0;
+      this.mod?.destroy?.();
+      this.leave();
+      return;
+    }
     this.exitTo = null;
     this.forfeit();
   }
@@ -488,7 +625,7 @@ export class MinigameScene extends Phaser.Scene {
   /** The question QUIT GAME asks: how the sitting stands, and what walking out forfeits. */
   quitLines(): string[] {
     const risk = this.forfeitAmount();
-    if (risk === null) return ['LEAVE THIS GAME?', 'NOTHING HAS BEEN PAID.'];
+    if (risk === null) return this.stake > 0 && !this.practicing ? ['LEAVE THIS GAME?', `YOUR ${this.stake} TOKENS COME BACK TO YOU.`] : ['LEAVE THIS GAME?', 'NOTHING HAS BEEN PAID.'];
     // How the sitting stands, first: the hands already settled, so whatever
     // is on the felt right now is the forfeit line's and not counted twice.
     const sitting: string[] = [];
@@ -500,73 +637,13 @@ export class MinigameScene extends Phaser.Scene {
   }
 
   /**
-   * ---- PLAY OR PRACTICE.  Two big choices on one card: PLAY, which takes
-   * the cabinet's tokens there and then (and from then on walking out is a
-   * forfeit, as at any cabinet), or PRACTICE, the same game for nothing --
-   * and coming out of a practice go comes back here.  LEAVE goes back to the
-   * room with nothing taken.
-   */
-  private showChooser(play: () => void, practice: () => void): void {
-    const def = cabinetById(this.gameId);
-    const free = def.freeToEnter === true;
-    const can = free || ledger.balance() >= def.cost;
-    const parts: Phaser.GameObjects.GameObject[] = [];
-    const keep = <T extends Phaser.GameObjects.GameObject>(o: T): T => (parts.push(o), o);
-    keep(this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.86).setOrigin(0, 0).setDepth(900).setInteractive());
-    keep(this.add.rectangle(GAME_W / 2, 92, 236, 112, PALETTE.ink).setStrokeStyle(1, PALETTE.gold).setDepth(901));
-    keep(this.add.rectangle(GAME_W / 2, 42, 236, 11, PALETTE.plum).setDepth(902));
-    keep(centerText(this, GAME_W / 2, 42, def.title, PALETTE.gold).setDepth(903));
-    keep(centerText(this, GAME_W / 2, 58, 'PLAY FOR REAL, OR PRACTISE FIRST?', PALETTE.cream).setDepth(903));
-    let done = false;
-    const card: TutorialCard = {
-      destroy: () => {
-        if (done) return;
-        done = true;
-        for (const o of parts) o.destroy();
-        parts.length = 0;
-      },
-    };
-    const pick = (fn: () => void, sfx: 'coin_drop' | 'ui_blip'): void => {
-      if (done) return;
-      card.destroy();
-      this.card = null;
-      audio.sfx(sfx);
-      fn();
-    };
-    const bw = 104;
-    keep(
-      button(this, GAME_W / 2 - 56, 84, 'PLAY', () => (can ? pick(play, 'coin_drop') : audio.sfx('buzzer', 0.5)), {
-        width: bw,
-        height: 22,
-        fill: can ? PALETTE.tealDark : PALETTE.slate,
-        disabled: !can,
-      }).setDepth(905),
-    );
-    keep(button(this, GAME_W / 2 + 56, 84, 'PRACTICE', () => pick(practice, 'ui_blip'), { width: bw, height: 22, fill: 0x1f4a5a }).setDepth(905));
-    keep(
-      centerText(this, GAME_W / 2 - 56, 102, free ? 'BETS INSIDE' : can ? `${def.cost} TOKENS` : `NEED ${def.cost - ledger.balance()} MORE`, can ? PALETTE.gold : PALETTE.blood).setDepth(903),
-    );
-    keep(centerText(this, GAME_W / 2 + 56, 102, 'FREE - WINS NOTHING', PALETTE.tealLight).setDepth(903));
-    keep(centerText(this, GAME_W / 2, 118, 'LEAVE A REAL GAME AND YOU FORFEIT', PALETTE.ash).setDepth(903));
-    keep(
-      button(this, GAME_W / 2, 136, 'LEAVE', () => {
-        if (done) return;
-        card.destroy();
-        this.card = null;
-        this.leave();
-      }, { width: 80, height: 13, fill: PALETTE.plum }).setDepth(905),
-    );
-    // (Esc at it is LEAVE, as at the card: see `handleEscape`)
-    this.card = card;
-  }
-
-  /**
    * The end of a practice go, however it ended: nothing changes hands, nothing
    * is recorded or counted, and the card says it was practice.
    */
   private endPractice(won: boolean | null): void {
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
     if (this.started) this.mod?.destroy?.();
@@ -603,6 +680,7 @@ export class MinigameScene extends Phaser.Scene {
     const amount = Math.floor(n);
     ledger.credit(amount, 'game.reward');
     this.paid += amount;
+    this.saveGame();
     store.flush();
   }
 
@@ -612,6 +690,7 @@ export class MinigameScene extends Phaser.Scene {
     if (this.settled || !Number.isFinite(n) || n <= 0) return false;
     if (!ledger.debit(Math.floor(n), 'game.cost')) return false;
     this.stake += Math.floor(n);
+    this.saveGame();
     store.flush();
     return true;
   }
@@ -636,6 +715,7 @@ export class MinigameScene extends Phaser.Scene {
     }
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
     if (this.started) this.mod?.destroy?.();
@@ -676,6 +756,7 @@ export class MinigameScene extends Phaser.Scene {
     }
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
     if (this.started) this.mod?.destroy?.();
@@ -702,6 +783,7 @@ export class MinigameScene extends Phaser.Scene {
     }
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
 

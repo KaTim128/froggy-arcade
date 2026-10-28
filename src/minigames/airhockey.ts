@@ -427,6 +427,37 @@ export const airHockey: MinigameModule = {
     if (elapsed > TIME_CAP_MS) finish();
   },
 
+  // ---- A RELOAD (log #87): the score, the clock, the puck and its speed,
+  // both mallets, and the face-off count if one was running.
+  snapshot() {
+    return {
+      scoreP, scoreA, elapsed, frozen, armed, openingDir, vel: { ...vel },
+      puck: puck ? { x: puck.x, y: puck.y } : null,
+      pad: pad ? { x: pad.x, y: pad.y } : null,
+      ai: aiPad ? { x: aiPad.x, y: aiPad.y } : null,
+    };
+  },
+
+  restore(snap: unknown) {
+    type P = { x: number; y: number } | null;
+    const v = snap as { scoreP: number; scoreA: number; elapsed: number; frozen: number; armed: boolean; openingDir: number; vel: Vec; puck: P; pad: P; ai: P };
+    scoreP = v.scoreP;
+    scoreA = v.scoreA;
+    elapsed = v.elapsed;
+    frozen = v.frozen;
+    armed = v.armed;
+    openingDir = v.openingDir;
+    vel = { ...v.vel };
+    if (puck && v.puck) puck.setPosition(v.puck.x, v.puck.y);
+    if (pad && v.pad) pad.setPosition(v.pad.x, v.pad.y);
+    if (aiPad && v.ai) aiPad.setPosition(v.ai.x, v.ai.y);
+    padPrev = pad ? { x: pad.x, y: pad.y } : padPrev;
+    history = [];
+    countText?.setText(frozen > 0 ? `${Math.ceil(frozen / 1000)}` : '').setVisible(frozen > 0);
+    updateScore();
+    dressPads();
+  },
+
   destroy() {
     dragEl?.remove();
     dragEl = null;
@@ -716,6 +747,7 @@ function finish(): void {
   over = true;
   const won = scoreP > scoreA;
   const tied = scoreP === scoreA;
+  if (won) apiRef?.record(scoreP - scoreA);
   puck?.scene.time.delayedCall(400, () => (won ? apiRef?.win() : tied ? apiRef?.draw() : apiRef?.lose()));
 }
 

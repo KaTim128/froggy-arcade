@@ -88,6 +88,7 @@ export class SettingsModal extends Phaser.Scene {
 
     this.body = this.add.container(0, 0);
     this.keysView = false;
+    this.howView = false;
     this.listenFor = null;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.stopListening());
     this.renderBody();
@@ -111,8 +112,17 @@ export class SettingsModal extends Phaser.Scene {
           mg?.quitGame();
         }, { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
       } else if (inGame) {
+        // LEAVE before the play is under way, QUIT GAME once it is -- or the
+        // cabinet's own (the Chamber's CASH OUT)
+        const mg = pausedScene() as MinigameScene | null;
+        const mine = mg?.ownExit?.() ?? null;
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
-        button(this, 122, 158, 'QUIT GAME', () => this.quitGame(), { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
+        button(this, 122, 158, mg?.exitLabel?.() ?? 'QUIT GAME', () => {
+          if (mine) {
+            resumePause();
+            mine.run();
+          } else this.quitGame();
+        }, { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
       } else if (own) {
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
         button(this, 122, 158, own.label, () => {
@@ -150,6 +160,7 @@ export class SettingsModal extends Phaser.Scene {
   private setTab(t: Tab): void {
     this.tab = t;
     this.keysView = false;
+    this.howView = false;
     this.stopListening();
     this.renderBody();
   }
@@ -223,12 +234,49 @@ export class SettingsModal extends Phaser.Scene {
     else if (this.tab === 'audio') this.renderAudio();
     else if (this.tab === 'test') this.renderTest();
     else if (this.keysView && !isTouch()) this.renderKeys();
+    else if (this.howView) this.renderHowTo();
     else if (this.pause) this.renderPlaceControls();
     else this.renderControls();
   }
 
   /** Showing the key bindings to change, rather than the list of controls. */
   private keysView = false;
+  /** Showing the paused game's HOW TO PLAY, rather than its controls. */
+  private howView = false;
+
+  /**
+   * ---- HOW TO PLAY, AGAIN, MID-GAME (log #50).  The paused cabinet's own
+   * objective, as its card said it, for whoever has forgotten what they are
+   * meant to be doing; its controls are a BACK away.
+   */
+  private renderHowTo(): void {
+    const mg = this.from === 'Minigame' ? (pausedScene() as MinigameScene | null) : null;
+    const lines = mg?.howToLines() ?? [];
+    const cols = Math.floor(276 / FONT_ADVANCE);
+    let y = 48;
+    this.body.add(centerText(this, GAME_W / 2, y, `HOW TO PLAY - ${mg?.title() ?? ''}`, PALETTE.gold));
+    y += 12;
+    for (const line of lines) {
+      let run = '';
+      const out: string[] = [];
+      for (const w of line.split(' ')) {
+        if (run && (run + ' ' + w).length > cols) {
+          out.push(run);
+          run = w;
+        } else run = run ? `${run} ${w}` : w;
+      }
+      if (run) out.push(run);
+      for (const l of out) {
+        if (y > 130) break;
+        this.body.add(centerText(this, GAME_W / 2, y, l, PALETTE.cream));
+        y += 9;
+      }
+    }
+    this.body.add(button(this, 236, 142, 'CONTROLS', () => {
+      this.howView = false;
+      this.renderBody();
+    }, { width: 66, height: 10, fill: 0x1f4a5a }));
+  }
   /** The action waiting for its new key, if one is. */
   private listenFor: string | null = null;
   private keyCatch: ((e: KeyboardEvent) => void) | null = null;
@@ -255,7 +303,8 @@ export class SettingsModal extends Phaser.Scene {
         fill: waiting ? 0x5a3a12 : moved ? 0x1f4a5a : undefined,
       });
       this.body.add(b);
-      y += 11;
+      // (ten to a row: nine of them and RESET KEYS clear the RESUME row)
+      y += 10;
     }
     this.body.add(text(this, 32, y + 1, 'ARROWS MOVE TOO', PALETTE.ash));
     this.body.add(button(this, 214, y + 3, 'RESET KEYS', () => {
@@ -315,6 +364,13 @@ export class SettingsModal extends Phaser.Scene {
 
   /** On a keyboard: the way into changing the keys, under the controls. */
   private addChangeKeys(): void {
+    // (in a game: its HOW TO PLAY too, on a phone as well)
+    if (this.from === 'Minigame') {
+      this.body.add(button(this, isTouch() ? 236 : 160, 142, 'HOW TO PLAY', () => {
+        this.howView = true;
+        this.renderBody();
+      }, { width: 66, height: 10, fill: 0x1f4a5a }));
+    }
     if (isTouch()) return;
     this.body.add(button(this, 236, 142, 'CHANGE KEYS', () => {
       this.keysView = true;

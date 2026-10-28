@@ -135,7 +135,7 @@ export const MODS: Record<Mod, { name: string; desc: string }> = {
 };
 
 export function attackInfo(a: Attack, el: Element, scale = 1): AttackInfo {
-  // every word of it in steps and seconds, never pixels (see plainWords)
+  // every word of it in tiles and seconds, never pixels (see plainWords)
   const raw = rawInfo(a, el, scale);
   const out = { ...raw } as AttackInfo;
   for (const k of Object.keys(out) as (keyof AttackInfo)[]) {

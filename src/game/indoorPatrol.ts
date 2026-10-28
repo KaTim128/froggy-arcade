@@ -84,6 +84,8 @@ export interface IndoorHost {
   /** A side-on room, one line deep (the cone is drawn side-on). */
   side?: boolean;
   dark?: () => boolean;
+  /** Out of their reach right now (in the lift, its doors closing): not seen, not caught. */
+  safe?: () => boolean;
 }
 
 type State = 'away' | 'enter' | 'walk' | 'look' | 'chase' | 'search' | 'question' | 'leave' | 'arrest' | 'gone';
@@ -321,7 +323,7 @@ export class IndoorCop {
     const c = this.cop;
     if (!c || this.state === 'away' || this.state === 'gone' || this.state === 'enter') return 0;
     const p = this.host.player();
-    if (!p.sprite.visible) return 0;
+    if (!p.sprite.visible || this.host.safe?.()) return 0;
     const dx = p.x - c.x;
     const dy = this.host.side ? 0 : p.y - c.y;
     const d = Math.hypot(dx, dy);
@@ -418,7 +420,7 @@ export class IndoorCop {
         } else this.unseenT += dt;
         const to = v > 0 ? { x: p.x, y: p.y } : this.lastSeen ?? { x: p.x, y: p.y };
         this.walkTo(to, PACE.chase, delta);
-        if (Math.hypot(p.x - c.x, (this.host.side ? 0 : p.y - c.y)) <= REACH && p.sprite.visible) return this.arrest();
+        if (Math.hypot(p.x - c.x, (this.host.side ? 0 : p.y - c.y)) <= REACH && p.sprite.visible && !this.host.safe?.()) return this.arrest();
         // out of sight a while: where did they go?
         if (this.unseenT > 2.5) {
           this.state = 'search';

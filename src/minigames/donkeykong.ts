@@ -602,6 +602,41 @@ export const donkeyKong: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): the climber where he stood, on a ladder or off,
+  // the lives, the clock, the grace after a hit, and every barrel on the
+  // girders, rolling or hopping, where it was and how fast.
+  snapshot() {
+    return {
+      player: { ...player }, lives, spawnTimer, elapsed, invulnMs, drops: { ...drops }, throwT, barrelNo,
+      barrels: barrels.map((b) => ({ id: b.id, x: b.x, y: b.y, floor: b.floor, dir: b.dir, falling: b.falling, bouncer: b.bouncer, phase: b.phase, speed: b.speed, rolledAt: b.rolledAt, lift: b.lift })),
+    };
+  },
+
+  restore(snap: unknown) {
+    type B = Omit<Barrel, 'dot'>;
+    const v = snap as { player: typeof player; lives: number; spawnTimer: number; elapsed: number; invulnMs: number; drops: typeof drops; throwT: number; barrelNo: number; barrels: B[] };
+    player = { ...v.player };
+    lives = v.lives;
+    spawnTimer = v.spawnTimer;
+    elapsed = v.elapsed;
+    invulnMs = v.invulnMs;
+    drops = { ...v.drops };
+    throwT = v.throwT;
+    barrelNo = v.barrelNo;
+    dying = false;
+    for (const b of barrels) b.dot.destroy();
+    barrels = [];
+    if (sceneRef) {
+      for (const b of v.barrels) {
+        const dot = makeBarrel(sceneRef, b.bouncer);
+        dot.setPosition(b.x, b.y - b.lift);
+        barrels.push({ ...b, dot });
+      }
+    }
+    place();
+    refreshHud();
+  },
+
   destroy() {
     barrels = [];
     kong = null;

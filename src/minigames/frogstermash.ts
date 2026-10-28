@@ -9045,8 +9045,10 @@ function finish(won: boolean): void {
   // `win` carries the BANK rather than the cabinet's headline figure: the
   // run may have been one round or nine, and this is the only moment any of
   // it reaches the ledger.
-  if (won) apiRef!.win(bank);
-  else apiRef!.lose();
+  if (won) {
+    apiRef!.record(bank);
+    apiRef!.win(bank);
+  } else apiRef!.lose();
 }
 
 // =================================================================== module

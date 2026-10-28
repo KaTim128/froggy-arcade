@@ -5,6 +5,8 @@
  * until the player interacts, so we ask for one click before anything else.
  */
 
+import { reloadTarget } from '../core/session';
+import { pauseOnArrival } from '../core/pause';
 import { isTouch } from '../core/device';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
@@ -48,9 +50,23 @@ export class Boot extends Phaser.Scene {
     });
   }
 
+  /**
+   * On, past the gate: the title screen -- or, when this tab was reloaded
+   * mid-run, straight back into it, paused (core/session, log #87).
+   */
+  private goOn(): void {
+    const back = reloadTarget();
+    if (back) {
+      pauseOnArrival(back.key);
+      fadeToScene(this, back.key, back.data);
+      return;
+    }
+    fadeToScene(this, 'StartScreen');
+  }
+
   private showGate(_started: number): void {
     if (audio.isUnlocked()) {
-      fadeToScene(this, 'StartScreen');
+      this.goOn();
       return;
     }
 
@@ -61,7 +77,7 @@ export class Boot extends Phaser.Scene {
       audio.unlock();
       audio.applyVolumes();
       store.flush();
-      fadeToScene(this, 'StartScreen');
+      this.goOn();
     });
   }
 }
