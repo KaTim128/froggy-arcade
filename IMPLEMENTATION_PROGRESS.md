@@ -391,10 +391,10 @@ Rules for every batch:
 | Q1 | Creature Clash: 20 new creatures + 40 abilities | DONE, pushed (70 creatures, 160 specials) |
 | Q2 | Then 20 MORE creatures + 40 MORE abilities (user: "actually 40 and 80") | open |
 | Q3 | Clash touch buttons and stick OUTSIDE the arena view (the black side bars), the same for every game | open |
-| Q4 | Clash move card: only the ability (no strong/weak), bigger text, nothing past its box | open |
-| Q5 | Clash creature card is tappable (and says so) -> stats page: ATTACK, DEFENCE, SPEED, HP, MELEE or RANGED, + strengths and weaknesses | open |
-| Q6 | Clash home: no stat bars, only the XP bar; the move rows get the room | open |
-| Q7 | Clash LADDER tile text 'AFTER THE STORY' runs out of its box | open |
+| Q4 | Clash move card: only the ability (no strong/weak), bigger text, nothing past its box | DONE |
+| Q5 | Clash creature card is tappable (and says so) -> stats page: ATTACK, DEFENCE, SPEED, HP, MELEE or RANGED, + strengths and weaknesses | DONE |
+| Q6 | Clash home: no stat bars, only the XP bar; the move rows get the room | DONE |
+| Q7 | Clash LADDER tile text 'AFTER THE STORY' runs out of its box | DONE |
 | Q8 | Buff abilities: e.g. evasion +30%, crit chance +20% | open |
 | Q9 | Story Mode: exactly 4 FIXED opponents per world before the boss, themed, none repeated across worlds, same for every account; no random | open |
 | Q10 | Pad Battles: Bog Ball-level visuals; pads spaced apart so frogs must jump; smooth jumps, exact landing, falling animation, splashes on a miss; body blocking/pushing | open |

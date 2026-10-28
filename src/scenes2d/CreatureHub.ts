@@ -33,8 +33,7 @@ import { drawAbilityIcon } from '../art/abilityIcons';
 import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
 import { drawFrogToken, floatDeduct } from '../ui/hud';
-import { tinyText, tinyWrap } from '../ui/tinyText';
-import { xpProgress } from '../game/creatureLevel';
+import { levelOf, xpProgress } from '../game/creatureLevel';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
@@ -324,14 +323,32 @@ export class CreatureHub extends Phaser.Scene {
       this.bar(bx, ty + 2, bwid, frac, col);
       ty += 8;
     };
+    // (user, 28 Oct: on the card only the XP bar; the stats are one tap away)
     if (xp !== undefined) {
-      // experience: how far into this level, or MAX
       row('XP', lv.max ? 'MAX' : `${lv.into}/${lv.need}`, lv.max ? 1 : lv.into / lv.need, lv.max ? PALETTE.gold : 0xc08aff, lv.max ? PALETTE.gold : PALETTE.fog);
+      ty -= 8;
     }
-    row('HP', String(c.hp), c.hp / 160, 0x6ad86a, PALETTE.fog);
-    row('SPD', String(c.speed), c.speed / 100, 0x6ac8e8, PALETTE.fog);
-    ty -= 8;
     ty += 10;
+    // ---- TAP THE CREATURE FOR ITS STATS.  The picture, its name and its
+    // role are one button: it lights up under the pointer, and a magnifier
+    // badge with STATS on it says there is more inside.
+    const hit = this.add.rectangle(x + 2, y + 2, w - 4, artH + 21, 0xffffff, 0.001).setOrigin(0, 0);
+    hit.setInteractive({ useHandCursor: true });
+    const glow = this.add.rectangle(x + 2, y + 2, w - 4, artH + 21, 0xffffff, 0).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold, 0);
+    hit.on('pointerover', () => (glow.setFillStyle(0xffffff, 0.06), glow.setStrokeStyle(1, PALETTE.gold, 1), audio.sfx('ui_hover')));
+    hit.on('pointerout', () => (glow.setFillStyle(0xffffff, 0), glow.setStrokeStyle(1, PALETTE.gold, 0)));
+    hit.on('pointerdown', () => (audio.sfx('ui_blip'), this.showStats(c, xp)));
+    L.add(glow);
+    L.add(hit);
+    const tagX = x + w - 4;
+    const tagY = y + artH - 9;
+    const statsTag = smallText(this, tagX - 3, tagY + 2, 'STATS', PALETTE.gold).setOrigin(1, 0);
+    L.add(this.add.rectangle(tagX, tagY, Math.ceil(statsTag.width) + 13, 9, 0x0a0d1e, 0.9).setOrigin(1, 0).setStrokeStyle(1, PALETTE.gold));
+    const mag = this.add.graphics();
+    mag.lineStyle(1, PALETTE.gold, 1).strokeCircle(tagX - Math.ceil(statsTag.width) - 8, tagY + 4, 2);
+    mag.lineBetween(tagX - Math.ceil(statsTag.width) - 6.5, tagY + 5.5, tagX - Math.ceil(statsTag.width) - 5, tagY + 7);
+    L.add(mag);
+    L.add(statsTag);
     L.add(this.add.rectangle(x + 4, ty - 2, w - 8, 1, 0x2a3050).setOrigin(0, 0));
     const g = this.add.graphics();
     L.add(g);
@@ -343,19 +360,20 @@ export class CreatureHub extends Phaser.Scene {
       // Nobody should have to buy a battle to find out.
       // (laid out so the longest name there is -- eleven letters, 66px, see
       // creatures MOVE_NAME_MAX -- sits clear of the icon and the "?")
-      const chip = this.add.rectangle(x + 2, ty - 1, w - 4, 9, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
+      // (taller rows now the stat bars are off the card: easier to hit)
+      const chip = this.add.rectangle(x + 2, ty - 2, w - 4, 12, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
       L.addAt(chip, L.getIndex(g));
       // (an icon is 11px wide, centred: x+3..x+13; the name starts after it)
-      drawAbilityIcon(g, a, x + 8, ty + 3, el.light);
-      const name = text(this, x + 15, ty, a.name, PALETTE.cream);
+      drawAbilityIcon(g, a, x + 8, ty + 4, el.light);
+      const name = text(this, x + 15, ty + 1, a.name, PALETTE.cream);
       L.add(name);
       // the "?" that says there is more to read
       const qx = x + w - 9;
-      L.add(this.add.rectangle(qx - 1, ty - 1, 7, 9, 0x3a4470).setOrigin(0, 0));
-      L.add(text(this, qx, ty, '?', PALETTE.gold));
+      L.add(this.add.rectangle(qx - 1, ty - 1, 7, 10, 0x3a4470).setOrigin(0, 0));
+      L.add(text(this, qx, ty + 1, '?', PALETTE.gold));
       // the damage, left of the "?" -- where the name leaves room for it
       if (a.dmg) {
-        const d = text(this, qx - 4, ty, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
+        const d = text(this, qx - 4, ty + 1, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
         if (name.x + name.width + 2 <= d.x - d.width) L.add(d);
         else d.destroy();
       }
@@ -363,7 +381,7 @@ export class CreatureHub extends Phaser.Scene {
       chip.on('pointerover', () => (chip.setFillStyle(0x34407a).setStrokeStyle(1, PALETTE.gold), name.setTint(PALETTE.gold), audio.sfx('ui_hover')));
       chip.on('pointerout', () => (chip.setFillStyle(0x232a4a).setStrokeStyle(1, 0x3a4470), name.setTint(PALETTE.cream)));
       chip.on('pointerdown', () => (audio.sfx('ui_blip'), this.showMove(c, a)));
-      ty += 10;
+      ty += 13;
     }
   }
 
@@ -380,7 +398,9 @@ export class CreatureHub extends Phaser.Scene {
     this.modal = M;
     const el = ELEMENTS[c.element];
     const lines = attackCard(a, c.element);
-    const w = 200;
+    // (user, 28 Oct: the move only -- the creature's strengths are on its
+    // STATS page -- in the bigger house font, wrapped inside the box)
+    const w = 280;
     const close = (): void => this.draw();
     const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
@@ -390,13 +410,12 @@ export class CreatureHub extends Phaser.Scene {
     // and took the CLOSE button with it; in the 3x5 face, wrapped, every
     // move fits with room to spare.
     const rows: Array<{ s: string; col: number; gap: boolean }> = [];
+    const per = Math.floor((w - 16) / 6);
     const lineOf = (ln: string, col: number): void => {
-      tinyWrap(ln, w - 16).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
+      wrapWords(ln, per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
     };
-    lines.forEach((ln, i) => lineOf(ln, i === 0 ? PALETTE.cream : PALETTE.fog));
-    lineOf(`GOOD AT: ${c.strong}`, PALETTE.mossLight);
-    lineOf(`WEAK: ${c.weak}`, 0xff9a9a);
-    const LH = 7;
+    lines.forEach((ln, i) => lineOf(ln, i === 0 ? PALETTE.cream : ln.startsWith('SPECIAL') ? PALETTE.gold : PALETTE.fog));
+    const LH = 9;
     const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
     // (and never taller than the screen: the button always shows)
     const h = Math.min(GAME_H - 4, 27 + textH + 22);
@@ -409,15 +428,84 @@ export class CreatureHub extends Phaser.Scene {
     M.add(text(this, x + 24, y + 8, a.name, PALETTE.gold));
     M.add(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));
     M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
-    const body = this.add.graphics();
-    M.add(body);
     let ly = y + 28;
     for (const r of rows) {
-      if (r.gap) ly += 3;
-      if (ly + 5 > y + h - 20) break;
-      tinyText(body, r.s, x + 8, ly, r.col);
+      if (r.gap) ly += 2;
+      if (ly + 8 > y + h - 20) break;
+      M.add(text(this, x + 8, ly, r.s, r.col));
       ly += LH;
     }
+    M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
+  }
+
+  /**
+   * ---- A CREATURE'S STATS (user, 28 Oct): opened by tapping it.  Attack,
+   * defence, speed and health as bars with their numbers, whether it fights
+   * up close or from range, what its element does, and what it is good and
+   * bad at -- the things the card has no room for.
+   *
+   *   ATTACK   its plain attack's damage a second (what it does all fight)
+   *   DEFENCE  how hard it is to wear down, out of 10: its health, plus a
+   *            point for a guard / reflect / thorns move, one for a heal,
+   *            and one for STONE, which shrugs damage off
+   */
+  private showStats(c: Creature, xp?: number): void {
+    this.modal?.destroy(true);
+    const M = this.add.container(0, 0).setDepth(600);
+    this.modal = M;
+    const el = ELEMENTS[c.element];
+    const close = (): void => this.draw();
+    const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
+    veil.setInteractive().on('pointerdown', close);
+    M.add(veil);
+    const w = 284;
+    const h = 146;
+    const x = (GAME_W - w) / 2;
+    const y = (GAME_H - h) / 2;
+    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
+    // the creature, big, on its element's ground
+    M.add(this.add.rectangle(x + 4, y + 4, 70, 56, el.dark, 0.6).setOrigin(0, 0));
+    const pic = this.add.graphics();
+    M.add(pic);
+    drawCreature(pic, c, x + 39, y + 34, 2, 1, 0);
+    const lvl = xp !== undefined ? `LV ${levelOf(xp)}` : 'LV 1';
+    M.add(text(this, x + 80, y + 6, c.name.toUpperCase(), PALETTE.gold));
+    M.add(text(this, x + w - 6, y + 6, lvl, PALETTE.cream).setOrigin(1, 0));
+    M.add(text(this, x + 80, y + 16, `${c.role} - ${el.name}`, el.light));
+    // ---- the four stats
+    const n = c.attacks[0];
+    const atk = Math.round(n.dmg / Math.max(0.1, n.cd));
+    const guards = c.attacks.some((a) => a.kind === 'shield' || ['guard', 'reflect', 'thorns'].includes(a.mod));
+    const heals = c.attacks.some((a) => a.kind === 'mend' || ['regen', 'drain'].includes(a.mod));
+    const def = Phaser.Math.Clamp(Math.round(c.hp / 17) + (guards ? 1 : 0) + (heals ? 1 : 0) + (c.element === 'stone' ? 1 : 0), 1, 10);
+    const melee = (n.kind === 'beam' && n.reach < 50) || n.kind === 'dash';
+    let sy = y + 28;
+    const stat = (label: string, value: string, frac: number, col: number): void => {
+      M.add(text(this, x + 80, sy, label, PALETTE.ash));
+      const v = text(this, x + w - 6, sy, value, PALETTE.cream).setOrigin(1, 0);
+      M.add(v);
+      const bx = x + 80 + 8 * 6;
+      const bw = x + w - 6 - Math.ceil(v.width) - 4 - bx;
+      M.add(this.add.rectangle(bx, sy + 2, bw, 4, 0x0a0d1e).setOrigin(0, 0));
+      M.add(this.add.rectangle(bx, sy + 2, Math.max(1, bw * Phaser.Math.Clamp(frac, 0, 1)), 4, col).setOrigin(0, 0));
+      sy += 9;
+    };
+    stat('ATTACK', `${atk}/SEC`, atk / 24, 0xff8a6a);
+    stat('DEFENCE', `${def}/10`, def / 10, 0xc8b890);
+    stat('SPEED', String(c.speed), c.speed / 90, 0x6ac8e8);
+    stat('HP', String(c.hp), c.hp / 160, 0x6ad86a);
+    let ly = y + 66;
+    const line = (s: string, col: number): void => {
+      for (const ln of wrapWords(s, Math.floor((w - 16) / 6))) {
+        M.add(text(this, x + 8, ly, ln, col));
+        ly += 9;
+      }
+    };
+    line(melee ? 'FIGHTS UP CLOSE: A MELEE FIGHTER' : `FIGHTS FROM RANGE: SHOTS UP TO ${Math.max(1, Math.round(n.reach / 16))} TILES`, melee ? 0xffb08a : 0x9ad0ff);
+    line(`${el.name}: ${el.effect}`, el.light);
+    ly += 2;
+    line(`GOOD AT: ${c.strong}`, PALETTE.mossLight);
+    line(`WEAK: ${c.weak}`, 0xff9a9a);
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
   }
 
@@ -486,7 +574,7 @@ export class CreatureHub extends Phaser.Scene {
     const storySub = c.story.cleared >= WORLDS.length ? 'ALL WORLDS DONE' : `WORLD ${sw + 1} OF ${WORLDS.length}`;
     this.tile(mx, 34, mw, 24, 'STORY MODE', resting ? 'RESTING' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
     const ladderOpen = c.story.cleared >= WORLDS.length || !!run;
-    this.tile(mx, 61, mw, 24, 'LADDER', !ladderOpen ? 'AFTER THE STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
+    this.tile(mx, 61, mw, 24, 'LADDER', !ladderOpen ? 'AFTER STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
       for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
