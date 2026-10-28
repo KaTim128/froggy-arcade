@@ -3,9 +3,8 @@
  * The active profile's badges, a box each: its own medal, its name, and what
  * it asks for.  Earned ones are in their colour; locked ones are grey with
  * the requirement in place of what was done -- and a SECRET is ??? all
- * through until it is found.  Four sections, STORY, ARCADE MASTERY, CREATURE
- * CLASH and SECRETS, in one list that scrolls (the wheel, a drag, or the
- * arrows).  Achievements are not here -- they are the Goals card's, in play.
+ * through until it is found.  One list, no headings, that scrolls (the
+ * wheel, a drag, or the arrows).  Achievements are not here -- they are the Goals card's, in play.
  */
 
 import Phaser from 'phaser';
@@ -14,15 +13,9 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { BADGES, type BadgeKind } from '../game/badges';
-import { drawBadgeIcon, isRare } from '../game/badgeIcons';
+import { BADGES } from '../game/badges';
+import { drawBadgeIcon } from '../game/badgeIcons';
 
-const SECTIONS: Array<[BadgeKind, string]> = [
-  ['story', 'STORY'],
-  ['mastery', 'ARCADE MASTERY'],
-  ['clash', 'CREATURE CLASH'],
-  ['secret', 'SECRETS'],
-];
 
 /** The list's window on the panel. */
 const TOP = 34;
@@ -79,16 +72,10 @@ export class BadgesModal extends Phaser.Scene {
       return;
     }
     this.list = this.add.container(0, TOP);
+    // one list, every badge alike: no headings saying which are the story's
+    // and which a machine's (the user's call) -- just the badges
     let y = 0;
-    for (const [kind, title] of SECTIONS) {
-      const of = BADGES.filter((b) => b.kind === kind);
-      const n = of.filter((b) => got.has(b.id)).length;
-      this.list.add(text(this, LEFT, y + 1, title, PALETTE.gold));
-      this.list.add(text(this, LEFT + BOX_W, y + 1, `${n}/${of.length}`, PALETTE.ash).setOrigin(1, 0));
-      y += 11;
-      for (const b of of) y += this.box(b, y, got.has(b.id)) + 3;
-      y += 4;
-    }
+    for (const b of BADGES) y += this.box(b, y, got.has(b.id)) + 3;
     this.height = y;
     // only what is inside the window shows
     const m = this.make.graphics({}, false).fillRect(0, TOP, GAME_W, BOTTOM - TOP);
@@ -118,8 +105,7 @@ export class BadgesModal extends Phaser.Scene {
     const secret = b.kind === 'secret' && !have;
     const lines = wrap(secret ? 'KEEP YOUR EYES OPEN. NOBODY WILL TELL YOU.' : have ? b.desc : b.hint, COLS).slice(0, 2);
     const h = 13 + lines.length * 8 + 2;
-    const rare = isRare(b.id);
-    const edge = have ? (rare ? 0xffd45e : b.col) : 0x3a414c;
+    const edge = have ? b.col : 0x3a414c;
     this.list.add(this.add.rectangle(LEFT, y, BOX_W, h, have ? 0x1a1610 : 0x12151b, 1).setOrigin(0, 0).setStrokeStyle(1, edge));
     const g = this.add.graphics();
     if (secret) {
@@ -133,7 +119,7 @@ export class BadgesModal extends Phaser.Scene {
       this.list.add(g);
     }
     this.list.add(text(this, LEFT + 30, y + 3, secret ? '???' : b.name, have ? PALETTE.cream : PALETTE.steel));
-    if (have) this.list.add(text(this, LEFT + BOX_W - 4, y + 3, rare ? 'RARE' : 'EARNED', rare ? 0xffd45e : PALETTE.mossLight).setOrigin(1, 0));
+    if (have) this.list.add(text(this, LEFT + BOX_W - 4, y + 3, 'EARNED', PALETTE.mossLight).setOrigin(1, 0));
     else this.list.add(text(this, LEFT + BOX_W - 4, y + 3, 'LOCKED', 0x5a6070).setOrigin(1, 0));
     lines.forEach((l, i) => this.list.add(text(this, LEFT + 30, y + 12 + i * 8, l, have ? PALETTE.ash : 0x6a7080)));
     return h;

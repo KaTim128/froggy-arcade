@@ -121,6 +121,9 @@ let ante = 1;
 let hands = 0;
 /** How the last hand went, kept so his next question can sit beside it. */
 let outcome = '';
+/** Five-card charlies hand after hand this session (the badge wants two). */
+let charlies = 0;
+let lastCharlie = false;
 let clock = 0;
 /** Seconds left of the talking mouth, so he only moves when he says something. */
 let talking = 0;
@@ -318,6 +321,8 @@ export const blackjack: MinigameModule = {
     talking = 1.2;
     hands = 0;
     outcome = '';
+    charlies = 0;
+    lastCharlie = false;
     player = [];
     dealer = [];
     // Nothing is on the felt yet.  Sitting down was free, so `staked` is zero
@@ -721,7 +726,9 @@ function hit(): void {
       finish(false, 'FIVE-CARD 21 - YOU LOSE');
       sceneRef.cameras.main.shake(200, 0.004);
     } else {
-      apiRef?.badge('m_21');
+      // (FIVE-CARD CHARLIE, the badge: two of them, hand after hand)
+      if (++charlies >= 2) apiRef?.badge('m_21');
+      lastCharlie = true;
       finish(true, `FIVE-CARD CHARLIE ON ${p}`);
     }
   }
@@ -996,6 +1003,9 @@ function drawStake(c: Phaser.GameObjects.Container): void {
 function finish(won: boolean, why: string, push = false): void {
   if (phase === 'over') return;
   phase = 'over';
+  // a hand that was not a charlie breaks the run of them
+  if (!lastCharlie) charlies = 0;
+  lastCharlie = false;
   outcome = why;
   setStatus(why);
   hitBtn?.setVisible(false);

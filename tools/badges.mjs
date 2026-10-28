@@ -71,7 +71,7 @@ const B = (page, fn, ...a) => page.evaluate(fn, ...a);
   const lines = await B(page, () => {
     const b = window.__froggy.badges;
     const out = {};
-    const pairs = [['whack', 69, 70, 'm_whack', false], ['hoops', 30, 29.9, 'm_hoops', true], ['roulette', 9, 10, 'm_chamber', false], ['wheel', 500, 1000, 'm_wheel', false], ['battleship', 31, 30 - 1, 'm_pond', true]];
+    const pairs = [['whack', 89, 90, 'm_whack', false], ['hoops', 22, 21.9, 'm_hoops', true], ['roulette', 9, 10, 'm_chamber', false], ['wheel', 500, 1000, 'm_wheel', false], ['battleship', 21, 20, 'm_pond', true]];
     for (const [game, short, on, id] of pairs) {
       b.onRecord(game, short);
       const before = b.has(id);
