@@ -25,7 +25,7 @@ import { KEY_ACTIONS, bind, bindable, capLabel, codeFor, resetKeys, setListening
 import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { isTouch } from '../core/device';
-import { jumpToScene, leaveToMenu, pausedScene, resumePause } from '../core/pause';
+import { jumpToScene, leaveToMenu, pausedScene, resumePause, resumeToLeave } from '../core/pause';
 import { ROOM_MONEY } from './PrizeExchange';
 import { STARTING_TOKENS } from './IntroCutscene';
 import { ledger } from '../core/ledger';
@@ -108,7 +108,7 @@ export class SettingsModal extends Phaser.Scene {
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
         button(this, 122, 158, 'LEAVE', () => {
           const mg = pausedScene() as MinigameScene | null;
-          resumePause();
+          resumeToLeave();
           mg?.quitGame();
         }, { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
       } else if (inGame) {
@@ -119,14 +119,14 @@ export class SettingsModal extends Phaser.Scene {
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
         button(this, 122, 158, mg?.exitLabel?.() ?? 'LEAVE', () => {
           if (mine) {
-            resumePause();
+            resumeToLeave();
             mine.run();
           } else this.quitGame();
         }, { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
       } else if (own) {
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
         button(this, 122, 158, own.label, () => {
-          resumePause();
+          resumeToLeave();
           own.run();
         }, { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
       } else {
@@ -189,7 +189,7 @@ export class SettingsModal extends Phaser.Scene {
       onConfirm: () => {
         this.asking = null;
         if (mg && risk !== null) {
-          resumePause();
+          resumeToLeave();
           // the cabinet's own quit takes the forfeit, then out to the title screen
           mg.quitTo('StartScreen');
         } else {
@@ -218,7 +218,7 @@ export class SettingsModal extends Phaser.Scene {
       confirm: risk === null ? 'LEAVE' : 'CONFIRM LEAVE',
       onConfirm: () => {
         this.asking = null;
-        resumePause();
+        resumeToLeave();
         mg.quitGame();
       },
       onCancel: () => {
