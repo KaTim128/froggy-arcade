@@ -356,7 +356,7 @@ export function raster(d: BodyDesc, s: number, f: number, p: Pal, mat?: Mat): Ra
             D = Math.max(D, -dd);
             continue;
           }
-          D = D === Infinity ? dd : smin(D, dd, mat && pt.k > 0 ? Math.max(pt.k * 1.45, 0.9) : pt.k);
+          D = D === Infinity ? dd : smin(D, dd, mat && pt.k >= 0.6 ? Math.max(pt.k * 1.45, 0.9) : pt.k);
           if (dd < bestD) {
             bestD = dd;
             best = n;
