@@ -152,7 +152,7 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     const B = new Build();
     for (let i = 0; i < 9; i++) {
       const a = Math.PI * (1.05 + (i / 8) * 0.9) + Math.sin(t * 2 + i) * 0.05;
-      B.cap(Math.cos(a) * 3, 2 + Math.sin(a) * 3, Math.cos(a) * 10, 2 + Math.sin(a) * 9.5, 0.55, 0.12, 'd', 0.3);
+      B.cap(Math.cos(a) * 3, 2 + Math.sin(a) * 3, Math.cos(a) * 10, 2 + Math.sin(a) * 9.5, 0.6, 0.3, 'd', 0.5);
     }
     for (const u of [-4, -2, 0, 2, 4]) B.c(u, 6.6 + Math.sin(t * 6 + u) * 0.3, 0.8, 'l', 0.6);
     B.e(0, 2.6, 5.6, 4.4, 'b', 0, 1.2);
@@ -389,7 +389,7 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     const pts: [number, number][] = [];
     for (let i = 0; i <= 6; i++) pts.push([7 - i * 2.8, -1 + Math.sin(t * 4 - i * 0.9) * 1.8 + i * 0.3]);
     B.chain(pts, 2.2, 0.5, 'b', 1);
-    for (let i = 1; i < 5; i++) B.tri(pts[i][0] - 1, pts[i][1] - 1.6, pts[i][0] + 1, pts[i][1] - 1.6, pts[i][0], pts[i][1] - 3.4, 'l', 0.4);
+    for (let i = 1; i < 5; i++) B.tri(pts[i][0] - 1, pts[i][1] - 0.8, pts[i][0] + 1, pts[i][1] - 0.8, pts[i][0], pts[i][1] - 3.2, 'l', 0.8);
     B.e(7.6, -1, 2.6, 1.8, 'b', 0, 0.8);
     for (let i = 1; i < 6; i++) B.glow(pts[i][0], pts[i][1] + 0.4, 0.45, 0xfff4a0);
     B.dl(8, 0, 9.8, -0.2, 0.25, 'k').eye(8, -1.6, 0.7);
@@ -833,9 +833,9 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
   },
   dragonfly: (t) => {
     const B = new Build();
-    const fl = Math.sin(t * 28) * 1;
+    const fl = Math.sin(t * 28) * 0.45;
     const bob = Math.sin(t * 3) * 1;
-    B.e(-1, -2.4 + bob + fl, 4.4, 1.1, 'l', -0.3, 0.4).e(-1.4, -0.6 + bob - fl, 4.2, 1, 'l', 0.3, 0.4);
+    B.e(-0.4, -1.5 + bob + fl, 4.4, 1.2, 'l', -0.3, 0.9).e(-0.8, -0.5 + bob - fl, 4.2, 1.1, 'l', 0.3, 0.9);
     B.cap(-8.6, 1.4 + bob, 0, 0.6 + bob, 0.4, 0.8, 'b', 0.6);
     B.c(1.6, 0.4 + bob, 1.4, 'b', 0.6);
     B.c(3.8, 0 + bob, 1.6, 'b', 0.7);
@@ -995,12 +995,12 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
   ladybug: (t) => {
     const B = new Build();
     const st = Math.sin(t * 10) * 0.4;
-    for (let i = 0; i < 3; i++) B.cap(-2 + i * 2, 4.8, -2.4 + i * 2 + st, 7.2, 0.25, 0.2, 0x24202c, 0.2);
+    for (let i = 0; i < 3; i++) B.cap(-2 + i * 2, 4.8, -2.4 + i * 2 + st, 7.2, 0.4, 0.32, 0x24202c, 0.4);
     B.e(0, 2.6, 5.4, 4, 'b', 0, 1);
     B.c(5.6, 3.2, 2.2, 0x24202c, 0.8);
     B.dl(0, -1.2, 0, 6.4, 0.3, 0x24202c);
     for (const [x, y, r] of [[-2.6, 1.4, 1], [2.4, 1.2, 0.9], [-1.6, 4, 0.8], [2.2, 4.2, 0.85], [0, 0, 0.6]] as const) B.dc(x, y, r, 0x24202c);
-    B.cap(6.4, 1.4, 8, -1.4 + st, 0.15, 0.1, 0x24202c, 0.2).cap(5.6, 1.2, 6.4, -1.8 - st, 0.15, 0.1, 0x24202c, 0.2);
+    B.cap(6.4, 2.2, 8, -1.4 + st, 0.3, 0.2, 0x24202c, 0.5).cap(5.6, 2.2, 6.4, -1.8 - st, 0.3, 0.2, 0x24202c, 0.5);
     B.de(-1.6, 0.6, 1.4, 0.6, 'l');
     B.dc(6.4, 2.8, 0.55, 0xffffff).dc(6.6, 2.8, 0.3, 0x000000);
     return B.done();
@@ -1030,7 +1030,8 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     B.e(8.2, -0.6, 1.4, 1.6, 'b', 0, 0.6);
     B.cap(6.4, 0, 6.6, 2.6, 0.5, 0.3, 'd', 0.3);
     for (const k of [-1, 1]) {
-      B.e(5.4 + k * 1.6, -5.4, 2.6, 1, 'w', k * 0.5, 0.4);
+      B.cap(4.4, -2, 5.4 + k * 1.6, -5.2, 0.8, 0.6, 'w', 0.8);
+      B.e(5.4 + k * 1.6, -5.4, 2.6, 1, 'w', k * 0.5, 0.8);
       for (let i = 0; i < 3; i++) B.tri(4 + k * 1.6 + i * 1.4, -6, 4.8 + k * 1.6 + i * 1.4, -6, 4.2 + k * 1.6 + i * 1.4, -7.8, 'w', 0.2);
     }
     spikes(B, [[-3, -1.6, 1.4], [0, -2, 1.2], [3, -1.8, 1]]);
@@ -1075,9 +1076,9 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     B.e(0, 3, 5.6, 1.9, 'b', 0, 1);
     B.e(-1, 1.8, 4.6, 1.1, 'd', -0.1, 0.6);
     B.cap(-2.6, 3, -1 + kick, -1.6, 0.7, 0.5, 'b', 0.4).cap(-1 + kick, -1.6, -5.6, 7.4, 0.5, 0.3, 'b', 0.3);
-    B.cap(1, 4, 0.6, 7.4, 0.25, 0.2, 'd', 0.2).cap(3, 4, 3.4, 7.4, 0.25, 0.2, 'd', 0.2);
+    B.cap(1, 4, 0.6, 7.4, 0.45, 0.35, 'd', 0.4).cap(3, 4, 3.4, 7.4, 0.45, 0.35, 'd', 0.4);
     B.c(5.6, 2.6, 1.8, 'b', 0.8);
-    B.cap(6.2, 1.4, 10.6, -4.6 + Math.sin(t * 6) * 0.5, 0.12, 0.08, 'd', 0.2).cap(6, 1.6, 9.4, -5.6, 0.12, 0.08, 'd', 0.2);
+    B.cap(6.2, 2, 10.6, -4.6 + Math.sin(t * 6) * 0.5, 0.35, 0.22, 'd', 0.5).cap(6, 2.2, 9.4, -5.6, 0.35, 0.22, 'd', 0.5);
     for (let i = 0; i < 3; i++) B.dl(-3.4 + i * 1.6, 1.4, -2.6 + i * 1.6, 2.4, 0.2, 'l');
     B.glow(6.6, 1.6, 0.4, 0xfff07a).eye(6.2, 2, 0.5);
     return B.done();
@@ -1211,7 +1212,7 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     B.e(1, 3, 2.8, 2.4, 'b', 0, 1);
     B.chain([[2.6, 1.6], [3.6, -1], [3.4, -3.2]], 0.8, 0.6, 'b', 0.8);
     B.c(3.8, -3.8, 1.1, 'b', 0.8);
-    for (let i = 0; i < 3; i++) B.cap(3.4 + i * 0.4, -4.6, 3 + i * 0.7, -6.6, 0.12, 0.1, 'l', 0.2).dc(3 + i * 0.7, -6.6, 0.3, 'l');
+    for (let i = 0; i < 3; i++) B.cap(3.4 + i * 0.4, -3.8, 3 + i * 0.7, -6.6, 0.35, 0.28, 'l', 0.5);
     B.tri(4.6, -4.2, 4.6, -3.4, 5.8, -3.6, 0xa89060, 0.2);
     B.eye(4, -4, 0.4);
     return B.done();

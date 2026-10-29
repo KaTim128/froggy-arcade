@@ -173,6 +173,48 @@ function solid(t: Tone, p: Pal): number {
   return t === 'b' ? p.col : t === 'd' ? p.dark : t === 'l' ? p.light : t === 'w' ? 0xf0ead8 : t === 'k' ? 0x24202c : t;
 }
 
+// ------------------------------------------------------------------ texture
+
+/** Where a shape sits: texture is anchored to its part, so it moves with it. */
+function anchor(s: Shape): [number, number] {
+  switch (s.t) {
+    case 'cap':
+      return [(s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2];
+    case 'tri':
+      return [(s.x1 + s.x2 + s.x3) / 3, (s.y1 + s.y2 + s.y3) / 3];
+    default:
+      return [s.x, s.y];
+  }
+}
+
+function hash(a: number, b: number, n: number): number {
+  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(n | 0, 2147483647)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/**
+ * The grain of the skin at one pixel, 0..1: clumps (fur tufts, scales) from
+ * value noise two pixels across, broken up by single-pixel speckle.  Taken
+ * from the part's own coordinates so it travels with the part, never swims.
+ */
+function grain(px: number, py: number, seed: number): number {
+  const gx = px / 2.2;
+  const gy = py / 2.2;
+  const x0 = Math.floor(gx);
+  const y0 = Math.floor(gy);
+  const fx = gx - x0;
+  const fy = gy - y0;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const a = hash(x0, y0, seed);
+  const b = hash(x0 + 1, y0, seed);
+  const c = hash(x0, y0 + 1, seed);
+  const d = hash(x0 + 1, y0 + 1, seed);
+  const clump = a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+  return clump * 0.65 + hash(px, py, seed + 7) * 0.35;
+}
+
 // ------------------------------------------------------------------ raster
 
 /** Runs of one colour: x, y (pixels from the snapped origin), width. */
@@ -262,8 +304,20 @@ export function raster(d: BodyDesc, s: number, f: number, p: Pal): Raster {
         const m = Math.hypot(gx, gy) || 1;
         // lit where the surface faces the light; it fades a few units in
         const depth = Math.max(0, Math.min(1, 1 + field[at] / (2.6 / s)));
-        const lit = ((gx / m) * LX + (gy / m) * LY) * depth;
-        out[j * W + i] = lit > 0.32 ? sh[0] : lit < -0.3 ? sh[2] : sh[1];
+        let lit = ((gx / m) * LX + (gy / m) * LY) * depth;
+        // THE SKIN: grain breaks the bands of light into tufts and scales,
+        // and now and then a pixel sits a half-step off its neighbours
+        const an = anchor(pt.s);
+        const u = (px0 + i + 0.5) / (s * f);
+        const v = (py0 + j + 0.5) / s;
+        const n = grain(Math.floor((u - an[0]) * s), Math.floor((v - an[1]) * s), tone[at]);
+        lit += (n - 0.5) * 1.1;
+        let col = lit > 0.32 ? sh[0] : lit < -0.3 ? sh[2] : sh[1];
+        if (col === sh[1]) {
+          if (n < 0.3) col = mix(sh[1], sh[2], 0.6);
+          else if (n > 0.74) col = mix(sh[1], sh[0], 0.6);
+        }
+        out[j * W + i] = col;
         break;
       }
     }
