@@ -260,6 +260,30 @@ function countsIn(sc: Phaser.Scene): boolean {
   return !!m.started && !NO_COUNT.has(m.gameId ?? '');
 }
 
+/**
+ * Unfrozen on the way OUT of a game (LEAVE, QUIT, CASH OUT): no 3, 2, 1 --
+ * the count belongs to going back into play, and here the next thing on
+ * screen is a menu or a room (user, 29 Oct).
+ */
+export function resumeToLeave(): void {
+  countNext = false;
+  resumePause();
+}
+
+/**
+ * 3, 2, 1 and then `done`, for a game that held itself still some other way
+ * (Creature Clash's LEAVE question, answered CANCEL): back into play counts
+ * in just as RESUME does.  Esc waits for it.
+ */
+export function countBack(done: () => void): void {
+  if (counting) return;
+  counting = true;
+  countIn(() => {
+    counting = false;
+    done();
+  });
+}
+
 export function resumePause(): void {
   if (!game || !frozen || counting) return;
   if (countNext) {

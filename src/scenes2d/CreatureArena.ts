@@ -18,6 +18,7 @@
  * order the timers, taps and tab switches arrive in.
  */
 
+import { countBack } from '../core/pause';
 import { STAGES, WORLDS, lineupFoe, storyFoe, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import Phaser from 'phaser';
@@ -1401,7 +1402,10 @@ export class CreatureArena extends Phaser.Scene {
       onCancel: () => {
         this.dialog?.destroy();
         this.dialog = null;
-        this.paused = was;
+        // back into a fight under way counts 3, 2, 1 first (LEAVE itself
+        // did not count: it was on the way out)
+        if (this.started && !was) countBack(() => (this.paused = was));
+        else this.paused = was;
       },
     });
     this.dialog.setDepth(3000);
