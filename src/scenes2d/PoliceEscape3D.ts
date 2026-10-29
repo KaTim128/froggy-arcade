@@ -178,6 +178,9 @@ interface Cop {
   heardT: number;
   /** Got to his floor (or seen you on the way): off the double-time. */
   arrived: boolean;
+  /** Drawn this frame (see `lightsAndVisibility`), and his meshes. */
+  drawn?: boolean;
+  meshes?: THREE.Object3D[];
 }
 
 const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v));
@@ -643,9 +646,9 @@ export class PoliceEscape3D extends Phaser.Scene {
     const b = this.b!;
     const door = b.entrance!;
     const plan = [
-      { home: TOP, at: { x: door.x + 0.3, z: door.z - 0.45 }, wait: this.retry ? 2.5 : 4 },
-      { home: 3, at: { x: door.x - 0.2, z: door.z + 0.5 }, wait: this.retry ? 3.7 : 5.4 },
-      { home: 1, at: { x: door.x - 0.6, z: door.z - 0.1 }, wait: this.retry ? 5 : 7 },
+      { home: TOP, at: { x: door.x + 0.3, z: door.z - 0.45 }, wait: this.retry ? 3.5 : 5.5 },
+      { home: 3, at: { x: door.x - 0.2, z: door.z + 0.5 }, wait: this.retry ? 4.7 : 6.9 },
+      { home: 1, at: { x: door.x - 0.6, z: door.z - 0.1 }, wait: this.retry ? 6 : 8.5 },
     ];
     OFFICER_LOOKS.forEach((look, i) => {
       const model = new PoliceOfficer(look, 101 + i * 7);
@@ -728,7 +731,10 @@ export class PoliceEscape3D extends Phaser.Scene {
       this.syncPad(dt);
       this.movePlayer(dt);
       this.hideFrame(dt);
-      if (!this.frozen) for (const c of this.cops) this.copFrame(c, dt);
+      if (!this.frozen) {
+        for (const c of this.cops) this.copFrame(c, dt);
+        this.keepApart();
+      }
       for (const c of this.cops) this.poseCop(c, dt);
       this.ambience(dt);
       this.check612();
@@ -1415,17 +1421,32 @@ export class PoliceEscape3D extends Phaser.Scene {
         return false;
       }
     }
-    // keep apart: if another officer is right in front, give him a moment
+    // THE ONE AHEAD GOES FIRST: another officer right in front of him, the
+    // way he is going, and he gives him a moment (then goes round him --
+    // `keepApart` will not let him through him)
     for (const o of this.cops) {
-      if (o === c || o.i > c.i) continue;
-      if (Math.abs(o.m.h - c.m.h) < 1 && Math.hypot(o.m.x - c.m.x, o.m.z - c.m.z) < 0.9) {
-        c.stuckT += dt;
-        if (c.stuckT < 1.2) return false;
+      if (o === c || o.i > c.i || o.inLobby) continue;
+      const ox = o.m.x - c.m.x;
+      const oz = o.m.z - c.m.z;
+      const od = Math.hypot(ox, oz);
+      if (Math.abs(o.m.h - c.m.h) < 1 && od < 0.9) {
+        const tx = n.x - c.m.x;
+        const tz = n.z - c.m.z;
+        const ahead = (ox * tx + oz * tz) / (od * (Math.hypot(tx, tz) || 1) || 1);
+        if (ahead > 0.5) {
+          c.stuckT += dt;
+          if (c.stuckT < 1.2) return false;
+        }
       }
     }
-    const dx = n.x - c.m.x;
-    const dz = n.z - c.m.z;
-    const d = Math.hypot(dx, dz) + (c.m.well ? Math.abs(n.y - c.m.h) * 0.3 : 0);
+    // STRAIGHT ON WHERE HE CAN: past a node when the one after it is on the
+    // same level, no door between, and nothing in the straight line to it --
+    // not out to the landing's fire door and back on every floor he passes
+    while (this.canCut(c, c.path[c.pathI], c.path[c.pathI + 1], prev)) c.pathI++;
+    const to = c.path[c.pathI];
+    const dx = to.x - c.m.x;
+    const dz = to.z - c.m.z;
+    const d = Math.hypot(dx, dz) + (c.m.well ? Math.abs(to.y - c.m.h) * 0.3 : 0);
     if (d < 0.25) {
       c.pathI++;
       return c.pathI >= c.path.length;
@@ -1438,7 +1459,7 @@ export class PoliceEscape3D extends Phaser.Scene {
     const moved = Math.hypot(c.m.x - before.x, c.m.z - before.z);
     c.speedNow = moved / Math.max(dt, 1e-4);
     c.st.run = pace > 3;
-    this.faceToward(c, n.x, n.z, dt, pace > 3 ? 9 : 5);
+    this.faceToward(c, to.x, to.z, dt, pace > 3 ? 9 : 5);
     // aim ahead, a little down, as you would walking with a torch
     c.st.aimYaw *= 0.9;
     c.st.aimPitch = -0.12;
@@ -1462,6 +1483,79 @@ export class PoliceEscape3D extends Phaser.Scene {
       }
     } else c.stuckT = Math.max(0, c.stuckT - dt);
     return false;
+  }
+
+  /**
+   * Can an officer at `c` go straight for `next`, past `n`?  Both on his
+   * level (in the well: the same flat landing he is on), no door on the way
+   * in or out of `n` (a door is opened at its own node), and nothing in the
+   * straight line -- his whole width of it -- to `next`.
+   */
+  private canCut(c: Cop, n: NavNode | undefined, next: NavNode | undefined, prev: NavNode | undefined): boolean {
+    if (!n || !next) return false;
+    if (n.zone !== next.zone || n.f !== next.f) return false;
+    if ((prev && this.edgeDoor(prev, n)) || this.edgeDoor(n, next)) return false;
+    if (c.m.well) {
+      // (a flight is not a straight line: only across a level landing)
+      if (n.zone !== 'well' || Math.abs(n.y - c.m.h) > 0.05 || Math.abs(next.y - c.m.h) > 0.05) return false;
+      return Math.hypot(next.x - c.m.x, next.z - c.m.z) < 2.6;
+    }
+    if (n.zone === 'well' || c.m.f !== n.f) return false;
+    const dx = next.x - c.m.x;
+    const dz = next.z - c.m.z;
+    const L = Math.hypot(dx, dz);
+    if (L < 0.01 || L > 9) return false;
+    const px = (-dz / L) * R_COP;
+    const pz = (dx / L) * R_COP;
+    const segs = this.segsCache(c.m.f, false);
+    const boxes = this.b!.floors[c.m.f]?.boxes ?? [];
+    for (const k of [-1, 0, 1]) {
+      const ax = c.m.x + px * k;
+      const az = c.m.z + pz * k;
+      const bx = next.x + px * k;
+      const bz = next.z + pz * k;
+      if (segs.some((sg) => segHit(ax, az, bx, bz, sg) !== null)) return false;
+      if (boxes.some((bb) => boxHit(ax, az, bx, bz, bb))) return false;
+    }
+    return true;
+  }
+
+  /**
+   * NO ONE WALKS THROUGH ANYONE.  Two officers closer than their two bodies
+   * on the same level are pushed apart, half each, through the same
+   * collision they walk with (not into a wall, not off a flight); one
+   * stood still -- searching, looking, at a door -- gives way less than
+   * one on the move.  Not in the lobby queue, and not at the arrest.
+   */
+  private keepApart(): void {
+    const MIN = R_COP * 2 + 0.04;
+    const cs = this.cops;
+    for (let i = 0; i < cs.length; i++) {
+      const a = cs[i];
+      if (a.inLobby || a.mode === 'arrest' || a.mode === 'scripted') continue;
+      for (let j = i + 1; j < cs.length; j++) {
+        const o = cs[j];
+        if (o.inLobby || o.mode === 'arrest' || o.mode === 'scripted') continue;
+        if (a.m.well !== o.m.well || Math.abs(a.m.h - o.m.h) > 0.8) continue;
+        let dx = o.m.x - a.m.x;
+        let dz = o.m.z - a.m.z;
+        let d = Math.hypot(dx, dz);
+        if (d >= MIN) continue;
+        if (d < 1e-3) {
+          // (stood on the very same spot: apart along whichever way he faces)
+          dx = Math.sin(a.yaw);
+          dz = Math.cos(a.yaw);
+          d = 1;
+        }
+        const push = MIN - Math.min(d, MIN);
+        const ux = dx / d;
+        const uz = dz / d;
+        const wa = a.speedNow > 0.2 ? 0.6 : 0.4;
+        const wo = 1 - wa;
+        this.step(a.m, a.m.x - ux * push * wa, a.m.z - uz * push * wa, R_COP, 'cop', false);
+        this.step(o.m, o.m.x + ux * push * wo, o.m.z + uz * push * wo, R_COP, 'cop', false);
+      }
+    }
   }
 
   private faceToward(c: Cop, x: number, z: number, dt: number, rate: number): void {
@@ -1877,6 +1971,30 @@ export class PoliceEscape3D extends Phaser.Scene {
       if (me.well && Math.abs(me.h - fl.f * FH) < 2.4 && b.stairDoors[fl.f].k > 0.05) on = true;
       if (!me.well && fl.f === me.f) on = true;
       fl.group.visible = on;
+    }
+    // NOT DRAWN WHERE IT CANNOT BE SEEN (log: lag with all of them in).
+    // A flat behind a shut door, that you are not in, is a few hundred
+    // meshes nobody can see; so is an officer on another floor.  The flat
+    // is hidden whole (no lights in it); an officer's meshes go to a layer
+    // the camera does not draw, so his torch -- a light -- stays in the
+    // scene and the light count, and so the shaders, never change.
+    const playing = this.phase === 'play' || this.phase === 'intro';
+    const mine = playing && !me.well ? b.roomAt(me.f, me.x, me.z) : null;
+    for (const r of b.rooms) {
+      if (!r.group || r.floor !== lvl) continue;
+      r.group.visible = !playing || r === mine || r.special === '612' || r.door.k > 0.01 || r.door.want > 0.01;
+    }
+    for (const c of this.cops) {
+      const near = !playing || (!c.m.well && !me.well ? c.m.f === me.f : Math.abs(c.m.h - me.h) < FH * 1.6);
+      if (c.drawn === near) continue;
+      c.drawn = near;
+      if (!c.meshes) {
+        c.meshes = [];
+        c.model.root.traverse((o) => {
+          if ((o as THREE.Mesh).isMesh) c.meshes!.push(o);
+        });
+      }
+      for (const o of c.meshes) o.layers.set(near ? 0 : 1);
     }
     // THE TORCHES' SHADOWS, WHERE THEY COST.  Each one is the whole scene drawn
     // again from his lens; three of them every frame was most of the frame.
@@ -2494,7 +2612,9 @@ export class PoliceEscape3D extends Phaser.Scene {
       if (line) {
         const cx = GAME_W / 2 + (over.left - over.right) / 2;
         if (line.red && line.text.length < 24 && !line.text.startsWith('RADIO')) {
-          drawPixelText(ctx, line.text, cx, GAME_H * 0.36, { scale: 1, color: '#ff4a4a', center: true });
+          // (on a phone the objective block comes down to ~68 and the hint under
+          // it to ~88: the shout goes under both)
+          drawPixelText(ctx, line.text, cx, isTouch() ? 96 : GAME_H * 0.36, { scale: 1, color: '#ff4a4a', center: true });
         } else {
           const room = GAME_W - 24 - over.left - over.right;
           const per = Math.max(10, Math.floor(room / 6));
@@ -2516,7 +2636,9 @@ export class PoliceEscape3D extends Phaser.Scene {
       if (!hint && this.hide && this.hide.k >= 1 && !this.hide.leaving) hint = isTouch() ? (this.hide.peek ? 'PEEK: STOP LOOKING - INTERACT: GET OUT' : 'PEEK: LOOK OUT - INTERACT: GET OUT') : this.hide.peek ? 'Q STOP PEEKING - E GET OUT' : 'Q PEEK - E GET OUT';
       if (!hint && this.clock < this.hintUntil) hint = this.hint;
       if (hint && this.phase === 'play') {
-        const y = 44;
+        // (under the objective block, never on it: on a phone that block
+        // starts lower, under the gear)
+        const y = this.objective ? top + 36 : 44;
         ctx.fillStyle = 'rgba(0,0,0,0.55)';
         ctx.fillRect(GAME_W / 2 - (hint.length * 6) / 2 - 4, y - 3, hint.length * 6 + 7, 13);
         drawPixelText(ctx, hint, GAME_W / 2, y, { scale: 1, color: '#f0d890', center: true });

@@ -268,8 +268,12 @@ export function buildHotelLobby(
     m.position.z = 0;
   };
   // the back wall, with the stairwell door's opening in it
-  const sd0 = STAIR_X - 0.55;
-  const sd1 = STAIR_X + 0.55;
+  // (in the police scene the opening is the stairwell's own fire door's,
+  // 0.9 m, so the one steel frame round it is the whole doorway -- not a
+  // wider hole with a second frame inside it)
+  const sdHalf = opts.police ? 0.45 : 0.55;
+  const sd0 = STAIR_X - sdHalf;
+  const sd1 = STAIR_X + sdHalf;
   wall(X0, sd0, back);
   wall(sd1, X1, back);
   wall(sd0, sd1, back, CEIL_H, 2.25);
@@ -340,9 +344,14 @@ export function buildHotelLobby(
     const c = new THREE.Mesh(new THREE.BoxGeometry(X1 - X0, 0.14, 0.08), cream);
     c.position.set((X0 + X1) / 2, CEIL_H - 0.07, z);
     S.add(c);
-    const r = new THREE.Mesh(new THREE.BoxGeometry(X1 - X0, 0.05, 0.05), brass);
-    r.position.set((X0 + X1) / 2, DADO, z);
-    S.add(r);
+    // the dado rail, broken for the stairwell doorway on the back wall (run
+    // through it, it was a bar across the opening at knee height)
+    const runs: [number, number][] = z < 1 ? [[X0, sd0 - 0.09], [sd1 + 0.09, X1]] : [[X0, X1]];
+    for (const [a, b] of runs) {
+      const r = new THREE.Mesh(new THREE.BoxGeometry(b - a, 0.05, 0.05), brass);
+      r.position.set((a + b) / 2, DADO, z);
+      S.add(r);
+    }
   }
 
   // ---- the reception desk, the sign, the pigeonholes, the clocks
@@ -451,7 +460,8 @@ export function buildHotelLobby(
     S.add(stairOpening);
   }
   const frame = new THREE.MeshLambertMaterial({ color: 0x2a1a0e });
-  for (const [w, h, x, y] of [
+  // (the police scene's doorway has the stairwell's steel frame through it)
+  if (!opts.police) for (const [w, h, x, y] of [
     [0.08, 2.3, STAIR_X - 0.59, 1.15],
     [0.08, 2.3, STAIR_X + 0.59, 1.15],
     [1.26, 0.1, STAIR_X, 2.3],

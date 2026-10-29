@@ -4,7 +4,7 @@
  * about -- it burrows, hops, scuttles, slithers, hovers, rolls, crawls, flies
  * or walks on two legs, four or eight), an element (what its hits DO), a
  * combat role, and three moves: one plain attack of its own, and two of the
- * 120 specials (game/specials) -- each of which belongs to one creature or
+ * 200 specials (game/specials) -- each of which belongs to one creature or
  * boss in the whole game, and no other.
  *
  * NO TIERS.  Nothing here is common or legendary, and nothing is simply
@@ -33,7 +33,11 @@ export type Body =
   | 'wisp' | 'jelly' | 'mantis' | 'spider' | 'roller' | 'sprout' | 'bat' | 'slug' | 'ram' | 'centipede'
   | 'tortoise' | 'hare' | 'scorpion' | 'puffer' | 'penguin' | 'shroom' | 'gecko' | 'angler' | 'stag' | 'yeti'
   | 'boar' | 'heron' | 'urchin' | 'newt' | 'seahorse' | 'bear' | 'sloth' | 'bee' | 'ferret' | 'rhino'
-  | 'eel' | 'obelisk' | 'hedgehog' | 'fox' | 'falcon' | 'crow' | 'lynx' | 'wraith' | 'firefly' | 'snail';
+  | 'eel' | 'obelisk' | 'hedgehog' | 'fox' | 'falcon' | 'crow' | 'lynx' | 'wraith' | 'firefly' | 'snail'
+  | 'salamander' | 'chick' | 'otter' | 'octopus' | 'badger' | 'caterpillar' | 'walrus' | 'ermine' | 'wasp' | 'mouse'
+  | 'armadillo' | 'crocodile' | 'parrot' | 'dragonfly' | 'leech' | 'possum' | 'worm' | 'starfish' | 'porcupine' | 'zebra'
+  | 'camel' | 'flamingo' | 'shark' | 'lobster' | 'koala' | 'ladybug' | 'beaver' | 'moose' | 'narwhal' | 'lemur'
+  | 'cricket' | 'pangolin' | 'goat' | 'squirrel' | 'swan' | 'raccoon' | 'vulture' | 'skunk' | 'axolotl' | 'peacock';
 /** The ten bosses' bodies: none of them is a normal creature's. */
 export type BossBody = 'lich' | 'seraph' | 'hydra' | 'queen' | 'maw' | 'cloud' | 'wyrm' | 'sphinx' | 'kraken' | 'mammoth';
 
@@ -64,6 +68,7 @@ export type AttackKind =
  *   where it     linger echo vortex                              (areas, lines, charges)
  *   lands
  *   on you       haste guard regen cleanse                       (any move)
+ *   buffs        evade focus fury quicken                        (any move: seconds of an edge)
  *   guards only  reflect thorns
  *   blinks only  strike
  *   none         the plain move, as it comes
@@ -74,13 +79,14 @@ export type Mod =
   | 'homing' | 'bounce' | 'wave' | 'boomerang' | 'grow' | 'drill' | 'split'
   | 'linger' | 'echo' | 'vortex'
   | 'haste' | 'guard' | 'regen' | 'cleanse'
+  | 'evade' | 'focus' | 'fury' | 'quicken'
   | 'reflect' | 'thorns'
   | 'strike';
 
 export const HIT_MODS: Mod[] = ['poison', 'mark', 'shred', 'execute', 'drain', 'pull', 'push', 'root', 'silence', 'weaken', 'chill', 'stagger', 'crit'];
 export const PATH_MODS: Mod[] = ['homing', 'bounce', 'wave', 'boomerang', 'grow', 'drill', 'split'];
 export const AREA_MODS: Mod[] = ['linger', 'echo', 'vortex'];
-export const SELF_MODS: Mod[] = ['haste', 'guard', 'regen', 'cleanse'];
+export const SELF_MODS: Mod[] = ['haste', 'guard', 'regen', 'cleanse', 'evade', 'focus', 'fury', 'quicken'];
 /** The kinds that fly as shots, and the ones that land somewhere as an area. */
 export const SHOT_KINDS: AttackKind[] = ['bolt', 'spread', 'snare'];
 export const AREA_KINDS: AttackKind[] = ['nova', 'arc', 'mine', 'beam', 'dash'];
@@ -139,7 +145,7 @@ export const ELEMENT_LIST = Object.keys(ELEMENTS) as Element[];
 const A = (name: string, kind: AttackKind, dmg: number, cd: number, reach: number, mod: Mod = 'none'): Attack => ({ name, kind, dmg, cd, reach, mod });
 /** A plain attack: no special at all. */
 const N = (name: string, kind: AttackKind, dmg: number, cd: number, reach: number): Attack => A(name, kind, dmg, cd, reach);
-/** One of the 120 specials, as a move. */
+/** One of the 200 specials, as a move. */
 const SP = (id: string): Attack => {
   const d = SPECIALS[id];
   if (!d) throw new Error(`creatures: no special "${id}"`);
@@ -149,7 +155,7 @@ const SP = (id: string): Attack => {
 type Def = Omit<Creature, 'boss'>;
 
 /**
- * ---- THE FIFTY.  Health runs about 74 to 140 and speed 42 to 82, traded
+ * ---- THE NINETY (fifty, then twenty and twenty more on 28 Oct).  Health runs about 74 to 140 and speed 42 to 82, traded
  * against each other and against what the moves do: the glow ones, whose
  * shots go through cover, are among the thinnest in the game; the tanks
  * crawl.  Each has one plain attack (`N`: a swipe up close, or a shot) and
@@ -222,6 +228,48 @@ const ROSTER: Def[] = [
   C({ id: 'angler', name: 'Lureangler', element: 'glow', body: 'angler', role: 'LURER', moves: 'SWIMS THROUGH THE AIR', strong: 'REELS YOU IN AND BURNS YOU THROUGH WALLS', weak: 'SOFT-BODIED: THE LEAST HEALTH BUT ONE', hp: 74, speed: 58, cry: 'water_plip', normal: N('LURE BUMP', 'beam', 9, 0.6, 32), specials: ['dangling_lure', 'deep_beam'] }),
   C({ id: 'firefly', name: 'Lanternfly', element: 'glow', body: 'firefly', role: 'BEACON', moves: 'DRIFTS ON A GLOWING TAIL', strong: 'A LANTERN THAT LETS IT SHOOT THROUGH ANYTHING', weak: 'STRAYS FROM ITS LANTERN AND IS WEAK', hp: 78, speed: 64, cry: 'arcane_cast', normal: N('GLOW SPARK', 'bolt', 7, 0.5, 205), specials: ['beacon', 'dazzle'] }),
   C({ id: 'snail', name: 'Starsnail', element: 'glow', body: 'snail', role: 'SHELL MAGE', moves: 'GLIDES ON A TRAIL OF LIGHT', strong: 'TURNS YOUR HITS INTO A BLAST, AND RIDES ITS TRAIL', weak: 'SLOW OFF ITS OWN TRAIL', hp: 84, speed: 48, cry: 'water_plip', normal: N('SHELL SPARK', 'bolt', 8, 0.6, 190), specials: ['star_shell', 'comet_trail'] }),
+  // ------------------------------------------- the twenty new ones (28 Oct, user: 20 creatures, 40 abilities)
+  C({ id: 'salamander', name: 'Pyrosal', element: 'ember', body: 'salamander', role: 'SKIRMISHER', moves: 'SCURRIES LOW', strong: 'QUICK SPITS THAT POISON, AND A BURNING GETAWAY', weak: 'FALLS APART IF YOU GET CLOSE', hp: 90, speed: 72, cry: 'poison_hiss', normal: N('FIRE LICK', 'bolt', 8, 0.5, 190), specials: ['cinder_spit', 'scorch_dash'] }),
+  C({ id: 'chick', name: 'Cinderchick', element: 'ember', body: 'chick', role: 'GLASS CANNON', moves: 'HOPS AND FLAPS', strong: 'BURSTS THAT GO OFF TWICE', weak: 'A PUFF OF FEATHERS - VERY FRAGILE', hp: 72, speed: 78, cry: 'arcane_cast', normal: N('PECK FLARE', 'bolt', 9, 0.55, 200), specials: ['flare_burst', 'ash_volley'] }),
+  C({ id: 'otter', name: 'Riptotter', element: 'tide', body: 'otter', role: 'BRAWLER', moves: 'BOUNDS ON SHORT LEGS', strong: 'SLIPPERY: SHAKES OFF SLOWS AND HOLDS', weak: 'ITS HITS ARE LIGHT', hp: 104, speed: 66, cry: 'splash', normal: N('PAW SLAP', 'beam', 10, 0.55, 34), specials: ['current_ram', 'slick_coat'] }),
+  C({ id: 'octopus', name: 'Inkling', element: 'tide', body: 'octopus', role: 'TRICKSTER', moves: 'CREEPS ON EIGHT ARMS', strong: 'INK THAT SLOWS, AND AN ARM THAT GRABS', weak: 'SOFT - NO ARMOUR AT ALL', hp: 84, speed: 64, cry: 'splash', normal: N('ARM WHIP', 'beam', 9, 0.6, 40), specials: ['ink_cloud', 'tentacle_grab'] }),
+  C({ id: 'badger', name: 'Mossbadger', element: 'moss', body: 'badger', role: 'TANK', moves: 'TRUNDLES, HEAD DOWN', strong: 'A WALL OF HEALTH THAT REGROWS', weak: 'SLOW TO REACH ANYTHING', hp: 138, speed: 46, cry: 'branch_creak', normal: N('DIG SWIPE', 'beam', 12, 0.7, 34), specials: ['moss_hide', 'root_rush'] }),
+  C({ id: 'caterpillar', name: 'Leafcrawler', element: 'moss', body: 'caterpillar', role: 'ZONER', moves: 'INCHES ALONG', strong: 'SPORES THAT BOUNCE ROUND COVER, AND A WALL OF LEAVES', weak: 'THE SLOWEST BUG THERE IS', hp: 112, speed: 44, cry: 'branch_creak', normal: N('SILK SPIT', 'bolt', 8, 0.65, 170), specials: ['spore_bounce', 'leaf_wall'] }),
+  C({ id: 'walrus', name: 'Rimewalrus', element: 'frost', body: 'walrus', role: 'JUGGERNAUT', moves: 'HAULS ITSELF ON ITS FLIPPERS', strong: 'TUSKS THAT HIT DOUBLE, AND A HIDE OF BLUBBER', weak: 'VERY SLOW OUT OF THE WATER', hp: 140, speed: 42, cry: 'bin_land', normal: N('TUSK JAB', 'beam', 13, 0.75, 36), specials: ['tusk_crash', 'blubber'] }),
+  C({ id: 'ermine', name: 'Frostermine', element: 'frost', body: 'ermine', role: 'STALKER', moves: 'DARTS ON A LONG BODY', strong: 'CHILLING FANGS AND A BLINK THAT LANDS HARD', weak: 'LIGHT - IT CANNOT TAKE A BEATING', hp: 80, speed: 78, cry: 'wind_gust', normal: N('ICE NIP', 'beam', 9, 0.45, 32), specials: ['snow_blink', 'rime_fang'] }),
+  C({ id: 'wasp', name: 'Voltwasp', element: 'volt', body: 'wasp', role: 'HARASSER', moves: 'BUZZES IN THE AIR', strong: 'STINGS THAT SHRED, AND NEEDLES THAT CURVE', weak: 'DIES FAST IF CAUGHT', hp: 76, speed: 80, cry: 'voice_robot', normal: N('BUZZ STING', 'bolt', 8, 0.45, 200), specials: ['shock_sting', 'swarm_fan'] }),
+  C({ id: 'mouse', name: 'Sparkmouse', element: 'volt', body: 'mouse', role: 'SKIRMISHER', moves: 'SCAMPERS', strong: 'A SQUEAK THAT SLOWS EVERY MOVE THEY HAVE', weak: 'TINY - LITTLE HEALTH', hp: 78, speed: 82, cry: 'voice_robot', normal: N('TAIL ZAP', 'bolt', 8, 0.5, 180), specials: ['static_dash', 'thunder_squeak'] }),
+  C({ id: 'armadillo', name: 'Rubbledillo', element: 'stone', body: 'armadillo', role: 'DEFENDER', moves: 'PLODS, AND ROLLS UP', strong: 'A SHELL THAT THROWS SHOTS BACK', weak: 'NOT MUCH BITE', hp: 130, speed: 50, cry: 'crumble', normal: N('SHELL BASH', 'beam', 11, 0.7, 34), specials: ['curl_guard', 'rock_roll'] }),
+  C({ id: 'crocodile', name: 'Cragodile', element: 'stone', body: 'crocodile', role: 'AMBUSHER', moves: 'SLINKS LOW ON SHORT LEGS', strong: 'A BITE THAT FINISHES THE WOUNDED', weak: 'SLOW TO TURN AND CHASE', hp: 122, speed: 52, cry: 'crumble', normal: N('JAW SNAP', 'beam', 13, 0.75, 36), specials: ['death_roll', 'gravel_lob'] }),
+  C({ id: 'parrot', name: 'Galeparrot', element: 'gale', body: 'parrot', role: 'TRICKSTER', moves: 'FLIES IN LOOPS', strong: 'FEATHERS THAT COME BACK, AND A MOCKING CRY', weak: 'LIGHT BONES', hp: 82, speed: 76, cry: 'wind_gust', normal: N('BEAK SNAP', 'beam', 9, 0.5, 32), specials: ['boomerang_feather', 'mock_call'] }),
+  C({ id: 'dragonfly', name: 'Skimwing', element: 'gale', body: 'dragonfly', role: 'HARASSER', moves: 'DARTS ON FOUR WINGS', strong: 'WEAVING DARTS THAT ARE HARD TO DODGE', weak: 'BRITTLE WINGS', hp: 74, speed: 84, cry: 'wind_gust', normal: N('WING DART', 'bolt', 8, 0.45, 210), specials: ['zigzag', 'hover_hop'] }),
+  C({ id: 'leech', name: 'Murkleech', element: 'murk', body: 'leech', role: 'DRAINER', moves: 'WRITHES', strong: 'EVERY BITE HEALS IT', weak: 'NO RANGE TO SPEAK OF', hp: 100, speed: 58, cry: 'poison_hiss', normal: N('SUCKER', 'beam', 10, 0.6, 32), specials: ['blood_latch', 'mire_spit'] }),
+  C({ id: 'possum', name: 'Gloompossum', element: 'murk', body: 'possum', role: 'TRICKSTER', moves: 'SCUTTLES, TAIL CURLED', strong: 'PLAYS DEAD, THEN MARKS ITS PREY', weak: 'GIVES UP GROUND EASILY', hp: 92, speed: 64, cry: 'voice_whisper', normal: N('NIGHT SWAT', 'beam', 10, 0.55, 32), specials: ['play_dead', 'shadow_mark'] }),
+  C({ id: 'worm', name: 'Glimworm', element: 'glow', body: 'worm', role: 'SNIPER', moves: 'BURROWS AND REARS UP', strong: 'A NEEDLE OF LIGHT THROUGH ANY COVER', weak: 'THIN AS A STRING', hp: 76, speed: 58, cry: 'arcane_cast', normal: N('GLIM SPIT', 'bolt', 8, 0.6, 200), specials: ['light_needle', 'glow_mine'] }),
+  C({ id: 'starfish', name: 'Dawnstar', element: 'glow', body: 'starfish', role: 'SUPPORT', moves: 'CARTWHEELS ON FIVE ARMS', strong: 'GROWS BACK, AND SPINS SHARDS', weak: 'A SOFT MIDDLE', hp: 96, speed: 60, cry: 'arcane_cast', normal: N('STAR JAB', 'beam', 9, 0.6, 34), specials: ['regrow_arm', 'shard_spin'] }),
+  C({ id: 'porcupine', name: 'Thornpine', element: 'moss', body: 'porcupine', role: 'DEFENDER', moves: 'WADDLES, QUILLS UP', strong: 'QUILLS THAT HURT ANYTHING THAT HITS IT', weak: 'SHORT REACH', hp: 118, speed: 50, cry: 'branch_creak', normal: N('QUILL JAB', 'beam', 11, 0.6, 32), specials: ['quill_coat', 'quill_burst'] }),
+  C({ id: 'zebra', name: 'Zapzebra', element: 'volt', body: 'zebra', role: 'CHARGER', moves: 'GALLOPS ON LONG LEGS', strong: 'A GALLOP THAT STUNS, STRIPES THAT JAM', weak: 'ALL GO, NO GUARD', hp: 106, speed: 70, cry: 'bin_land', normal: N('HOOF KICK', 'beam', 11, 0.6, 34), specials: ['stampede', 'stripe_zap'] }),
+  // ------------------------------------------- twenty more (28 Oct, user: "40 creatures and 80 abilities" in all)
+  C({ id: 'camel', name: 'Dunecamel', element: 'ember', body: 'camel', role: 'ENDURANCE', moves: 'PLODS ON LONG LEGS', strong: 'HARD TO HIT IN THE HEAT HAZE', weak: 'SLOW TO GET GOING', hp: 124, speed: 50, cry: 'bin_land', normal: N('SAND KICK', 'beam', 11, 0.65, 34), specials: ['heat_haze', 'sand_spit'] }),
+  C({ id: 'flamingo', name: 'Blazemingo', element: 'ember', body: 'flamingo', role: 'DUELIST', moves: 'STEPS ON ONE LEG', strong: 'KICKS THAT CRIT, FIRE THAT LINGERS', weak: 'THIN LEGS - EASY TO TOPPLE', hp: 86, speed: 70, cry: 'wings', normal: N('PINK PECK', 'bolt', 8, 0.5, 190), specials: ['flame_kick', 'pink_blaze'] }),
+  C({ id: 'shark', name: 'Tideshark', element: 'tide', body: 'shark', role: 'FINISHER', moves: 'CUTS THROUGH ON ITS FINS', strong: 'SMELLS BLOOD: FINISHES THE WOUNDED', weak: 'ALL BITE AND NO SHELL', hp: 102, speed: 70, cry: 'splash', normal: N('FIN SLASH', 'beam', 11, 0.55, 34), specials: ['fin_rush', 'blood_scent'] }),
+  C({ id: 'lobster', name: 'Clawster', element: 'tide', body: 'lobster', role: 'BRAWLER', moves: 'SCUTTLES SIDEWAYS', strong: 'A STUNNING CLAW AND A SHELL TO HIDE IN', weak: 'SHORT REACH', hp: 120, speed: 52, cry: 'splash', normal: N('FEELER WHIP', 'beam', 10, 0.6, 38), specials: ['claw_snap', 'shell_brace'] }),
+  C({ id: 'koala', name: 'Gumkoala', element: 'moss', body: 'koala', role: 'SUPPORT', moves: 'AMBLES, HALF ASLEEP', strong: 'HEALS AND SLIPS HITS, AND GUM THAT HOLDS', weak: 'SLOW TO DO ANYTHING', hp: 112, speed: 48, cry: 'branch_creak', normal: N('LEAF FLICK', 'bolt', 8, 0.65, 170), specials: ['eucalyptus', 'gum_drop'] }),
+  C({ id: 'ladybug', name: 'Spotbug', element: 'moss', body: 'ladybug', role: 'HARASSER', moves: 'FLITS ON TINY WINGS', strong: 'MARKS ITS PREY, FEEDS ON ITS HITS', weak: 'SMALL - EASY TO SWAT', hp: 78, speed: 76, cry: 'arcane_cast', normal: N('DOT SHOT', 'bolt', 8, 0.5, 190), specials: ['spot_flash', 'aphid_swarm'] }),
+  C({ id: 'beaver', name: 'Dambeaver', element: 'moss', body: 'beaver', role: 'BUILDER', moves: 'WADDLES, TAIL DRAGGING', strong: 'BUILDS A WALL AND HEALS BEHIND IT', weak: 'NOT MUCH RANGE', hp: 122, speed: 50, cry: 'branch_creak', normal: N('GNAW', 'beam', 11, 0.65, 32), specials: ['dam_wall', 'tail_slap'] }),
+  C({ id: 'moose', name: 'Frostmoose', element: 'frost', body: 'moose', role: 'JUGGERNAUT', moves: 'STRIDES ON STILTS', strong: 'CHARGES AND BELLOWS THAT SLOW', weak: 'A BIG TARGET', hp: 140, speed: 46, cry: 'bin_land', normal: N('MOOSE STOMP', 'beam', 13, 0.75, 36), specials: ['antler_charge', 'cold_bellow'] }),
+  C({ id: 'narwhal', name: 'Narhorn', element: 'frost', body: 'narwhal', role: 'LANCER', moves: 'SWIMS THROUGH THE AIR', strong: 'A HARPOON THAT HOLDS, A WALL OF ICE', weak: 'CLUMSY UP CLOSE', hp: 108, speed: 56, cry: 'splash', normal: N('ICE SPRAY', 'bolt', 9, 0.6, 190), specials: ['harpoon', 'rime_wall'] }),
+  C({ id: 'lemur', name: 'Zaplemur', element: 'volt', body: 'lemur', role: 'TRICKSTER', moves: 'LEAPS, TAIL HIGH', strong: 'A TAIL THAT STUNS, A LEAP THAT CRITS', weak: 'LIGHT AS A FEATHER', hp: 80, speed: 80, cry: 'voice_robot', normal: N('TAIL ZING', 'bolt', 8, 0.5, 200), specials: ['ring_tail', 'spark_leap'] }),
+  C({ id: 'cricket', name: 'Chirpbolt', element: 'volt', body: 'cricket', role: 'SKIRMISHER', moves: 'SPRINGS ON BIG LEGS', strong: 'STUNNING SPARKS AND FAST RECHARGES', weak: 'A THIN SHELL', hp: 82, speed: 76, cry: 'voice_robot', normal: N('LEG SPARK', 'bolt', 8, 0.5, 190), specials: ['chirp', 'volt_volley'] }),
+  C({ id: 'pangolin', name: 'Shalegolin', element: 'stone', body: 'pangolin', role: 'DEFENDER', moves: 'TRUNDLES IN ITS SCALES', strong: 'ROLLS UP, AND SHEDS SCALES THAT SHATTER', weak: 'SLOW TO CHASE', hp: 126, speed: 50, cry: 'crumble', normal: N('CLAW RAKE', 'beam', 11, 0.65, 34), specials: ['scale_roll', 'scale_shed'] }),
+  C({ id: 'goat', name: 'Craggoat', element: 'stone', body: 'goat', role: 'BRUISER', moves: 'HOPS FROM ROCK TO ROCK', strong: 'BOULDERS THAT DRAG YOU IN, HOPS THAT HIT HARD', weak: 'STUBBORN - SLOW TO TURN', hp: 116, speed: 58, cry: 'crumble', normal: N('HEADBUTT', 'beam', 12, 0.7, 34), specials: ['rock_slide', 'cliff_hop'] }),
+  C({ id: 'squirrel', name: 'Gustquirrel', element: 'gale', body: 'squirrel', role: 'SKIRMISHER', moves: 'SCURRIES AND GLIDES', strong: 'ACORNS THAT GROW, GLIDES THAT RECHARGE IT', weak: 'TINY - VERY LITTLE HEALTH', hp: 76, speed: 82, cry: 'wind_gust', normal: N('NUT TOSS', 'bolt', 8, 0.5, 190), specials: ['acorn_bomb', 'glide'] }),
+  C({ id: 'swan', name: 'Stormswan', element: 'gale', body: 'swan', role: 'CONTROLLER', moves: 'GLIDES, WINGS HALF OPEN', strong: 'PULLS YOU IN, FEATHERS THAT WEAVE', weak: 'A LONG NECK TO HIT', hp: 96, speed: 62, cry: 'wings', normal: N('NECK JAB', 'beam', 10, 0.6, 36), specials: ['wing_gust', 'down_storm'] }),
+  C({ id: 'raccoon', name: 'Murkoon', element: 'murk', body: 'raccoon', role: 'THIEF', moves: 'SNEAKS ON QUIET PAWS', strong: 'BAGS AND MARKS YOU, WEAKENS YOUR HITS', weak: 'RUNS FROM A FAIR FIGHT', hp: 92, speed: 68, cry: 'voice_whisper', normal: N('SCRATCH', 'beam', 10, 0.55, 32), specials: ['swag_sack', 'mask_dash'] }),
+  C({ id: 'vulture', name: 'Gloomvulture', element: 'murk', body: 'vulture', role: 'SCAVENGER', moves: 'HUNCHES AND HOPS', strong: 'DIVES THAT HEAL IT, SHADOWS THAT POISON', weak: 'UGLY AND SLOW ON THE GROUND', hp: 104, speed: 56, cry: 'crow_caw', normal: N('TALON TEAR', 'beam', 11, 0.6, 34), specials: ['carrion_dive', 'dead_circle'] }),
+  C({ id: 'skunk', name: 'Stinkpaw', element: 'murk', body: 'skunk', role: 'ZONER', moves: 'TROTS, TAIL UP', strong: 'STINK THAT POISONS OVER COVER', weak: 'SMALL AND SLOW TO RUN', hp: 96, speed: 58, cry: 'poison_hiss', normal: N('TAIL SWAT', 'beam', 10, 0.6, 32), specials: ['stink_bomb', 'musk_ward'] }),
+  C({ id: 'axolotl', name: 'Glowlotl', element: 'glow', body: 'axolotl', role: 'SUPPORT', moves: 'WRIGGLES, GILLS FLUTTERING', strong: 'HEALS AND RECHARGES, BUBBLES THAT WEAKEN', weak: 'SOFT AND SLOW', hp: 98, speed: 54, cry: 'water_plip', normal: N('GILL SPARK', 'bolt', 8, 0.6, 180), specials: ['gill_glow', 'bubble_beam'] }),
+  C({ id: 'peacock', name: 'Prismcock', element: 'glow', body: 'peacock', role: 'SNIPER', moves: 'STRUTS, TAIL FANNED', strong: 'A STARE THAT MARKS, A FLASH THAT CRITS', weak: 'ALL FEATHERS - LITTLE HEALTH', hp: 82, speed: 64, cry: 'wings', normal: N('PLUME DART', 'bolt', 8, 0.55, 210), specials: ['tail_fan', 'eye_stare'] }),
 ];
 
 /**
@@ -375,7 +423,7 @@ if (import.meta.env?.DEV) {
       (a.mod === 'strike' && a.kind === 'blink');
     if (!ok) throw new Error(`creatures: "${a.name}" cannot have "${a.mod}" on a ${a.kind}`);
   }
-  if (ROSTER.length !== 50) throw new Error('creatures: the roster is fifty');
+  if (ROSTER.length !== 90) throw new Error('creatures: the roster is ninety');
 }
 
 export const creatureById = (id: string): Creature | undefined => CREATURES.find((c) => c.id === id) ?? BOSSES.find((b) => b.id === id);
@@ -447,17 +495,17 @@ export interface Biome {
 }
 
 export const BIOMES: Biome[] = [
-  { id: 'caves', name: 'ECHO CAVES', pool: ['mole', 'bat', 'spider', 'roller', 'slug', 'tortoise', 'yeti', 'bear', 'hedgehog'], ground: 0x4a4440, groundDark: 0x2e2a28, prop: 'rock', cover: 'line', mood: { sky: 0x120e14, haze: 0x2a2230, fleck: 0x8a7a9a } },
-  { id: 'fields', name: 'WINDY FIELDS', pool: ['moth', 'mantis', 'hound', 'owl', 'sprout', 'hare', 'stag', 'bee', 'fox', 'falcon'], ground: 0x8ab85a, groundDark: 0x5a8a3a, prop: 'tree', cover: 'grove', mood: { sky: 0x9ad0e8, haze: 0xc8e8a0, fleck: 0xf0e880 } },
-  { id: 'forests', name: 'DEEPWOOD', pool: ['sprout', 'serpent', 'beetle', 'centipede', 'owl', 'shroom', 'stag', 'sloth', 'lynx', 'crow', 'firefly'], ground: 0x3a6a2e, groundDark: 0x24461c, prop: 'tree', cover: 'scatter', mood: { sky: 0x16220f, haze: 0x2a4a22, fleck: 0x8ad06a } },
-  { id: 'frozen', name: 'FROZEN PASS', pool: ['golem', 'ram', 'jelly', 'hound', 'moth', 'penguin', 'yeti', 'rhino'], ground: 0xd8ecf4, groundDark: 0xa0c4d4, prop: 'ice', cover: 'line', mood: { sky: 0xbfd8e8, haze: 0xeaf6ff, fleck: 0xffffff } },
-  { id: 'swamps', name: 'SOURMIRE', pool: ['serpent', 'toad', 'slug', 'bat', 'sprout', 'shroom', 'gecko', 'newt', 'wraith', 'eel'], ground: 0x4a5a3a, groundDark: 0x2e3a24, prop: 'reed', cover: 'scatter', mood: { sky: 0x202a1e, haze: 0x3a5a3a, fleck: 0x9ab06a } },
-  { id: 'ruins', name: 'SUNKEN RUINS', pool: ['centipede', 'golem', 'spider', 'owl', 'wisp', 'gecko', 'tortoise', 'obelisk', 'snail', 'crow'], ground: 0x9a9070, groundDark: 0x6a6048, prop: 'pillar', cover: 'ring', mood: { sky: 0x2a3348, haze: 0xc8c0a0, fleck: 0xfff0c0 } },
-  { id: 'shore', name: 'SALT SHORE', pool: ['crab', 'ray', 'toad', 'jelly', 'mantis', 'puffer', 'angler', 'urchin', 'seahorse', 'heron'], ground: 0xe0d090, groundDark: 0xb8a868, prop: 'shell', cover: 'scatter', mood: { sky: 0x6ab8e0, haze: 0xf0e8c0, fleck: 0xffffff } },
-  { id: 'desert', name: 'GLASS DESERT', pool: ['roller', 'beetle', 'hound', 'wisp', 'mantis', 'scorpion', 'hare', 'ferret', 'falcon', 'rhino'], ground: 0xe8c078, groundDark: 0xc09050, prop: 'cactus', cover: 'scatter', mood: { sky: 0xe8a060, haze: 0xffd8a0, fleck: 0xfff4c0 } },
+  { id: 'caves', name: 'ECHO CAVES', pool: ['mole', 'bat', 'spider', 'roller', 'slug', 'tortoise', 'yeti', 'bear', 'hedgehog', 'armadillo', 'worm', 'pangolin', 'goat', 'axolotl'], ground: 0x4a4440, groundDark: 0x2e2a28, prop: 'rock', cover: 'line', mood: { sky: 0x120e14, haze: 0x2a2230, fleck: 0x8a7a9a } },
+  { id: 'fields', name: 'WINDY FIELDS', pool: ['moth', 'mantis', 'hound', 'owl', 'sprout', 'hare', 'stag', 'bee', 'fox', 'falcon', 'parrot', 'mouse', 'zebra', 'dragonfly', 'ladybug', 'lemur', 'cricket', 'squirrel', 'swan'], ground: 0x8ab85a, groundDark: 0x5a8a3a, prop: 'tree', cover: 'grove', mood: { sky: 0x9ad0e8, haze: 0xc8e8a0, fleck: 0xf0e880 } },
+  { id: 'forests', name: 'DEEPWOOD', pool: ['sprout', 'serpent', 'beetle', 'centipede', 'owl', 'shroom', 'stag', 'sloth', 'lynx', 'crow', 'firefly', 'badger', 'caterpillar', 'porcupine', 'possum', 'koala', 'ladybug', 'beaver', 'moose', 'squirrel', 'raccoon'], ground: 0x3a6a2e, groundDark: 0x24461c, prop: 'tree', cover: 'scatter', mood: { sky: 0x16220f, haze: 0x2a4a22, fleck: 0x8ad06a } },
+  { id: 'frozen', name: 'FROZEN PASS', pool: ['golem', 'ram', 'jelly', 'hound', 'moth', 'penguin', 'yeti', 'rhino', 'walrus', 'ermine', 'moose', 'narwhal', 'goat'], ground: 0xd8ecf4, groundDark: 0xa0c4d4, prop: 'ice', cover: 'line', mood: { sky: 0xbfd8e8, haze: 0xeaf6ff, fleck: 0xffffff } },
+  { id: 'swamps', name: 'SOURMIRE', pool: ['serpent', 'toad', 'slug', 'bat', 'sprout', 'shroom', 'gecko', 'newt', 'wraith', 'eel', 'leech', 'salamander', 'dragonfly', 'beaver', 'skunk', 'axolotl'], ground: 0x4a5a3a, groundDark: 0x2e3a24, prop: 'reed', cover: 'scatter', mood: { sky: 0x202a1e, haze: 0x3a5a3a, fleck: 0x9ab06a } },
+  { id: 'ruins', name: 'SUNKEN RUINS', pool: ['centipede', 'golem', 'spider', 'owl', 'wisp', 'gecko', 'tortoise', 'obelisk', 'snail', 'crow', 'crocodile', 'shark', 'raccoon', 'peacock'], ground: 0x9a9070, groundDark: 0x6a6048, prop: 'pillar', cover: 'ring', mood: { sky: 0x2a3348, haze: 0xc8c0a0, fleck: 0xfff0c0 } },
+  { id: 'shore', name: 'SALT SHORE', pool: ['crab', 'ray', 'toad', 'jelly', 'mantis', 'puffer', 'angler', 'urchin', 'seahorse', 'heron', 'otter', 'octopus', 'starfish', 'flamingo', 'shark', 'lobster', 'narwhal', 'swan'], ground: 0xe0d090, groundDark: 0xb8a868, prop: 'shell', cover: 'scatter', mood: { sky: 0x6ab8e0, haze: 0xf0e8c0, fleck: 0xffffff } },
+  { id: 'desert', name: 'GLASS DESERT', pool: ['roller', 'beetle', 'hound', 'wisp', 'mantis', 'scorpion', 'hare', 'ferret', 'falcon', 'rhino', 'chick', 'wasp', 'camel', 'cricket', 'pangolin', 'vulture'], ground: 0xe8c078, groundDark: 0xc09050, prop: 'cactus', cover: 'scatter', mood: { sky: 0xe8a060, haze: 0xffd8a0, fleck: 0xfff4c0 } },
   // STORY MODE's last world (game/creatureStory): an arena of its own, its dwellers the murk and the glow
-  { id: 'void', name: 'VOID CITADEL', pool: ['wraith', 'crow', 'lynx', 'shroom', 'bat', 'serpent', 'firefly', 'owl', 'angler', 'snail', 'obelisk'], ground: 0x241c38, groundDark: 0x140f22, prop: 'pillar', cover: 'ring', mood: { sky: 0x07050e, haze: 0x4a2a7a, fleck: 0xb88aff } },
-  { id: 'volcano', name: 'ASHEN PEAK', pool: ['wisp', 'slug', 'mole', 'ram', 'roller', 'scorpion', 'angler', 'boar', 'heron'], ground: 0x5a3a30, groundDark: 0x3a2018, prop: 'vent', cover: 'ring', mood: { sky: 0x2a1218, haze: 0x6a2a1a, fleck: 0xff8a3a } },
+  { id: 'void', name: 'VOID CITADEL', pool: ['wraith', 'crow', 'lynx', 'shroom', 'bat', 'serpent', 'firefly', 'owl', 'angler', 'snail', 'obelisk', 'possum', 'worm', 'vulture', 'skunk', 'peacock'], ground: 0x241c38, groundDark: 0x140f22, prop: 'pillar', cover: 'ring', mood: { sky: 0x07050e, haze: 0x4a2a7a, fleck: 0xb88aff } },
+  { id: 'volcano', name: 'ASHEN PEAK', pool: ['wisp', 'slug', 'mole', 'ram', 'roller', 'scorpion', 'angler', 'boar', 'heron', 'chick', 'salamander', 'camel', 'flamingo'], ground: 0x5a3a30, groundDark: 0x3a2018, prop: 'vent', cover: 'ring', mood: { sky: 0x2a1218, haze: 0x6a2a1a, fleck: 0xff8a3a } },
 ];
 
 // (every creature lives somewhere: one with no zone could only be met on the ladder)

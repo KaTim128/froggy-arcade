@@ -55,6 +55,7 @@ import { FULL_LINE, ODDITIES, PLUSHIES, addItem, itemDef, pocketsFull } from '..
 import { isTouch } from '../core/device';
 import { touchControls } from '../ui/touchControls';
 import { showTutorial, type TutorialCard } from '../ui/tutorialCard';
+import type { TutorialStep } from '../minigames/types';
 import { deviceControls, deviceObjective, type ControlRow } from '../ui/controlsList';
 import { touchLayoutFor } from '../game/touchLayouts';
 import { store, type GameId, type SavedToy } from '../core/state';
@@ -82,11 +83,29 @@ const HOW_TO: Record<CraneKind, string[]> = {
     'WHAT IS INSIDE GOES IN YOUR POCKETS.',
   ],
 };
+/**
+ * HOW TO PLAY, a step at a time, each with its own picture (ui/tutorialDemos
+ * `crane.*` and `oddity.*`) -- not one picture under six broken lines.
+ */
+const HOW_TO_STEPS: Record<CraneKind, TutorialStep[]> = {
+  plush: [
+    { say: 'FROM THE FRONT, A / D MOVES THE CLAW. LINE IT UP OVER THE PLUSH YOU WANT.', phone: 'FROM THE FRONT, THE STICK MOVES THE CLAW. LINE IT UP OVER THE PLUSH YOU WANT.', demo: 'crane.line' },
+    { say: 'SPACE TURNS TO THE SIDE VIEW. NOW A / D SETS HOW DEEP THE CLAW GOES - LINE IT UP AGAIN.', phone: 'SIDE VIEW TURNS IT ROUND. NOW THE STICK SETS HOW DEEP THE CLAW GOES - LINE IT UP AGAIN.', demo: 'crane.depth' },
+    { say: 'SPACE DROPS THE CLAW. PRESS IT AGAIN TO GRAB - ON THE WAY DOWN, OR ONCE IT SETTLES. THE MIDDLE OF A PLUSH GRIPS BEST.', phone: 'DROP DROPS THE CLAW. GRAB SHUTS IT - ON THE WAY DOWN, OR ONCE IT SETTLES. THE MIDDLE OF A PLUSH GRIPS BEST.', demo: 'crane.drop' },
+    { say: 'THE CLAW CARRIES IT TO THE CHUTE. A TOY THAT DROPS IN IS YOURS, IN YOUR POCKETS.', demo: 'crane.win' },
+  ],
+  oddity: [
+    { say: 'FROM THE FRONT, A / D MOVES THE CLAW. LINE IT UP OVER A CAPSULE.', phone: 'FROM THE FRONT, THE STICK MOVES THE CLAW. LINE IT UP OVER A CAPSULE.', demo: 'oddity.line' },
+    { say: 'SPACE TURNS TO THE SIDE VIEW. NOW A / D SETS HOW DEEP THE CLAW GOES - LINE IT UP AGAIN.', phone: 'SIDE VIEW TURNS IT ROUND. NOW THE STICK SETS HOW DEEP THE CLAW GOES - LINE IT UP AGAIN.', demo: 'oddity.depth' },
+    { say: 'SPACE DROPS THE CLAW. PRESS IT AGAIN TO GRAB, ON THE WAY DOWN OR ONCE IT SETTLES. ON A CAPSULE IT HOLDS 4 TIMES IN 5.', phone: 'DROP DROPS THE CLAW. GRAB SHUTS IT, ON THE WAY DOWN OR ONCE IT SETTLES. ON A CAPSULE IT HOLDS 4 TIMES IN 5.', demo: 'oddity.drop' },
+    { say: 'THE CLAW CARRIES IT TO THE CHUTE. WHAT IS INSIDE A CAPSULE THAT DROPS IN GOES IN YOUR POCKETS.', demo: 'oddity.win' },
+  ],
+};
 const HOW_TO_KEYS: ControlRow[] = [
   ['A / D OR ← →', 'MOVE THE CLAW'],
   ['SPACE / E', 'SIDE VIEW, DROP, THEN GRAB'],
   ['V', 'FRONT / SIDE VIEW'],
-  ['ESC', 'PAUSE - QUIT IS IN THERE'],
+  ['ESC', 'PAUSE - LEAVE IS IN THERE'],
 ];
 
 export type CraneKind = 'plush' | 'oddity';
@@ -916,7 +935,12 @@ export class CraneGame extends Phaser.Scene {
     const layout = touchLayoutFor('CraneGame');
     this.howTo = showTutorial(this, {
       title: this.kind === 'oddity' ? 'ODDITY CRANE' : 'PLUSH CRANE',
-      tutorial: { objective: deviceObjective(HOW_TO[this.kind], layout), controls: deviceControls(HOW_TO_KEYS, layout) },
+      tutorial: {
+        pitch: this.kind === 'oddity' ? 'A DARK MACHINE FULL OF CAPSULES. GRAB ONE, DROP IT DOWN THE CHUTE.' : 'GRAB A PLUSH AND DROP IT DOWN THE CHUTE.',
+        steps: HOW_TO_STEPS[this.kind],
+        objective: deviceObjective(HOW_TO[this.kind], layout),
+        controls: deviceControls(HOW_TO_KEYS, layout),
+      },
       cost,
       balance: ledger.balance(),
       payNote: 'WIN: THE PRIZE YOU DROP IN THE CHUTE',
@@ -1770,7 +1794,7 @@ export class CraneGame extends Phaser.Scene {
   /** QUIT, LEAVE or Esc: back to the room.  A go already paid for is spent. */
   /** QUIT, in the pause menu between RESUME and EXIT TO START MENU. */
   pauseExit(): { label: string; run: () => void } {
-    return { label: 'QUIT', run: () => this.leave(true) };
+    return { label: 'LEAVE', run: () => this.leave(true) };
   }
 
   private leave(force = false): void {

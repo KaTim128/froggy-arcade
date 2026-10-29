@@ -25,7 +25,7 @@ export function makeStub(id: GameId): MinigameModule {
       controls: [
         ['SPACE', 'WIN'],
         ['X', 'LOSE'],
-        ['ESC', 'QUIT - FORFEITS THE COST'],
+        ['ESC', 'LEAVE - FORFEITS THE COST'],
       ],
     },
     touch: { buttons: [{ label: 'WIN', key: 'SPACE', primary: true }, { label: 'LOSE', key: 'X' }] },

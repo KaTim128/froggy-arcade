@@ -356,6 +356,18 @@ const LOOPS: Record<string, (px: Px, t: number) => void> = {
     if (cyc === 6) px(6, 4, 2, 1, C), px(7, 3, 1, 3, C);
     if (t % 8 === 0) px(5, 1, 1, 1, K);
   },
+  // PAD BATTLES: a grid of pads, one flashing and gone, frogs hopping between
+  pads: (px, t) => {
+    const gone = Math.floor(t / 6) % 12;
+    for (let r = 0; r < 3; r++)
+      for (let c = 0; c < 4; c++) {
+        const i = r * 4 + c;
+        if (i === gone && t % 6 > 3) continue;
+        px(1 + c * 3.2, 1 + r * 3, 2, 2, i === gone && t % 2 ? K : C);
+      }
+    px(1 + ((t / 2) % 4) * 3.2, 0.5, 1, 1, B);
+    px(10 - ((t / 3) % 4) * 3.2, 6.5, 1, 1, K);
+  },
   // CROAKED: the frog gulps its way round a little maze after the tadpole
   maze: (px, t) => {
     px(0, 0, 14, 1, B);

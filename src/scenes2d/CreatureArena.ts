@@ -18,23 +18,23 @@
  * order the timers, taps and tab switches arrive in.
  */
 
-import { STAGES, WORLDS, drawStoryFoe, storyFoe } from '../game/creatureStory';
+import { STAGES, WORLDS, lineupFoe, storyFoe, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, text } from '../core/ui';
+import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { plainWords } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
-import { BIOMES, ELEMENTS, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
+import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
 import {
-  AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
+  AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, EVADE_CHANCE, EVADE_S, FOCUS_CRIT, FOCUS_S, FURY_MUL, FURY_S, QUICK_RATE, QUICK_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, WALL_DEFAULT, WALL_SPECS, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
 } from '../game/attackInfo';
 import { abilityIconURL, drawAbilityIcon } from '../art/abilityIcons';
@@ -564,7 +564,7 @@ export class CreatureArena extends Phaser.Scene {
       const open = this.resumed && ob?.mode === 'story';
       const w = open ? ob!.world ?? 0 : this.storyWorld;
       const stage = open ? ob!.stage ?? 0 : cs.story.stage[w] ?? 0;
-      const foeId = open ? ob!.foe ?? '' : stage >= STAGES ? WORLDS[w].boss : drawStoryFoe(w, cs.lastFoe[WORLDS[w].id] ?? null);
+      const foeId = open ? ob!.foe ?? '' : stage >= STAGES ? WORLDS[w].boss : lineupFoe(w, stage);
       const sf = storyFoe(w, stage, foeId);
       if (!sf) {
         this.scene.start('CreatureHub', { from: this.from, screen: 'story', msg: 'NO SUCH FIGHT.' });
@@ -614,8 +614,11 @@ export class CreatureArena extends Phaser.Scene {
     // Phaser's "has a touch screen", which a touchscreen laptop also has:
     // on a desktop the sticks never appear)
     const touchDevice = isTouch();
-    this.band = touchDevice && window.innerHeight >= window.innerWidth;
-    this.touch = touchDevice && !this.band;
+    // ON A PHONE, ALWAYS THE SHARED CONTROLS, NEVER STICKS DRAWN ON THE
+    // ARENA (user, 28 Oct: "buttons not in the arena view"): under the
+    // picture upright, in the black columns either side of it sideways
+    this.band = touchDevice;
+    this.touch = false;
     this.paintHud();
     this.applyBand();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
@@ -626,7 +629,7 @@ export class CreatureArena extends Phaser.Scene {
     // of empty black underneath.
     if (touchDevice) {
       const onResize = (): void => {
-        const band = window.innerHeight >= window.innerWidth;
+        const band = true;
         if (band === this.band) return;
         this.band = band;
         this.touch = !band;
@@ -1202,10 +1205,9 @@ export class CreatureArena extends Phaser.Scene {
       this.labels.push(this.stepLabel);
     }
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
-    // ---- THERE IS NO LEAVING A BATTLE.  Not during the count either: a
-    // real fight ends by winning it, losing it or running the clock out, and
-    // no button says otherwise.  (Nobody is ever stuck: TIME_LIMIT settles
-    // every battle on its own.)
+    // ---- LEAVING A BATTLE is LEAVE in the pause menu (pauseExit), asked
+    // first with what it forfeits (user, 28 Oct) -- never a button over the
+    // fight.  (And nobody is ever stuck: TIME_LIMIT settles every battle.)
     //
     // TRAINING is not a battle, so it has a way out -- and it goes in the
     // HUD, not over the arena: the middle of the top bar, in the slot the
@@ -1354,9 +1356,55 @@ export class CreatureArena extends Phaser.Scene {
     );
   }
 
-  /** Training's LEAVE, in the pause menu between RESUME and EXIT TO START MENU. */
+  /**
+   * LEAVE, in the pause menu between RESUME and EXIT TO START MENU, like
+   * every cabinet's (user, 28 Oct).  Training goes straight out; a real
+   * battle asks first and says what walking out costs.
+   */
   pauseExit(): { label: string; run: () => void } | null {
-    return this.training ? { label: 'LEAVE', run: () => this.askQuit() } : null;
+    if (this.over || this.sim) return null;
+    return { label: 'LEAVE', run: () => (this.training ? this.askQuit() : this.confirmLeave()) };
+  }
+
+  /**
+   * WALKING OUT OF A BATTLE, asked first.  Before the bell nothing has been
+   * paid, so nothing is lost.  After it, leaving is a loss: the fight's price
+   * stays spent and the fighter faints -- or, on the ladder, the run ends and
+   * its entry and its prize go with it.
+   */
+  private confirmLeave(): void {
+    if (this.dialog || this.over) return;
+    const paid = this.started;
+    const c = store.get().creatures;
+    const risk = !paid ? 0 : this.mode === 'ladder' ? LADDER_COST : this.mode === 'story' ? storyPrice(this.storyWorld, this.storyWorld < c.story.cleared).cost : BATTLE_COST;
+    const name = this.me.c.name.toUpperCase();
+    const lines = !paid
+      ? ['LEAVE BEFORE THE BELL?', 'NOTHING HAS BEEN PAID YET.']
+      : this.mode === 'ladder'
+        ? ['LEAVE THIS BATTLE?', ...forfeitLines(risk), `THE LADDER RUN ENDS, AND ITS ${LADDER_BOSS_WIN} PRIZE.`]
+        : ['LEAVE THIS BATTLE?', ...forfeitLines(risk), `IT COUNTS AS A LOSS: ${name} FAINTS.`];
+    const was = this.paused;
+    this.paused = true;
+    this.dialog = confirmDialog(this, {
+      lines,
+      confirm: paid ? 'CONFIRM LEAVE' : 'LEAVE',
+      edge: paid ? 0xc31f2e : PALETTE.neon,
+      onConfirm: () => {
+        this.dialog = null;
+        this.over = true;
+        this.settled = true;
+        const screen = this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'story' : 'map';
+        const r = paid ? finishBattle(false) : null;
+        const fainted = r && !r.runOver ? `YOU LEFT. ${name} FAINTED.` : 'YOU LEFT. THE RUN IS OVER.';
+        this.scene.start('CreatureHub', { from: this.from, screen, world: this.storyWorld, msg: r ? fainted : 'YOU LEFT BEFORE THE BELL.' });
+      },
+      onCancel: () => {
+        this.dialog?.destroy();
+        this.dialog = null;
+        this.paused = was;
+      },
+    });
+    this.dialog.setDepth(3000);
   }
 
   private askQuit(): void {
@@ -1590,6 +1638,18 @@ export class CreatureArena extends Phaser.Scene {
       case 'regen':
         f.regen = a.kind === 'shield' ? a.reach : REGEN_S;
         break;
+      // ---- THE BUFFS: seconds of an edge, said over its head as it starts
+      case 'evade':
+      case 'focus':
+      case 'fury':
+      case 'quicken': {
+        const BUFF = { evade: [EVADE_S, 'EVASION', 0xb8e8ff], focus: [FOCUS_S, 'FOCUS', 0xffe060], fury: [FURY_S, 'FURY', 0xff7a4a], quicken: [QUICK_S, 'QUICKEN', 0x9aff9a] } as const;
+        const [secs, word, col] = BUFF[a.mod];
+        f.st[`b_${a.mod}`] = secs;
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 16 * f.scale, t: 0, life: 0.45, col });
+        this.floatNum(f, 0, col, `${word} `);
+        break;
+      }
       case 'cleanse':
         f.burn = f.slow = f.chill = f.root = f.blind = f.poison = f.weak = f.shred = f.stun = 0;
         for (const k of ['sleep', 'cage', 'knock', 'stone', 'slick', 'mired', 'confused', 'omen', 'pollen', 'leash', 'rain', 'n_stacks', 'n_quills']) delete f.st[k];
@@ -2540,6 +2600,11 @@ export class CreatureArena extends Phaser.Scene {
       this.fx.push({ kind: 'spark', x: to.x, y: to.y, r: 9, t: 0, life: 0.2, col: 0xfff0c0 });
       return;
     }
+    // EVASION: some of what comes at it simply misses
+    if ((to.st.b_evade ?? 0) > 0 && dmg > 0 && Math.random() < EVADE_CHANCE) {
+      this.floatNum(to, 0, 0xb8e8ff, 'MISS ');
+      return;
+    }
     if (to.shield > 0 || to.guard > 0) {
       this.fx.push({ kind: 'spark', x: to.x, y: to.y, r: 10, t: 0, life: 0.2, col: 0xffffff });
       to.guard = 0;
@@ -2577,8 +2642,12 @@ export class CreatureArena extends Phaser.Scene {
       d -= 10;
       to.st.n_bark -= 1;
     }
+    // FURY: its hits land harder while it lasts
+    if ((from.st.b_fury ?? 0) > 0 && a) d *= FURY_MUL;
     let crit = false;
-    if (m === 'crit' && Math.random() < 0.25) {
+    // (FOCUS adds its chance to a move's own, or gives a plain one a chance)
+    const critChance = (m === 'crit' ? 0.25 : 0) + ((from.st.b_focus ?? 0) > 0 && a ? FOCUS_CRIT : 0);
+    if (critChance > 0 && Math.random() < critChance) {
       d *= 2;
       crit = true;
     }
@@ -2684,7 +2753,8 @@ export class CreatureArena extends Phaser.Scene {
 
   /** A number rising off whoever took it. */
   private floatNum(to: Fighter, d: number, col: number, pre = ''): void {
-    const n = text(this, to.x, to.y - 14 * to.scale, `${pre}${d}`, col).setOrigin(0.5, 1).setDepth(58);
+    // (a word with nothing to count -- MISS, GULP, EVASION -- is the word alone)
+    const n = text(this, to.x, to.y - 14 * to.scale, d === 0 && pre ? pre.trim() : `${pre}${d}`, col).setOrigin(0.5, 1).setDepth(58);
     this.tweens.add({ targets: n, y: n.y - 10, alpha: 0, duration: 650, ease: 'Quad.easeOut', onComplete: () => n.destroy() });
   }
 
@@ -2780,7 +2850,9 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   private tickFighter(f: Fighter, dt: number): void {
-    for (let i = 0; i < 3; i++) f.cds[i] = Math.max(0, f.cds[i] - dt);
+    // (QUICKEN: the cooldowns run faster while it lasts)
+    const cdRate = (f.st.b_quicken ?? 0) > 0 ? QUICK_RATE : 1;
+    for (let i = 0; i < 3; i++) f.cds[i] = Math.max(0, f.cds[i] - dt * cdRate);
     for (const k of ['slow', 'stun', 'stunImmune', 'blind', 'shield', 'invuln', 'aura', 'root', 'flash'] as const) f[k] = Math.max(0, f[k] - dt);
     if (f.burn > 0) {
       const before = Math.floor(f.burn);
@@ -3613,7 +3685,7 @@ export class CreatureArena extends Phaser.Scene {
       }
       // back to where the fight came from: the run's ladder, or the map
       const screen = ladder ? 'ladder' : story ? 'story' : 'map';
-      box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen }), { width: 80, height: 13 }));
+      box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen, world: this.storyWorld }), { width: 80, height: 13 }));
     });
   }
 

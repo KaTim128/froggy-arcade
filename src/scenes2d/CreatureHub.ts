@@ -16,7 +16,7 @@
  * what is true.
  */
 
-import { STAGES, WORLDS, stageLevel, storyPrice } from '../game/creatureStory';
+import { STAGES, WORLDS, lineupFoe, stageLevel, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import { isTouch } from '../core/device';
 import { capLabel, codeFor } from '../core/keymap';
@@ -33,8 +33,8 @@ import { drawAbilityIcon } from '../art/abilityIcons';
 import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
 import { drawFrogToken, floatDeduct } from '../ui/hud';
-import { tinyText, tinyWrap } from '../ui/tinyText';
-import { xpProgress } from '../game/creatureLevel';
+import { levelOf, xpProgress } from '../game/creatureLevel';
+import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
@@ -83,6 +83,9 @@ export class CreatureHub extends Phaser.Scene {
   private layer!: Phaser.GameObjects.Container;
   private art!: Phaser.GameObjects.Graphics;
   private shown: Shown[] = [];
+  /** HOW TO PLAY: the step it is on, and its moving picture (redrawn in update). */
+  private howStep = 0;
+  private demo: { g: Phaser.GameObjects.Graphics; id: string; pool: Phaser.GameObjects.BitmapText[]; t0: number; clip: Phaser.GameObjects.Graphics; mask: Phaser.Display.Masks.GeometryMask } | null = null;
   /** The story map: the world picked, and where the marker is now. */
   private storyW = 0;
   private mark = { x: WORLD_AT[0][0], y: WORLD_AT[0][1] - 20 };
@@ -100,8 +103,13 @@ export class CreatureHub extends Phaser.Scene {
   /** The screen asked for (back from a fight: the ladder, or the map). */
   private want: Screen | null = null;
 
-  init(data: { from?: string; msg?: string; screen?: string }): void {
+  init(data: { from?: string; msg?: string; screen?: string; world?: number }): void {
     this.from = data.from ?? 'ArcadeLounge';
+    // (back from a story fight: on the world it was in)
+    if (typeof data.world === 'number' && WORLD_AT[data.world]) {
+      this.storyW = data.world;
+      this.mark = { x: WORLD_AT[data.world][0], y: WORLD_AT[data.world][1] - 20 };
+    }
     this.msg = data.msg ?? '';
     this.want = SCREENS.includes(data.screen as Screen) ? (data.screen as Screen) : null;
     this.picked = null;
@@ -145,6 +153,7 @@ export class CreatureHub extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     this.art.clear();
+    this.drawDemo(time);
     for (const s of this.shown) {
       if (s.hop) {
         // the marker: glides along to the world picked, hopping as it goes
@@ -186,6 +195,10 @@ export class CreatureHub extends Phaser.Scene {
   private draw(): void {
     this.modal?.destroy(true);
     this.modal = null;
+    if (this.demo) {
+      this.demo.clip.destroy();
+      this.demo = null;
+    }
     this.layer.removeAll(true);
     this.shown = [];
     const L = this.layer;
@@ -209,8 +222,11 @@ export class CreatureHub extends Phaser.Scene {
     // (on the pack screen the line keeps to the right-hand column, clear of
     // the cards; once one is picked its own panel says who joined)
     const packMsg = this.screen === 'pack';
+    // (on the story map the line keeps under the map, clear of the panel)
+    const storyMsg = this.screen === 'story';
     if (this.msg && !(packMsg && this.picked)) {
-      const m = centerText(this, packMsg ? 239 : GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
+      const m = centerText(this, packMsg ? 239 : storyMsg ? 98 : GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
+      if (storyMsg) m.setMaxWidth(186);
       L.add(m);
       backPlate(this, m, PALETTE.gold);
     } else if (this.screen === 'home') {
@@ -316,14 +332,32 @@ export class CreatureHub extends Phaser.Scene {
       this.bar(bx, ty + 2, bwid, frac, col);
       ty += 8;
     };
+    // (user, 28 Oct: on the card only the XP bar; the stats are one tap away)
     if (xp !== undefined) {
-      // experience: how far into this level, or MAX
       row('XP', lv.max ? 'MAX' : `${lv.into}/${lv.need}`, lv.max ? 1 : lv.into / lv.need, lv.max ? PALETTE.gold : 0xc08aff, lv.max ? PALETTE.gold : PALETTE.fog);
+      ty -= 8;
     }
-    row('HP', String(c.hp), c.hp / 160, 0x6ad86a, PALETTE.fog);
-    row('SPD', String(c.speed), c.speed / 100, 0x6ac8e8, PALETTE.fog);
-    ty -= 8;
     ty += 10;
+    // ---- TAP THE CREATURE FOR ITS STATS.  The picture, its name and its
+    // role are one button: it lights up under the pointer, and a magnifier
+    // badge with STATS on it says there is more inside.
+    const hit = this.add.rectangle(x + 2, y + 2, w - 4, artH + 21, 0xffffff, 0.001).setOrigin(0, 0);
+    hit.setInteractive({ useHandCursor: true });
+    const glow = this.add.rectangle(x + 2, y + 2, w - 4, artH + 21, 0xffffff, 0).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold, 0);
+    hit.on('pointerover', () => (glow.setFillStyle(0xffffff, 0.06), glow.setStrokeStyle(1, PALETTE.gold, 1), audio.sfx('ui_hover')));
+    hit.on('pointerout', () => (glow.setFillStyle(0xffffff, 0), glow.setStrokeStyle(1, PALETTE.gold, 0)));
+    hit.on('pointerdown', () => (audio.sfx('ui_blip'), this.showStats(c, xp)));
+    L.add(glow);
+    L.add(hit);
+    const tagX = x + w - 4;
+    const tagY = y + artH - 9;
+    const statsTag = smallText(this, tagX - 3, tagY + 2, 'STATS', PALETTE.gold).setOrigin(1, 0);
+    L.add(this.add.rectangle(tagX, tagY, Math.ceil(statsTag.width) + 13, 9, 0x0a0d1e, 0.9).setOrigin(1, 0).setStrokeStyle(1, PALETTE.gold));
+    const mag = this.add.graphics();
+    mag.lineStyle(1, PALETTE.gold, 1).strokeCircle(tagX - Math.ceil(statsTag.width) - 8, tagY + 4, 2);
+    mag.lineBetween(tagX - Math.ceil(statsTag.width) - 6.5, tagY + 5.5, tagX - Math.ceil(statsTag.width) - 5, tagY + 7);
+    L.add(mag);
+    L.add(statsTag);
     L.add(this.add.rectangle(x + 4, ty - 2, w - 8, 1, 0x2a3050).setOrigin(0, 0));
     const g = this.add.graphics();
     L.add(g);
@@ -335,19 +369,20 @@ export class CreatureHub extends Phaser.Scene {
       // Nobody should have to buy a battle to find out.
       // (laid out so the longest name there is -- eleven letters, 66px, see
       // creatures MOVE_NAME_MAX -- sits clear of the icon and the "?")
-      const chip = this.add.rectangle(x + 2, ty - 1, w - 4, 9, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
+      // (taller rows now the stat bars are off the card: easier to hit)
+      const chip = this.add.rectangle(x + 2, ty - 2, w - 4, 12, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
       L.addAt(chip, L.getIndex(g));
       // (an icon is 11px wide, centred: x+3..x+13; the name starts after it)
-      drawAbilityIcon(g, a, x + 8, ty + 3, el.light);
-      const name = text(this, x + 15, ty, a.name, PALETTE.cream);
+      drawAbilityIcon(g, a, x + 8, ty + 4, el.light);
+      const name = text(this, x + 15, ty + 1, a.name, PALETTE.cream);
       L.add(name);
       // the "?" that says there is more to read
       const qx = x + w - 9;
-      L.add(this.add.rectangle(qx - 1, ty - 1, 7, 9, 0x3a4470).setOrigin(0, 0));
-      L.add(text(this, qx, ty, '?', PALETTE.gold));
+      L.add(this.add.rectangle(qx - 1, ty - 1, 7, 10, 0x3a4470).setOrigin(0, 0));
+      L.add(text(this, qx, ty + 1, '?', PALETTE.gold));
       // the damage, left of the "?" -- where the name leaves room for it
       if (a.dmg) {
-        const d = text(this, qx - 4, ty, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
+        const d = text(this, qx - 4, ty + 1, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
         if (name.x + name.width + 2 <= d.x - d.width) L.add(d);
         else d.destroy();
       }
@@ -355,7 +390,7 @@ export class CreatureHub extends Phaser.Scene {
       chip.on('pointerover', () => (chip.setFillStyle(0x34407a).setStrokeStyle(1, PALETTE.gold), name.setTint(PALETTE.gold), audio.sfx('ui_hover')));
       chip.on('pointerout', () => (chip.setFillStyle(0x232a4a).setStrokeStyle(1, 0x3a4470), name.setTint(PALETTE.cream)));
       chip.on('pointerdown', () => (audio.sfx('ui_blip'), this.showMove(c, a)));
-      ty += 10;
+      ty += 13;
     }
   }
 
@@ -372,7 +407,9 @@ export class CreatureHub extends Phaser.Scene {
     this.modal = M;
     const el = ELEMENTS[c.element];
     const lines = attackCard(a, c.element);
-    const w = 200;
+    // (user, 28 Oct: the move only -- the creature's strengths are on its
+    // STATS page -- in the bigger house font, wrapped inside the box)
+    const w = 280;
     const close = (): void => this.draw();
     const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
@@ -382,13 +419,12 @@ export class CreatureHub extends Phaser.Scene {
     // and took the CLOSE button with it; in the 3x5 face, wrapped, every
     // move fits with room to spare.
     const rows: Array<{ s: string; col: number; gap: boolean }> = [];
+    const per = Math.floor((w - 16) / 6);
     const lineOf = (ln: string, col: number): void => {
-      tinyWrap(ln, w - 16).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
+      wrapWords(ln, per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
     };
-    lines.forEach((ln, i) => lineOf(ln, i === 0 ? PALETTE.cream : PALETTE.fog));
-    lineOf(`GOOD AT: ${c.strong}`, PALETTE.mossLight);
-    lineOf(`WEAK: ${c.weak}`, 0xff9a9a);
-    const LH = 7;
+    lines.forEach((ln, i) => lineOf(ln, i === 0 ? PALETTE.cream : ln.startsWith('SPECIAL') ? PALETTE.gold : PALETTE.fog));
+    const LH = 9;
     const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
     // (and never taller than the screen: the button always shows)
     const h = Math.min(GAME_H - 4, 27 + textH + 22);
@@ -401,15 +437,84 @@ export class CreatureHub extends Phaser.Scene {
     M.add(text(this, x + 24, y + 8, a.name, PALETTE.gold));
     M.add(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));
     M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
-    const body = this.add.graphics();
-    M.add(body);
     let ly = y + 28;
     for (const r of rows) {
-      if (r.gap) ly += 3;
-      if (ly + 5 > y + h - 20) break;
-      tinyText(body, r.s, x + 8, ly, r.col);
+      if (r.gap) ly += 2;
+      if (ly + 8 > y + h - 20) break;
+      M.add(text(this, x + 8, ly, r.s, r.col));
       ly += LH;
     }
+    M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
+  }
+
+  /**
+   * ---- A CREATURE'S STATS (user, 28 Oct): opened by tapping it.  Attack,
+   * defence, speed and health as bars with their numbers, whether it fights
+   * up close or from range, what its element does, and what it is good and
+   * bad at -- the things the card has no room for.
+   *
+   *   ATTACK   its plain attack's damage a second (what it does all fight)
+   *   DEFENCE  how hard it is to wear down, out of 10: its health, plus a
+   *            point for a guard / reflect / thorns move, one for a heal,
+   *            and one for STONE, which shrugs damage off
+   */
+  private showStats(c: Creature, xp?: number): void {
+    this.modal?.destroy(true);
+    const M = this.add.container(0, 0).setDepth(600);
+    this.modal = M;
+    const el = ELEMENTS[c.element];
+    const close = (): void => this.draw();
+    const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
+    veil.setInteractive().on('pointerdown', close);
+    M.add(veil);
+    const w = 284;
+    const h = 146;
+    const x = (GAME_W - w) / 2;
+    const y = (GAME_H - h) / 2;
+    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
+    // the creature, big, on its element's ground
+    M.add(this.add.rectangle(x + 4, y + 4, 70, 56, el.dark, 0.6).setOrigin(0, 0));
+    const pic = this.add.graphics();
+    M.add(pic);
+    drawCreature(pic, c, x + 39, y + 34, 2, 1, 0);
+    const lvl = xp !== undefined ? `LV ${levelOf(xp)}` : 'LV 1';
+    M.add(text(this, x + 80, y + 6, c.name.toUpperCase(), PALETTE.gold));
+    M.add(text(this, x + w - 6, y + 6, lvl, PALETTE.cream).setOrigin(1, 0));
+    M.add(text(this, x + 80, y + 16, `${c.role} - ${el.name}`, el.light));
+    // ---- the four stats
+    const n = c.attacks[0];
+    const atk = Math.round(n.dmg / Math.max(0.1, n.cd));
+    const guards = c.attacks.some((a) => a.kind === 'shield' || ['guard', 'reflect', 'thorns'].includes(a.mod));
+    const heals = c.attacks.some((a) => a.kind === 'mend' || ['regen', 'drain'].includes(a.mod));
+    const def = Phaser.Math.Clamp(Math.round(c.hp / 17) + (guards ? 1 : 0) + (heals ? 1 : 0) + (c.element === 'stone' ? 1 : 0), 1, 10);
+    const melee = (n.kind === 'beam' && n.reach < 50) || n.kind === 'dash';
+    let sy = y + 28;
+    const stat = (label: string, value: string, frac: number, col: number): void => {
+      M.add(text(this, x + 80, sy, label, PALETTE.ash));
+      const v = text(this, x + w - 6, sy, value, PALETTE.cream).setOrigin(1, 0);
+      M.add(v);
+      const bx = x + 80 + 8 * 6;
+      const bw = x + w - 6 - Math.ceil(v.width) - 4 - bx;
+      M.add(this.add.rectangle(bx, sy + 2, bw, 4, 0x0a0d1e).setOrigin(0, 0));
+      M.add(this.add.rectangle(bx, sy + 2, Math.max(1, bw * Phaser.Math.Clamp(frac, 0, 1)), 4, col).setOrigin(0, 0));
+      sy += 9;
+    };
+    stat('ATTACK', `${atk}/SEC`, atk / 24, 0xff8a6a);
+    stat('DEFENCE', `${def}/10`, def / 10, 0xc8b890);
+    stat('SPEED', String(c.speed), c.speed / 90, 0x6ac8e8);
+    stat('HP', String(c.hp), c.hp / 160, 0x6ad86a);
+    let ly = y + 66;
+    const line = (s: string, col: number): void => {
+      for (const ln of wrapWords(s, Math.floor((w - 16) / 6))) {
+        M.add(text(this, x + 8, ly, ln, col));
+        ly += 9;
+      }
+    };
+    line(melee ? 'FIGHTS UP CLOSE: A MELEE FIGHTER' : `FIGHTS FROM RANGE: SHOTS UP TO ${Math.max(1, Math.round(n.reach / 16))} TILES`, melee ? 0xffb08a : 0x9ad0ff);
+    line(`${el.name}: ${el.effect}`, el.light);
+    ly += 2;
+    line(`GOOD AT: ${c.strong}`, PALETTE.mossLight);
+    line(`WEAK: ${c.weak}`, 0xff9a9a);
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
   }
 
@@ -478,7 +583,7 @@ export class CreatureHub extends Phaser.Scene {
     const storySub = c.story.cleared >= WORLDS.length ? 'ALL WORLDS DONE' : `WORLD ${sw + 1} OF ${WORLDS.length}`;
     this.tile(mx, 34, mw, 24, 'STORY MODE', resting ? 'RESTING' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
     const ladderOpen = c.story.cleared >= WORLDS.length || !!run;
-    this.tile(mx, 61, mw, 24, 'LADDER', !ladderOpen ? 'AFTER THE STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
+    this.tile(mx, 61, mw, 24, 'LADDER', !ladderOpen ? 'AFTER STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
       for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
@@ -498,7 +603,7 @@ export class CreatureHub extends Phaser.Scene {
     }, () => this.go(busy ? 'pack' : 'recruit'));
     // (the keys, on a keyboard only: a phone's controls are on the screen -- C7)
     if (!isTouch())
-      this.tile(mx, 142, mw, 24, 'CONTROLS', `KEYS ${capLabel(codeFor('creatureclash:KeyJ'))} ${capLabel(codeFor('creatureclash:KeyK'))} ${capLabel(codeFor('creatureclash:KeyL'))}`, 0x4ad0c0, (g, x, y, col) => {
+      this.tile(mx, 142, mw, 24, 'HOW TO PLAY', 'MOVES, STATS, EFFECTS', 0x4ad0c0, (g, x, y, col) => {
         g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
         g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
       }, () => this.go('controls'));
@@ -799,7 +904,7 @@ export class CreatureHub extends Phaser.Scene {
       wrapWords(`BEAT ${WORLDS[i - 1].bossName} TO OPEN IT.`, 18).forEach((ln, k) => L.add(text(this, px + 4, 108 + k * 9, ln, PALETTE.ash)));
       return;
     }
-    const nextLine = stage >= STAGES ? `BOSS: ${w.bossName}` : `BATTLE ${stage + 1}/${STAGES} - LV ${stageLevel(i, stage)}`;
+    const nextLine = stage >= STAGES ? `BOSS: ${w.bossName}` : `BATTLE ${stage + 1}/${STAGES}: ${creatureById(lineupFoe(i, stage))!.name.toUpperCase()} LV ${stageLevel(i, stage)}`;
     wrapWords(nextLine, 18).slice(0, 2).forEach((ln, k) => L.add(text(this, px + 4, 96 + k * 9, ln, stage >= STAGES ? 0xff9a9a : PALETTE.cream)));
     const price = storyPrice(i, replay);
     L.add(text(this, px + 4, 113, `WIN: +${price.win} TOKENS`, PALETTE.mossLight));
@@ -917,21 +1022,87 @@ export class CreatureHub extends Phaser.Scene {
     this.scene.start('CreatureArena', { mode: 'ladder', from: this.from });
   }
 
+  /**
+   * ---- HOW TO PLAY (user, 28 Oct: "a better tutorial for beginners --
+   * stats, effects, buffs, debuffs, cooldowns").  A step at a time: a moving
+   * picture on the left (ui/tutorialDemos `clash.*`), what it means on the
+   * right in plain words, < and > to go through them.  The last step is the
+   * controls, as this device works them.
+   */
   private controls(): void {
     const L = this.layer;
     const key = (k: string): string => capLabel(codeFor(`creatureclash:${k}`));
-    L.add(centerText(this, GAME_W / 2, 24, 'BATTLE CONTROLS', PALETTE.cream));
-    L.add(text(this, 40, 42, 'WASD / ARROWS', PALETTE.gold));
-    L.add(text(this, 140, 42, 'MOVE', PALETTE.fog));
-    L.add(text(this, 40, 56, `${key('KeyJ')}  ${key('KeyK')}  ${key('KeyL')}`, PALETTE.gold));
-    L.add(text(this, 140, 56, 'ATTACKS 1, 2, 3 - AT ONCE,', PALETTE.fog));
-    L.add(text(this, 140, 65, 'AT THE OTHER ONE', PALETTE.fog));
-    L.add(text(this, 40, 79, '1  2  3', PALETTE.gold));
-    L.add(text(this, 140, 79, 'THE SAME, AT THE MOUSE', PALETTE.fog));
-    L.add(text(this, 40, 93, 'MOUSE', PALETTE.gold));
-    L.add(text(this, 140, 93, 'AIM.  CLICK TO FIRE THE', PALETTE.fog));
-    L.add(text(this, 140, 102, 'CHOSEN ATTACK', PALETTE.fog));
-    L.add(centerText(this, GAME_W / 2, 124, 'J, K AND L CAN BE MOVED IN THE SETTINGS, UNDER', PALETTE.ash));
-    L.add(centerText(this, GAME_W / 2, 133, 'CHANGE KEYS, WHILE A BATTLE IS ON.', PALETTE.ash));
+    const touch = isTouch();
+    const steps: Array<{ demo: string; say: string }> = [
+      { demo: 'clash.move', say: touch ? 'THE STICK MOVES YOUR CREATURE. EACH MOVE BUTTON FIRES THAT MOVE STRAIGHT AT THE FOE.' : 'W A S D MOVES YOUR CREATURE. AIM WITH THE MOUSE AND CLICK TO FIRE THE MOVE YOU HAVE PICKED.' },
+      { demo: 'clash.moves', say: 'EVERY CREATURE HAS THREE MOVES: A PLAIN ATTACK AND TWO SPECIALS. AFTER A MOVE IS USED IT HAS TO RECHARGE - ITS COOLDOWN. THE RING ROUND ITS BUTTON FILLS BACK UP, AND THEN IT IS READY.' },
+      { demo: 'clash.stats', say: "TAP A CREATURE'S CARD FOR ITS STATS. HP: HOW MUCH IT CAN TAKE. ATTACK: HOW HARD IT HITS. DEFENCE: HOW WELL IT LASTS. SPEED: HOW FAST IT MOVES. MELEE FIGHTS UP CLOSE, RANGED FROM AFAR." },
+      { demo: 'clash.elements', say: 'EACH CREATURE HAS AN ELEMENT, AND EVERY HIT IT LANDS CARRIES ITS EDGE: EMBER BURNS, TIDE KNOCKS BACK, FROST SLOWS, VOLT STUNS, STONE TAKES LESS. TAP ? BY A MOVE TO READ JUST WHAT IT DOES.' },
+      { demo: 'clash.debuffs', say: 'DEBUFFS GO ON THE FOE FOR A FEW SECONDS: POISON AND BURNS HURT EVERY SECOND, SLOW AND HOLD STOP IT MOVING, SILENCE PUTS ITS MOVES BACK ON COOLDOWN, WEAKEN SOFTENS ITS HITS.' },
+      { demo: 'clash.buffs', say: 'BUFFS HELP YOU FOR A FEW SECONDS: HASTE, GUARD, REGROW, EVASION (30% OF HITS MISS), FOCUS (+20% CRITS), FURY (+25% DAMAGE), QUICKEN (FASTER COOLDOWNS). THE NAME POPS UP OVER YOU.' },
+      { demo: 'clash.cover', say: 'ROCKS AND WALLS STOP SHOTS: GET BEHIND ONE TO DODGE. BUT A LOBBED MOVE FLIES OVER COVER, AND GLOW SHOTS GO RIGHT THROUGH IT.' },
+      { demo: 'clash.story', say: 'STORY MODE: FIVE WORLDS, EACH FOUR BATTLES AND A BOSS. WINS PAY TOKENS AND XP, AND XP LEVELS YOUR CREATURE UP. BEAT THE LAST BOSS TO OPEN THE LADDER. TRAINING IS FREE PRACTICE.' },
+      {
+        demo: 'clash.keys',
+        say: touch
+          ? 'ON A PHONE THE CONTROLS SIT BESIDE OR UNDER THE ARENA: THE STICK MOVES, AND EACH MOVE BUTTON FIRES ITS MOVE AT THE FOE.'
+          : `${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} FIRE MOVES 1, 2 AND 3 STRAIGHT AT THE FOE. 1 2 3 FIRE THEM AT THE MOUSE. W A S D MOVES. ${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} CAN BE MOVED IN THE SETTINGS, UNDER CHANGE KEYS.`,
+      },
+    ];
+    this.howStep = Phaser.Math.Clamp(this.howStep, 0, steps.length - 1);
+    const st = steps[this.howStep];
+    L.add(centerText(this, GAME_W / 2, 24, 'HOW TO PLAY', PALETTE.gold));
+    // the picture, in its box, clipped to it
+    const DX = 12;
+    const DY = 38;
+    L.add(this.add.rectangle(DX - 1, DY - 1, DEMO_W + 2, DEMO_H + 2, 0x000000, 0).setOrigin(0, 0).setStrokeStyle(1, 0x4ad0c0));
+    const g = this.add.graphics().setPosition(DX, DY);
+    L.add(g);
+    const clip = this.make.graphics({}, false);
+    clip.fillStyle(0xffffff, 1).fillRect(DX, DY, DEMO_W, DEMO_H);
+    const mask = clip.createGeometryMask();
+    g.setMask(mask);
+    this.demo = { g, id: st.demo, pool: [], t0: this.time.now, clip, mask };
+    // the words, beside it
+    const RX = DX + DEMO_W + 10;
+    L.add(smallText(this, RX, DY, `STEP ${this.howStep + 1} OF ${steps.length}`, PALETTE.tealLight));
+    let y = DY + 10;
+    for (const ln of wrapWords(st.say, Math.floor((GAME_W - RX - 8) / 6)).slice(0, 11)) {
+      L.add(text(this, RX, y, ln, PALETTE.cream));
+      y += 9;
+    }
+    // where you are, and the way through
+    const dotsW = steps.length * 8;
+    for (let i = 0; i < steps.length; i++) L.add(this.add.rectangle(DX + DEMO_W / 2 - dotsW / 2 + i * 8 + 2, DY + DEMO_H + 6, 4, 4, i === this.howStep ? PALETTE.gold : 0x3a3450).setOrigin(0, 0));
+    const go = (d: number): void => {
+      this.howStep = Phaser.Math.Clamp(this.howStep + d, 0, steps.length - 1);
+      audio.sfx('ui_blip', 0.35);
+      this.draw();
+    };
+    L.add(button(this, GAME_W / 2 + 40, 166, '<', () => go(-1), { width: 30, height: 13, disabled: this.howStep === 0 }));
+    L.add(button(this, GAME_W / 2 + 76, 166, '>', () => go(1), { width: 30, height: 13, disabled: this.howStep === steps.length - 1 }));
   }
+
+  /** HOW TO PLAY's picture, this frame (see `controls`). */
+  private drawDemo(time: number): void {
+    const d = this.demo;
+    if (!d || this.screen !== 'controls') return;
+    d.g.clear();
+    let used = 0;
+    const lbl = (x: number, y: number, str: string, col: number = PALETTE.cream): void => {
+      if (!str) return;
+      let t = d.pool[used];
+      if (!t) {
+        t = smallText(this, 0, 0, '', col).setOrigin(0.5, 0.5);
+        t.setMask(d.mask);
+        this.layer.add(t);
+        d.pool.push(t);
+      }
+      used++;
+      t.setText(str).setTint(col).setPosition(Math.round(d.g.x + x), Math.round(d.g.y + y)).setVisible(true);
+    };
+    demoFor(d.id)(d.g, (time - d.t0) / 1000, lbl);
+    for (let i = used; i < d.pool.length; i++) d.pool[i].setVisible(false);
+  }
+
 }

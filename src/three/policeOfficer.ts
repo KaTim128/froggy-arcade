@@ -596,11 +596,16 @@ export class PoliceOfficer {
     for (const sx of [-1, 1]) {
       const sh = mesh(new THREE.SphereGeometry(0.075 * b, 14, 10), sleeve, this.chest, sx * 0.2 * b, 0.24 * k, 0);
       sh.scale.set(1.1, 0.85, 0.95);
-      // the epaulette
-      const ep = mesh(new THREE.BoxGeometry(0.06, 0.012, 0.13), navyCap, this.chest, sx * 0.18 * b, 0.285 * k, 0);
-      ep.rotation.z = sx * -0.25;
-      mesh(new THREE.SphereGeometry(0.008, 6, 4), silver, this.chest, sx * 0.205 * b, 0.284 * k, 0.05);
+      // the epaulette, lying on the slope of the shoulder (see the yoke)
+      const ep = mesh(new THREE.BoxGeometry(0.07, 0.012, 0.12), navyCap, this.chest, sx * 0.185 * b, 0.26 * k + 0.04 * b, 0);
+      ep.rotation.z = sx * -0.42;
+      mesh(new THREE.SphereGeometry(0.008, 6, 4), silver, this.chest, sx * 0.2 * b, 0.26 * k + 0.035 * b, 0.05);
     }
+    // THE YOKE: the slope from the base of the neck out and down to the
+    // shoulders, one piece with the chest under it -- not a flat shelf with
+    // a collar stood on it and a ball for a shoulder either end
+    const yoke = mesh(new THREE.SphereGeometry(0.23 * b, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), shirt, this.chest, 0, 0.26 * k - 0.004, 0);
+    yoke.scale.set(1, 0.32, 0.62);
     // the badge: a gold shield on the left breast; the name bar on the right
     {
       const s = new THREE.Shape();
@@ -665,9 +670,10 @@ export class PoliceOfficer {
     this.neck.position.y = 0.3 * k;
     // a man's neck: thick, the muscle either side of it running down
     // (narrower than the head by a good margin: as wide as it, it read as a post)
-    mesh(new THREE.CylinderGeometry(0.054, 0.062, 0.1, 14), skin, this.neck, 0, 0.03, -0.006);
-    // the collar round it
-    const collar = mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.05, 16, 1, true), new THREE.MeshLambertMaterial({ color: 0x1d2a42, side: THREE.DoubleSide }), this.neck, 0, -0.005, 0);
+    // (down into the yoke, so there is no seam where it meets the shoulders)
+    mesh(new THREE.CylinderGeometry(0.054, 0.066, 0.13, 14), skin, this.neck, 0, 0.015, -0.006);
+    // the collar round it, standing up out of the yoke
+    const collar = mesh(new THREE.CylinderGeometry(0.072, 0.08, 0.05, 16, 1, true), new THREE.MeshLambertMaterial({ color: 0x1d2a42, side: THREE.DoubleSide }), this.neck, 0, 0.035, 0);
     collar.scale.z = 0.85;
     this.neck.add(this.head);
     this.head.position.y = 0.16;
@@ -949,8 +955,14 @@ export class PoliceOfficer {
 
   setPose(x: number, y: number, z: number, yaw: number): void {
     this.root.position.set(x, y, z);
+    let d = yaw - this.root.rotation.y;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    this.turned += d;
     this.root.rotation.y = yaw;
   }
+  /** How far he has turned since the last frame (setPose), radians. */
+  private turned = 0;
+  private turnStep = 0;
 
   /** Where the eyes are, in the world. */
   eyeWorld(out = new THREE.Vector3()): THREE.Vector3 {
@@ -977,7 +989,13 @@ export class PoliceOfficer {
     const s = this.s;
     // everything eases towards what it should be: nothing snaps
     const ease = (a: number, b: number, rate: number) => a + (b - a) * Math.min(1, dt * rate);
-    s.speed = st.speed;
+    // TURNING ON THE SPOT IS STEPPING ROUND: a body turning with its feet
+    // planted slides round on its soles.  The turn counts as a short walk
+    // (a foot moves about 0.3 m in a quarter turn), so the legs step it.
+    const turnRate = dt > 0 ? Math.abs(this.turned) / dt : 0;
+    this.turned = 0;
+    this.turnStep += (Math.min(0.75, turnRate * 0.3) - this.turnStep) * Math.min(1, dt * 10);
+    s.speed = Math.max(st.speed, st.speed < 0.3 ? this.turnStep : 0);
     s.run = st.run;
     s.aimYaw = ease(s.aimYaw, st.aimYaw, 7);
     s.aimPitch = ease(s.aimPitch, st.aimPitch, 7);

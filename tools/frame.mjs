@@ -1,6 +1,6 @@
 /**
  * The cabinet's frame, the same for every game: the way out (LEAVE before
- * the play, QUIT GAME after, a cabinet's own where it has one), and the
+ * the play, LEAVE after too, a cabinet's own where it has one), and the
  * other things every game shares (log B4).
  *
  *   node tools/frame.mjs [--url http://localhost:5173]
@@ -101,7 +101,7 @@ try {
     });
     await sleep(800);
     const racing = await mg(page, 'return { label: s.exitLabel(), inPlay: s.inPlay() }');
-    check('frog race: once the race is on, it is QUIT GAME', racing.label === 'QUIT GAME' && racing.inPlay, JSON.stringify(racing));
+    check('frog race: once the race is on, the pause menu still says LEAVE (user: LEAVE leaves, BACK goes back)', racing.label === 'LEAVE' && racing.inPlay, JSON.stringify(racing));
     await page.close();
   }
   // ---- CHAMBER: LEAVE before the first pull, CASH OUT with something on the machine

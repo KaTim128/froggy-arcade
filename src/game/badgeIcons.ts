@@ -197,6 +197,12 @@ const ICONS: Record<string, Draw> = {
     line(g, x + 4 * k, y - 4 * k, x - 4 * k, y + 4 * k, hi, 1.2 * k);
     box(g, x, y, 2 * k, 2 * k, ink);
   },
+  m_pads: (g, x, y, k, ink, hi) => {
+    // a lily pad with its notch, and a frog on it
+    disc(g, x, y + 1.5 * k, 4 * k, ink);
+    tri(g, x, y + 1.5 * k, x + 4 * k, y - 0.5 * k, x + 4 * k, y + 2.5 * k, 0x000000);
+    disc(g, x - 1 * k, y + 0.5 * k, 1.6 * k, hi);
+  },
   m_croak: (g, x, y, k, ink, hi) => {
     // a gaping frog closing on a tadpole
     disc(g, x - 1.5 * k, y, 4 * k, ink);
@@ -296,6 +302,25 @@ const ICONS: Record<string, Draw> = {
 export const isRare = (id: string): boolean => id.startsWith('m_') || id.startsWith('s_') || id.startsWith('c_');
 
 /** The medal for `id`, centred on (x, y), radius `size`. */
+/** `g`, but every colour it is given comes out as a locked grey (light or dark). */
+function greyPen(g: G): G {
+  const grey = (c: number): number => {
+    const l = ((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.59 + (c & 255) * 0.11;
+    return l > 96 ? 0x4a5260 : 0x2f3540;
+  };
+  return new Proxy(g, {
+    get(t, prop, recv) {
+      if (prop === 'fillStyle') return (c: number, a?: number) => (t.fillStyle(grey(c), a), recv);
+      if (prop === 'lineStyle') return (w: number, c: number, a?: number) => (t.lineStyle(w, grey(c), a), recv);
+      const v = Reflect.get(t, prop, t);
+      return typeof v === 'function' ? (...args: unknown[]) => {
+        const r = (v as (...a: unknown[]) => unknown).apply(t, args);
+        return r === t ? recv : r;
+      } : v;
+    },
+  });
+}
+
 export function drawBadgeIcon(g: G, id: string, x: number, y: number, size: number, col: number, locked = false): void {
   const k = size / 8;
   const rare = isRare(id);
@@ -309,7 +334,10 @@ export function drawBadgeIcon(g: G, id: string, x: number, y: number, size: numb
     if (!locked) for (let i = 0; i < 8; i++) disc(g, x + Math.cos((i / 8) * Math.PI * 2) * size, y + Math.sin((i / 8) * Math.PI * 2) * size, 0.8, 0xfff2b0);
   } else g.lineStyle(1, locked ? 0x3a414c : 0x14100c, 1).strokeCircle(x, y, size);
   const draw = ICONS[id];
-  if (draw) draw(g, x, y, k * 0.82, ink, hi);
+  // LOCKED IS GREY, ALL OF IT: a picture that paints its own colour (KING OF
+  // THE ROAD's green light) is drawn through a pen that turns every colour
+  // into one of the two locked greys, by how light it is
+  if (draw) draw(locked ? greyPen(g) : g, x, y, k * 0.82, ink, hi);
   if (!locked) disc(g, x - size * 0.45, y - size * 0.5, size * 0.18, 0xffffff, 0.35);
 }
 

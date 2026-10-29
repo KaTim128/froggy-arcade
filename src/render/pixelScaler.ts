@@ -134,8 +134,12 @@ export function attachScaler(game: Phaser.Game): void {
     // which made every circle an egg and every person fat.  What is left
     // either side is the ambient glow, not black bars.
     const fill = touch && !portrait;
+    // (sideways, the controls have a column of black each side to sit in,
+    // off the picture: the picture is fitted to what is left -- user, 28 Oct:
+    // "buttons not in the arena view, same for other games")
+    const cols = fill ? touchControls.reserveSides() : { left: 0, right: 0 };
     const zoom = fill
-      ? computeTouchZoom(window.innerWidth, window.innerHeight, 0, 0, 0)
+      ? computeTouchZoom(window.innerWidth, window.innerHeight, 0, cols.left + cols.right, 0)
       : touch
         ? computeTouchZoom(window.innerWidth, window.innerHeight - topPad - safe.bottom, 0, safe.left + safe.right, 0)
         : computeZoom(window.innerWidth, window.innerHeight);
