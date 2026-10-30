@@ -844,6 +844,9 @@ export function buildDroppedKey(): THREE.Group {
  * turns.  It is parented to the camera, so it is drawn in view space and the
  * room's own lighting never has to reach it.
  *
+
+ * Skin: the drifter's own (art/player S / s), so it is HIS hand.
+ *
  * Built palm-down, a right hand (thumb on -X), fingers forward along -Z,
  * wrist at the origin, the forearm going back along +Z.
  */
@@ -854,7 +857,7 @@ export function buildHand(): THREE.Group {
   // out as a white slab.  A matcap carries its own light, so every rounded
   // surface here keeps a lit side, a shadowed side and a warm rim whatever the
   // room is doing -- and the shapes are round, so there is form to shade.
-  const skin = new THREE.MeshMatcapMaterial({ matcap: matcapTex(0xf0cfb2, 0xc79a7c, 0x7a5442, 0x9a5a48) });
+  const skin = new THREE.MeshMatcapMaterial({ matcap: matcapTex(0xe8c9a6, 0xd8b088, 0xa8845f, 0xa8684f) });
   const nail = new THREE.MeshMatcapMaterial({ matcap: matcapTex(0xffeee6, 0xe2bcb0, 0x9c7468) });
   const sleeve = new THREE.MeshMatcapMaterial({ matcap: matcapTex(0x6f8290, 0x3e4c58, 0x1c242c) });
   const cuff = new THREE.MeshMatcapMaterial({ matcap: matcapTex(0x5a6a76, 0x323e48, 0x161c22) });
@@ -879,10 +882,10 @@ export function buildHand(): THREE.Group {
   // and the heel under it -- so it narrows into the wrist rather than ending
   // on a straight edge.
   // (broader and thicker than it was -- user, 30 Oct: it read thin, small and long)
-  blob(g, 0.058, 0.027, 0.06, 0.002, 0, -0.058);
-  blob(g, 0.05, 0.028, 0.044, -0.006, -0.004, -0.022);
+  blob(g, 0.05, 0.024, 0.058, 0.002, 0, -0.058);
+  blob(g, 0.043, 0.025, 0.042, -0.006, -0.004, -0.022);
   // the ridge of the knuckles across the back
-  for (let i = 0; i < 4; i++) blob(g, 0.0145, 0.0125, 0.0135, -0.03 + i * 0.0195, 0.015, -0.104);
+  for (let i = 0; i < 4; i++) blob(g, 0.0125, 0.0112, 0.0118, -0.033 + i * 0.022, 0.013, -0.104);
 
   // ---- FOUR FINGERS, three joints each, tapering to the tips.  Each joint
   // is a group the next one hangs from, so a curl bends the whole finger the
@@ -893,7 +896,7 @@ export function buildHand(): THREE.Group {
     [0.045, 0.028, 0.02],
     [0.035, 0.022, 0.017],
   ];
-  const RAD = [0.0132, 0.0138, 0.0128, 0.0112];
+  const RAD = [0.0112, 0.0118, 0.0108, 0.0094];
   const joints: THREE.Group[][] = [];
   for (let i = 0; i < 4; i++) {
     const chain: THREE.Group[] = [];
@@ -901,7 +904,7 @@ export function buildHand(): THREE.Group {
     for (let j = 0; j < 3; j++) {
       const jt = new THREE.Group();
       if (j === 0) {
-        jt.position.set(-0.03 + i * 0.0195, 0.002 - Math.abs(i - 1.3) * 0.002, -0.106);
+        jt.position.set(-0.033 + i * 0.022, 0.002 - Math.abs(i - 1.3) * 0.002, -0.106);
         // a little fan, the way fingers sit when the hand is relaxed
         jt.rotation.y = (1.5 - i) * 0.07;
       } else {
@@ -944,7 +947,7 @@ export function buildHand(): THREE.Group {
   arm.rotation.x = 0.16;
   g.add(arm);
   // a shorter, sturdier forearm, with a heavier sleeve and cuff
-  const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.044, 0.16, 22, 1, true), skin);
+  const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.039, 0.16, 22, 1, true), skin);
   fore.rotation.x = Math.PI / 2;
   fore.position.z = 0.07;
   fore.scale.set(1.18, 1, 0.84);
