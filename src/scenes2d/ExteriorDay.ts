@@ -656,7 +656,6 @@ export class ExteriorDay extends Phaser.Scene {
     const glow = (x: number, y: number, w: number, h: number, col: number, a: number) =>
       this.add.ellipse(x, y, w, h, col, a).setDepth(701).setBlendMode(Phaser.BlendModes.ADD);
     glow(doorX, 70, 150, 40, 0xff4fa3, 0.22);
-    glow(doorX, 132, 60, 40, 0xffe0a0, 0.25);
     glow(doorX - 33, 102, 26, 26, 0xffe0a0, 0.3);
     glow(doorX + 33, 102, 26, 26, 0xffe0a0, 0.3);
     glow(BEG_X, BEG_Y + 4, 46, 10, 0xffd890, 0.12);

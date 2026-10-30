@@ -381,53 +381,61 @@ export function paintEntrance(scene: Phaser.Scene, wall: Phaser.GameObjects.Grap
   const hTop = gTop + 8;
   const hLen = 9;
   const hx = [doorX - 4, doorX + 3];
-  for (const x of hx) {
-    d.fillStyle(c(PALETTE.ash), 1).fillRect(x, hTop + 1, 1, 1).fillRect(x, hTop + hLen - 2, 1, 1);
-    d.fillStyle(c(PALETTE.bone), 1).fillRect(x, hTop, 1, hLen);
-  }
   if (closed) {
-    // ---- LOCKED.  Not a shutter: a locked DOOR.  A steel hasp across the
-    // two leaves, a chain through both pull bars, and a brass padlock big
-    // enough to be seen for what it is from the pavement -- a body, a
-    // shackle through the hasp, a keyhole, and the light down one edge.
-    // (The arcade only grows shutters later, and only once the night is
-    // behind you; until then this is what a shut arcade looks like.)
-    const steel = 0x9aa4b0;
-    const dark = 0x5c6672;
-    const bright = 0xd8e0e8;
-    // the hasp: a plate bolted across the meeting stiles
+    // ---- LOCKED FROM WITHIN.  The chain and the padlock are on the INSIDE of
+    // the glass -- looped through the inner pulls, behind the outer ones --
+    // so from the street they are only seen through it: dimmer, bluer, a
+    // shadow behind them on the dark floor, and the glass's own reflections
+    // across them.  Nothing of them stands out in front of the door.
+    const dim = (n: number): number => {
+      const r = (n >> 16) & 255;
+      const g = (n >> 8) & 255;
+      const b = n & 255;
+      return (Math.round(r * 0.5 + 8) << 16) | (Math.round(g * 0.55 + 12) << 8) | Math.round(b * 0.62 + 24);
+    };
+    const steel = dim(0x9aa4b0);
+    const dark = dim(0x5c6672);
+    const bright = dim(0xd8e0e8);
+    // the inside pull bars the chain goes through, set back from the glass
+    for (const x of hx) {
+      d.fillStyle(dim(0x2a303a), 1).fillRect(x + 1, hTop + 1, 1, hLen);
+      d.fillStyle(dark, 1).fillRect(x, hTop, 1, hLen);
+    }
+    // the hasp across the meeting stiles, inside
     const hy = hTop + 3;
+    d.fillStyle(0x000000, 0.35).fillRect(doorX - 6, hy + 1, 14, 6);
     d.fillStyle(dark, 1).fillRect(doorX - 7, hy - 1, 14, 6);
     d.fillStyle(steel, 1).fillRect(doorX - 6, hy, 12, 4);
     d.fillStyle(bright, 1).fillRect(doorX - 6, hy, 12, 1);
-    d.fillStyle(dark, 1).fillRect(doorX - 5, hy + 1, 1, 1).fillRect(doorX + 4, hy + 1, 1, 1);
-    // the chain, wrapped round both bars and pulled tight across the hasp
+    // the chain, looped through both inner bars
     for (const wy of [hTop, hTop + 7]) {
       for (let x = hx[0] - 1, k = 0; x <= hx[1] + 1; x++, k++) {
         d.fillStyle(k % 2 ? dark : steel, 1).fillRect(x, wy, 1, k % 2 ? 1 : 2);
       }
-      d.fillStyle(dark, 1).fillRect(hx[0] - 1, wy - 1, 1, 3).fillRect(hx[1] + 1, wy - 1, 1, 3);
     }
-    // THE PADLOCK, hanging off the hasp: shackle, body, keyhole
+    // the padlock, hanging inside: its shadow on the door behind it, then the lock
     const lx = doorX - 3;
     const ly = hy + 4;
-    // the shackle: up through the hasp and down the other side
+    d.fillStyle(0x000000, 0.4).fillRect(lx, ly + 1, 8, 8);
     d.fillStyle(bright, 1).fillRect(lx + 1, ly - 2, 1, 3).fillRect(lx + 4, ly - 2, 1, 3);
     d.fillStyle(steel, 1).fillRect(lx + 2, ly - 3, 2, 1);
-    // the body, brass, lit along the top and down the left
-    d.fillStyle(0x4a3410, 1).fillRect(lx - 1, ly, 8, 7);
-    d.fillStyle(0xc9a24a, 1).fillRect(lx, ly + 1, 6, 5);
-    d.fillStyle(0xf0d890, 1).fillRect(lx, ly + 1, 6, 1).fillRect(lx, ly + 1, 1, 5);
-    d.fillStyle(0x7a5a24, 1).fillRect(lx + 5, ly + 2, 1, 4).fillRect(lx + 1, ly + 5, 5, 1);
-    // the keyhole
-    d.fillStyle(0x2a1e08, 1).fillRect(lx + 2, ly + 3, 2, 1).fillRect(lx + 2, ly + 4, 1, 1);
-    // and the glass in front of it all, so it reads as inside
-    d.fillStyle(c(PALETTE.moon), 0.06).fillRect(doorX - 12, gTop + 1, 24, gBot - gTop - 4);
+    d.fillStyle(dim(0x4a3410), 1).fillRect(lx - 1, ly, 8, 7);
+    d.fillStyle(dim(0xc9a24a), 1).fillRect(lx, ly + 1, 6, 5);
+    d.fillStyle(dim(0xf0d890), 1).fillRect(lx, ly + 1, 6, 1).fillRect(lx, ly + 1, 1, 5);
+    d.fillStyle(dim(0x7a5a24), 1).fillRect(lx + 5, ly + 2, 1, 4).fillRect(lx + 1, ly + 5, 5, 1);
+    d.fillStyle(0x16100a, 1).fillRect(lx + 2, ly + 3, 2, 1).fillRect(lx + 2, ly + 4, 1, 1);
+    // the glass in front of it all: a cool wash, so it reads as seen through it
+    d.fillStyle(c(PALETTE.moon), 0.14).fillRect(doorX - 12, gTop + 1, 24, gBot - gTop - 4);
+  }
+  // the outer pull bars, in front of everything inside
+  for (const x of hx) {
+    d.fillStyle(c(PALETTE.ash), 1).fillRect(x, hTop + 1, 1, 1).fillRect(x, hTop + hLen - 2, 1, 1);
+    d.fillStyle(c(PALETTE.bone), 1).fillRect(x, hTop, 1, hLen);
   }
   // reflections across the glass
   for (const side of [-1, 1]) {
     const lx = side < 0 ? doorX - leafW : doorX + 2;
-    d.fillStyle(PALETTE.white, closed ? 0.07 : 0.16);
+    d.fillStyle(PALETTE.white, closed ? 0.12 : 0.16);
     for (let i = 0; i < 4; i++) d.fillRect(lx + 2 + i, gTop + 3 + i * 2, 1, 4);
   }
   // the threshold, and a mat on the step
