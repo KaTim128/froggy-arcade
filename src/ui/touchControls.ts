@@ -289,6 +289,23 @@ const STYLE = `
   white-space: nowrap; overflow: hidden;
 }
 #touch-controls .tc-btn[hidden] { display: none; }
+/* A move still reloading (setCooldown): the part of the button not yet back is
+   dark, a bright ring fills round its edge as the time passes, the seconds
+   left sit in the middle, and the icon is muted.  --cd is the share to go. */
+#touch-controls .tc-btn { position: relative; }
+#touch-controls .tc-btn.cooling > * { opacity: 0.38; filter: grayscale(0.7); }
+#touch-controls .tc-btn.cooling::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: conic-gradient(from 0deg, #6ac8ff calc((1 - var(--cd, 0)) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+}
+#touch-controls .tc-btn.cooling::after {
+  content: attr(data-cd); position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 1.25em; font-weight: 800; text-shadow: 0 0 4px #000, 0 0 2px #000;
+  background: conic-gradient(from 0deg, transparent calc((1 - var(--cd, 0)) * 360deg), rgba(0, 0, 0, 0.62) 0);
+}
 
 /* The gear: pause and settings, at the top right, always reachable. */
 #touch-controls .tc-corner {
@@ -682,6 +699,28 @@ class TouchControls {
   }
 
   /** Change what the button that sends `key` says, without swapping the layout. */
+  /**
+   * A button's move is reloading: `left` is the share still to come back (1
+   * just used, 0 ready) and `secs` what to read in the middle.  null (or 0)
+   * puts the button back as it was.  Only what the game's own clock says:
+   * this is a picture of the cooldown, never the cooldown.
+   */
+  setCooldown(key: KeyName, left: number | null, secs = ''): void {
+    if (!this.root) return;
+    for (const el of Array.from(this.root.querySelectorAll('.tc-btn')) as HTMLElement[]) {
+      if (el.dataset.key !== key) continue;
+      const on = left !== null && left > 0;
+      el.classList.toggle('cooling', on);
+      if (on) {
+        el.style.setProperty('--cd', left.toFixed(3));
+        if (el.dataset.cd !== secs) el.dataset.cd = secs;
+      } else {
+        el.style.removeProperty('--cd');
+        delete el.dataset.cd;
+      }
+    }
+  }
+
   relabel(key: KeyName, label: string): void {
     if (!this.root) return;
     for (const el of Array.from(this.root.querySelectorAll('.tc-btn')) as HTMLElement[]) {
@@ -1148,9 +1187,12 @@ class TouchControls {
     let sideL = leftW;
     if (!portrait) {
       const inner = this.sideInner();
-      sideL = inner;
-      this.root.style.setProperty('--tc-stick', `${inner}px`);
-      this.root.style.setProperty('--tc-joy', `${inner}px`);
+      // THE ARROWS ARE BIGGER THAN THEIR COLUMN (user, 30 Oct): easier to hit,
+      // standing over the picture's bottom-left corner a little, see-through
+      // there (the 'over' class), which is clear of the HUD and the action
+      sideL = Math.round(Math.min(156, inner * 1.45));
+      this.root.style.setProperty('--tc-stick', `${sideL}px`);
+      this.root.style.setProperty('--tc-joy', `${Math.round(sideL * 0.86)}px`);
       if (n) {
         (this.pads as HTMLElement).style.gridTemplateColumns = 'repeat(1, auto)';
         const tall = Math.floor((pic.height - 24 - (n - 1) * gap) / n);

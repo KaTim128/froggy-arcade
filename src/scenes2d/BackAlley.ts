@@ -25,6 +25,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { backPlate, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
 import { clock } from '../game/life';
+import { earnBadge } from '../game/badges';
 import { Patrol, alleyWatch } from '../game/patrol';
 
 const WALK_Y = 168;
@@ -52,6 +53,8 @@ export class BackAlley extends Phaser.Scene {
     this.locked = false;
     this.spot = null;
     const st = store.get();
+    // found it: the way round the side of the arcade is a secret
+    earnBadge('s_back');
     // open on the night it is the way in (shown out at closing, before Hide
     // and Seek); chained every other time
     this.chained = st.route !== 'ejected' && !backWayOpen(st);

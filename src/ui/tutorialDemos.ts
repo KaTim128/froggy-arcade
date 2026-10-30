@@ -841,16 +841,24 @@ function tadpole(g: G, x: number, y: number, t: number, dir = 1, stuck = false):
   g.fillStyle(0xffffff, 1).fillRect(x + dir, y - 1, 1, 1);
 }
 
-/** Pac Frog, from above, mouth working. */
-function pacFrog(g: G, x: number, y: number, t: number, dir = 1): void {
-  const open = 0.3 + 0.3 * Math.abs(Math.sin(t * 8));
-  const a = dir > 0 ? 0 : Math.PI;
-  g.fillStyle(0x1e5a2a, 1).fillCircle(x, y, 6);
-  g.fillStyle(0x5ac85a, 1);
-  g.slice(x, y, 5, a + open, a - open + Math.PI * 2, false);
-  g.fillPath();
-  g.fillStyle(0xffffff, 1).fillCircle(x - dir, y - 3, 1.4);
-  g.fillStyle(INK, 1).fillRect(x - dir, y - 3, 1, 1);
+/** The Big Frog, from above, mouth working. */
+function bigFrog(g: G, x: number, y: number, t: number, dir = 1): void {
+  const open = 0.5 + 0.5 * Math.abs(Math.sin(t * 8));
+  g.fillStyle(0x000000, 0.3).fillEllipse(x, y + 5, 11, 3);
+  // back legs, body with a lit shoulder and spots, head, mouth, two raised eyes
+  for (const s of [-1, 1]) g.fillStyle(0x1e5a2a, 1).fillCircle(x - dir * 4, y + s * 4, 2.2).fillStyle(0x3aa048, 1).fillCircle(x - dir * 4.4, y + s * 4, 1.5);
+  g.fillStyle(0x0e3a1e, 1).fillEllipse(x, y, 11, 8.4);
+  g.fillStyle(0x3aa048, 1).fillEllipse(x, y, 9.8, 7.2);
+  g.fillStyle(0x6ad86a, 1).fillCircle(x - dir * 0.5 - 1, y - 1.5, 2);
+  g.fillStyle(0x1e6a2c, 1).fillCircle(x - dir * 2.5, y - 1.5, 0.9).fillCircle(x - dir * 3, y + 1.8, 0.8);
+  g.fillStyle(0x0e3a1e, 1).fillCircle(x + dir * 3.6, y, 3.4);
+  g.fillStyle(0x3aa048, 1).fillCircle(x + dir * 3.6, y, 2.9);
+  if (open > 0.5) g.fillStyle(0x5a0a18, 1).fillTriangle(x + dir * 5, y - 2.2, x + dir * 5, y + 2.2, x + dir * (5.4 + open), y);
+  for (const s of [-1, 1]) {
+    g.fillStyle(0x1e5a2a, 1).fillCircle(x + dir * 2.8, y + s * 2.4, 1.9);
+    g.fillStyle(0xe8c850, 1).fillCircle(x + dir * 2.8, y + s * 2.4, 1.4);
+    g.fillStyle(INK, 1).fillCircle(x + dir * 3.1, y + s * 2.4, 0.7);
+  }
 }
 
 /** The crane machine's glass box: the pile of prizes, the chute, the claw on its rail. */
@@ -2180,9 +2188,9 @@ export const DEMOS: Record<string, Demo> = {
     const left = ph(t, 3.4) < 0.5;
     panel(g, 10, 22, 50, 20, left ? GOLD : 0x3a6a3a, 0x2e6a3a);
     panel(g, 64, 22, 50, 20, !left ? GOLD : 0x3a4a8a, 0x2a4a7a);
-    lbl(35, 32, 'PAC FROG', CREAM);
+    lbl(35, 32, 'BIG FROG', CREAM);
     lbl(89, 32, 'SURVIVOR', CREAM);
-    pacFrog(g, 35, 56, t, 1);
+    bigFrog(g, 35, 56, t, 1);
     tadpole(g, 89, 56, t, 1);
     lbl(35, 70, 'YOU HUNT', GREEN);
     lbl(89, 70, 'YOU RUN', 0x8ab0ff);
@@ -2194,7 +2202,7 @@ export const DEMOS: Record<string, Demo> = {
     const k = ph(t, 3.5);
     const tx = 16 + k * 92;
     tadpole(g, tx, 34, t, 1);
-    pacFrog(g, Math.max(10, tx - 26 + k * 10), 34, t, 1);
+    bigFrog(g, Math.max(10, tx - 26 + k * 10), 34, t, 1);
     lbl(DEMO_W / 2, 10, 'CATCH THE TADPOLE', CREAM);
     lbl(DEMO_W / 2, 80, 'IT IS QUICKER: CORNER IT', GOLD);
   },
@@ -2210,7 +2218,7 @@ export const DEMOS: Record<string, Demo> = {
     const tx = k < 0.55 ? 120 - seg(k, 0.25, 0.55) * 50 : 70;
     tadpole(g, tx, 45, t, -1, k >= 0.55);
     if (k >= 0.55) g.lineStyle(1, 0xf0d060, 1).strokeCircle(70, 45, 3 + (1 - seg(k, 0.55, 1)) * 8);
-    pacFrog(g, k < 0.12 ? 70 : k < 0.55 ? 70 - seg(k, 0.12, 0.3) * 30 : 40 + seg(k, 0.6, 0.9) * 26, 45, t, k < 0.55 ? -1 : 1);
+    bigFrog(g, k < 0.12 ? 70 : k < 0.55 ? 70 - seg(k, 0.12, 0.3) * 30 : 40 + seg(k, 0.6, 0.9) * 26, 45, t, k < 0.55 ? -1 : 1);
     key(g, lbl, 16, 14, 'SPC', k < 0.14, 17);
     lbl(DEMO_W / 2 + 14, 14, 'DROP A TRAP', CREAM);
     lbl(DEMO_W / 2, 78, k >= 0.55 ? 'STUCK - GRAB IT!' : 'IT SWIMS IN...', GOLD);
@@ -2229,7 +2237,7 @@ export const DEMOS: Record<string, Demo> = {
     }
     g.lineStyle(1, 0xc8a050, 0.35 + 0.15 * Math.sin(t * 4)).strokeCircle(96, 46, 4);
     tadpole(g, tx, 46, t, 1);
-    pacFrog(g, tx - 34, 46, t, 1);
+    bigFrog(g, tx - 34, 46, t, 1);
     lbl(DEMO_W / 2, 14, 'EAT EVERY FLY', CREAM);
     lbl(DEMO_W / 2, 76, 'A FAINT RING IS A TRAP', RED);
   },
@@ -2239,7 +2247,7 @@ export const DEMOS: Record<string, Demo> = {
     const k = ph(t, 3);
     const x = k < 0.5 ? 14 + k * 104 : 63;
     const y = k < 0.5 ? 18 : 18 + (k - 0.5) * 110;
-    pacFrog(g, x, Math.min(y, 72), t, k < 0.5 ? 1 : 1);
+    bigFrog(g, x, Math.min(y, 72), t, k < 0.5 ? 1 : 1);
     key(g, lbl, 100, 74, 'S', k > 0.2 && k < 0.55);
     if (k > 0.2 && k < 0.5) lbl(100, 64, 'EARLY', GOLD);
     lbl(40, 72, 'TURNS AT THE GAP', CREAM);

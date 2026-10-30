@@ -68,6 +68,9 @@ const BUMP_SPEED = 7;
 const KNOCK = 5.6;
 const FRICTION = 5;
 const FIRST_WAVE = 4;
+/** A frog that stays on one pad this long (seconds) makes it crack, and the pad gives way {STAY_WARN} later. */
+const STAY_S = 6;
+const STAY_WARN = 1.8;
 /** A fall: over the edge and down to the water, then under. */
 const DROP_S = 0.28;
 const SINK_S = 1.1;
@@ -126,6 +129,9 @@ interface Frog {
   alive: boolean;
   fall: Fall | null;
   stun: number;
+  /** How long it has stood on the pad it is on (it cannot stay for ever). */
+  stay: number;
+  stayPad: Pad | null;
   cds: { tongue: number; bump: number; jump: number };
   tongue: number;
   tongueHit: boolean;
@@ -197,7 +203,7 @@ function makeFrog(i: number, c: number, r: number): Frog {
   const x = padX(c);
   const z = padZ(r);
   return {
-    ...spec, x, z, y: 0, vx: 0, vz: 0, face: Math.atan2(-x, -z), jump: null, squash: 0, alive: true, fall: null, stun: 0,
+    ...spec, x, z, y: 0, vx: 0, vz: 0, face: Math.atan2(-x, -z), jump: null, squash: 0, alive: true, fall: null, stun: 0, stay: 0, stayPad: null,
     cds: { tongue: 0.5, bump: 0.5, jump: 0 }, tongue: 0, tongueHit: false, bump: 0, hop: 0, place: 0, outAt: 0, hitsTaken: 0,
     brain: { think: Math.random() * 0.3, mx: 0, mz: 0, want: null, aim: null },
     img: null,
@@ -644,7 +650,36 @@ function separate(): void {
   for (const f of frogs) if (f.alive && !f.jump && !padAt(f.x, f.z)) fallIn(f);
 }
 
+/**
+ * NO SITTING: a frog that stands on one pad for too long (user, 30 Oct) makes
+ * it crack under it, and unless it jumps the pad sinks with it.  Jumping to
+ * another pad starts the count again.
+ */
+function stepStay(dt: number): void {
+  for (const f of frogs) {
+    if (!f.alive || f.fall || f.jump) {
+      f.stay = 0;
+      f.stayPad = null;
+      continue;
+    }
+    const p = padAt(f.x, f.z);
+    if (!p) continue;
+    if (p !== f.stayPad) {
+      f.stayPad = p;
+      f.stay = 0;
+    }
+    f.stay += dt;
+    if (f.stay >= STAY_S && p.state === 'ok') {
+      p.state = 'warn';
+      p.t = 0;
+      p.warn = STAY_WARN;
+      audio.sfx('crumble', 0.25);
+    }
+  }
+}
+
 function stepPads(dt: number): void {
+  stepStay(dt);
   for (const p of pads) {
     p.jx = p.jy = 0;
     p.dip = Math.max(0, p.dip - dt * 4);
@@ -1185,11 +1220,11 @@ export const padBattles: MinigameModule = {
     steps: [
       { say: 'FOUR FROGS, EACH ON A LILY PAD, WITH WATER BETWEEN THE PADS. FALL IN AND YOU ARE OUT. LAST FROG STANDING WINS.', demo: 'pads.grid' },
       { say: 'YOU CAN WALK ABOUT ON YOUR OWN PAD. TO GET TO ANOTHER ONE, JUMP: SPACE JUMPS TO THE NEXT PAD THE WAY YOU FACE.', phone: 'YOU CAN WALK ABOUT ON YOUR OWN PAD. TO GET TO ANOTHER ONE, PRESS JUMP: IT JUMPS TO THE NEXT PAD THE WAY YOU FACE.', demo: 'pads.jump' },
-      { say: 'A PAD ABOUT TO GO FLASHES, SHAKES AND CRACKS - THEN SINKS. JUMP OFF IT IN TIME. THEY GO FASTER AS IT GOES ON.', demo: 'pads.collapse' },
+      { say: 'A PAD ABOUT TO GO FLASHES, SHAKES AND CRACKS - THEN SINKS. JUMP OFF IT IN TIME. STAND ON ONE PAD TOO LONG AND IT GOES, TOO.', demo: 'pads.collapse' },
       { say: 'J WHIPS YOUR TONGUE OUT IN FRONT - EVEN ACROSS A GAP. WHOEVER IT CATCHES IS KNOCKED BACK, MAYBE INTO THE WATER.', phone: 'TONGUE WHIPS IT OUT IN FRONT - EVEN ACROSS A GAP. WHOEVER IT CATCHES IS KNOCKED BACK, MAYBE INTO THE WATER.', demo: 'pads.tongue' },
       { say: 'K IS A BODY BUMP: A SHORT CHARGE ACROSS YOUR PAD. AIM IT SO THEY GO OFF THE EDGE. FROGS ARE SOLID: YOU CAN SHOVE ONE OFF, TOO.', phone: 'BUMP IS A SHORT CHARGE ACROSS YOUR PAD. AIM IT SO THEY GO OFF THE EDGE. FROGS ARE SOLID: YOU CAN SHOVE ONE OFF, TOO.', demo: 'pads.bump' },
     ],
-    objective: ['KNOCK THE OTHER THREE FROGS INTO THE WATER.', 'JUMP PAD TO PAD - A MISSED JUMP IS A SPLASH.', 'PADS CRUMBLE AND SINK: GET OFF THEM IN TIME.', 'LAST FROG STANDING WINS.'],
+    objective: ['KNOCK THE OTHER THREE FROGS INTO THE WATER.', 'JUMP PAD TO PAD - A MISSED JUMP IS A SPLASH.', 'PADS CRUMBLE AND SINK: GET OFF THEM IN TIME. DON\'T SIT ON ONE.', 'LAST FROG STANDING WINS.'],
     controls: [
       ['W A S D', 'WALK / TURN'],
       ['ARROWS', 'WALK / TURN'],

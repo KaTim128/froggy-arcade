@@ -317,6 +317,8 @@ export interface EntranceOpts {
   /** What is behind the glass: the arcade's purple, or a shop's own light. */
   inside?: Inside;
   depth?: number;
+  /** Just the doors: no lamps, no spill (drawn over a doorway that already has them). */
+  bare?: boolean;
 }
 
 /**
@@ -433,7 +435,7 @@ export function paintEntrance(scene: Phaser.Scene, wall: Phaser.GameObjects.Grap
   if (!closed) d.fillStyle(c(inside.mat), 0.8).fillRect(doorX - 10, base, 20, 2);
 
   // ---- the lamps either side of the door, and their light on the wall
-  for (const side of [-1, 1]) {
+  for (const side of o.bare ? [] : [-1, 1]) {
     const lx = doorX + side * 28;
     const ly = o.lampY;
     const lit = !night;
@@ -445,7 +447,7 @@ export function paintEntrance(scene: Phaser.Scene, wall: Phaser.GameObjects.Grap
     d.fillStyle(lit ? PALETTE.cream : c(PALETTE.ash), 1).fillRect(lx - 2, ly - 1, 5, 4);
     d.fillStyle(c(PALETTE.ink), 1).fillRect(lx - 2, ly + 3, 5, 1);
   }
-  if (!closed) {
+  if (!closed && !o.bare) {
     // light falling out of the glass onto the pavement
     scene.add.rectangle(doorX, base, 30, 14, day ? PALETTE.gold : inside.spill).setOrigin(0.5, 0).setAlpha(day ? 0.12 : 0.14).setDepth(o.depth ?? 0);
   }

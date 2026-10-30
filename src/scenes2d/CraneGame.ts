@@ -1606,7 +1606,7 @@ export class CraneGame extends Phaser.Scene {
     }
     const cost = CRANE_COST[this.kind];
     if (played) {
-      c.add(button(this, GAME_W / 2 - 51, 116, `TRY AGAIN - ${cost}`, () => this.again(), { width: 90, height: 13 }));
+      c.add(button(this, GAME_W / 2 - 51, 116, `${title === 'YOU WIN!' ? 'PLAY AGAIN' : 'TRY AGAIN'} - ${cost}`, () => this.again(), { width: 90, height: 13 }));
     }
     c.add(button(this, GAME_W / 2 + (played ? 54 : 0), 116, 'LEAVE', () => this.leave(true), { width: 60, height: 13 }));
     this.result = c;

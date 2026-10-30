@@ -155,12 +155,20 @@ export function resultGlow(scene: Phaser.Scene, won: boolean | null, card: { w?:
   // all of it in one layer, so whoever shows the card can take it down with it
   const box = scene.add.container(0, 0).setDepth(D);
   const put = <T extends Phaser.GameObjects.GameObject>(o: T): T => (box.add(o), o);
+  // (the card can be taken down while its effects still play -- PLAY AGAIN
+  // or LEAVE pressed at once -- and a tween left running on a destroyed ring
+  // or spark throws every frame, which stalled the whole scene, buttons and all)
+  const tweens: Phaser.Tweens.Tween[] = [];
+  box.once(Phaser.GameObjects.Events.DESTROY, () => tweens.forEach((t) => t.stop()));
+  const tween = (cfg: Phaser.Types.Tweens.TweenBuilderConfig): void => {
+    tweens.push(scene.tweens.add(cfg));
+  };
   // the card itself glows gold, just round its edge
   if (won) {
     const col = 0xffd45e;
     for (const [pad, a] of [[3, 0.55], [6, 0.28], [10, 0.12]] as const) {
       const rim = put(scene.add.rectangle(cx, cy, cw + pad * 2, ch + pad * 2).setStrokeStyle(pad > 3 ? 3 : 2, col, a).setBlendMode(Phaser.BlendModes.ADD));
-      scene.tweens.add({ targets: rim, alpha: { from: 1, to: 0.55 }, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      tween({ targets: rim, alpha: { from: 1, to: 0.55 }, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
   }
   if (won) {
@@ -180,17 +188,17 @@ export function resultGlow(scene: Phaser.Scene, won: boolean | null, card: { w?:
     // the warm wash over the whole picture, and the burst at the middle
     const wash = put(scene.add.rectangle(0, 0, GAME_W, GAME_H, 0xffc84a, 0.16).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD));
     const burst = put(scene.add.image(cx, cy, 'result_gold').setBlendMode(Phaser.BlendModes.ADD).setScale(0.6).setAlpha(0.9));
-    scene.tweens.add({ targets: burst, scale: 3.4, alpha: 0.25, duration: 900, ease: 'Cubic.easeOut' });
-    scene.tweens.add({ targets: wash, alpha: 0.06, duration: 1100 });
+    tween({ targets: burst, scale: 3.4, alpha: 0.25, duration: 900, ease: 'Cubic.easeOut' });
+    tween({ targets: wash, alpha: 0.06, duration: 1100 });
     const ring = put(scene.add.circle(cx, cy, 20).setStrokeStyle(2, 0xffe08a, 0.9));
-    scene.tweens.add({ targets: ring, radius: 150, alpha: 0, duration: 800, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+    tween({ targets: ring, radius: 150, alpha: 0, duration: 800, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
     // the sparks, gold and white, thrown up and falling
     const cols = [0xffe08a, 0xffffff, 0xffc84a, 0xfff4c8];
     for (let i = 0; i < 34; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = 40 + Math.random() * 90;
       const s = put(scene.add.rectangle(cx, cy, 2, 2, cols[i % cols.length]).setBlendMode(Phaser.BlendModes.ADD));
-      scene.tweens.add({
+      tween({
         targets: s,
         x: cx + Math.cos(a) * sp,
         y: cy + Math.sin(a) * sp * 0.7 + 30,

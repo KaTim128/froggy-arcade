@@ -45,16 +45,18 @@ export function closingNotice(scene: Phaser.Scene, then: () => void): void {
   noticeDay = clock().day;
   const c = scene.add.container(0, 0).setDepth(2000).setScrollFactor(0);
   const veil = scene.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.45).setOrigin(0, 0).setInteractive();
-  const W = 230;
-  const H = 76;
+  const W = 240;
+  const H = 90;
   const x = GAME_W / 2;
   const y = GAME_H / 2 - 6;
   c.add(veil);
   c.add(scene.add.rectangle(x, y, W, H, PALETTE.ink, 0.97).setStrokeStyle(2, PALETTE.gold));
   c.add(scene.add.rectangle(x, y - H / 2 + 9, W - 4, 14, PALETTE.plum));
   c.add(centerText(scene, x, y - H / 2 + 9, 'THE ARCADE IS CLOSING', PALETTE.gold));
-  c.add(centerText(scene, x, y - 8, `IT IS 7:45 PM - TIME TO HEAD HOME!`, PALETTE.cream));
-  c.add(centerText(scene, x, y + 3, `WE OPEN AGAIN AT ${twelveHour(SUNRISE_HOUR)}. SEE YOU TOMORROW.`, PALETTE.fog));
+  // three short lines, each well inside the panel (one long one ran out of it)
+  c.add(centerText(scene, x, y - 14, 'IT IS 7:45 PM - TIME TO HEAD HOME!', PALETTE.cream));
+  c.add(centerText(scene, x, y - 3, `WE OPEN AGAIN AT ${twelveHour(SUNRISE_HOUR)}.`, PALETTE.fog));
+  c.add(centerText(scene, x, y + 8, 'SEE YOU TOMORROW.', PALETTE.fog));
   let done = false;
   const ok = (): void => {
     if (done) return;
@@ -62,7 +64,7 @@ export function closingNotice(scene: Phaser.Scene, then: () => void): void {
     c.destroy(true);
     then();
   };
-  c.add(button(scene, x, y + H / 2 - 12, 'OK', ok, { width: 54, height: 13 }));
+  c.add(button(scene, x, y + H / 2 - 13, 'OK', ok, { width: 54, height: 13 }));
   c.each((o: Phaser.GameObjects.GameObject) => (o as unknown as { setScrollFactor?: (n: number) => void }).setScrollFactor?.(0));
   // (E, Space and Enter answer it as well as the button)
   const kb = scene.input.keyboard;

@@ -41,7 +41,7 @@ import {
 import { abilityIconURL, drawAbilityIcon } from '../art/abilityIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
 import { backPlate } from '../ui/plate';
-import type { KeyName } from '../ui/touchControls';
+import { touchControls, type KeyName } from '../ui/touchControls';
 import { capLabel, codeFor, gameKeys, setKeyScope } from '../core/keymap';
 
 /** The Clash's own keys: J K L fire abilities 1 2 3 (log B6), movable in CONTROLS. */
@@ -4053,7 +4053,17 @@ export class CreatureArena extends Phaser.Scene {
         cd?.setVisible(false);
       }
     });
-    if (this.band) for (const t of this.cdTexts) t.setVisible(false);
+    if (this.band) {
+      for (const t of this.cdTexts) t.setVisible(false);
+      // the phone's own buttons carry the countdown: a ring that fills, the
+      // seconds in the middle, the icon muted until it has gone all the way round
+      const keys: KeyName[] = ['FOUR', 'FIVE', 'SIX'];
+      this.me.c.attacks.forEach((a, i) => {
+        const left = this.me.cds[i];
+        const secs = left >= 10 ? `${Math.ceil(left)}` : (Math.ceil(left * 10) / 10).toFixed(1);
+        touchControls.setCooldown(keys[i], left > 0 ? Phaser.Math.Clamp(left / a.cd, 0, 1) : null, secs);
+      });
+    }
     // the chosen attack's line, fading
     const showing = this.infoT > 0 && !this.over && !this.dialog;
     this.info.setVisible(showing).setAlpha(Math.min(1, this.infoT * 3));
