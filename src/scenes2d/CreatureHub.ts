@@ -950,32 +950,20 @@ export class CreatureHub extends Phaser.Scene {
     // ---- the terms, the balance, and what to do
     const px = 196;
     L.add(this.add.rectangle(px, 26, 118, 134, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
+    // (few words, all of them inside the panel: 18 letters is as wide as it holds)
     L.add(text(this, px + 4, 30, `ENTRY: ${LADDER_COST} TOKENS`, PALETTE.gold));
-    L.add(text(this, px + 4, 39, 'PAID ONCE A RUN', PALETTE.ash));
-    L.add(text(this, px + 4, 50, LADDER_WIN ? `+${LADDER_WIN} EACH LEVEL` : 'BEAT ALL 5 + BOSS:', PALETTE.mossLight));
-    L.add(text(this, px + 4, 59, `WIN ${LADDER_BOSS_WIN} TOKENS`, PALETTE.mossLight));
-    L.add(text(this, px + 4, 70, 'LOSS ENDS THE RUN.', 0xff9a9a));
-    if (LADDER_WIN) {
-      L.add(text(this, px + 4, 79, 'YOU KEEP WHAT', PALETTE.ash));
-      L.add(text(this, px + 4, 88, 'IT HAS PAID.', PALETTE.ash));
-    }
-    // which bosses this time round: none comes back until all have been beaten
-    if (!LADDER_WIN) {
-      L.add(text(this, px + 4, 79, `BOSSES: ${c.bossesBeaten.length}/${BOSSES.length} BEATEN`, PALETTE.gold));
-      L.add(text(this, px + 4, 88, 'NONE COMES BACK TILL', PALETTE.ash));
-    }
-    if (!LADDER_WIN) L.add(text(this, px + 4, 97, 'ALL HAVE FALLEN.', PALETTE.ash));
-    L.add(text(this, px + 4, 108, `TOKENS: ${ledger.balance()}`, PALETTE.cream));
+    L.add(text(this, px + 4, 44, LADDER_WIN ? `+${LADDER_WIN} EACH LEVEL` : `WIN ${LADDER_BOSS_WIN} TOKENS`, PALETTE.mossLight));
+    L.add(text(this, px + 4, 58, `BOSSES ${c.bossesBeaten.length}/${BOSSES.length}`, PALETTE.gold));
+    L.add(text(this, px + 4, 80, `TOKENS: ${ledger.balance()}`, PALETTE.cream));
     if (run) {
-      L.add(text(this, px + 4, 119, LADDER_WIN ? `THIS RUN: +${run.earned}` : `BOSS PAYS ${LADDER_BOSS_WIN}`, PALETTE.gold));
+      L.add(text(this, px + 4, 94, LADDER_WIN ? `THIS RUN: +${run.earned}` : `BOSS PAYS ${LADDER_BOSS_WIN}`, PALETTE.gold));
       L.add(button(this, px + 59, 134, run.level > LADDER_LEVELS ? 'FIGHT THE BOSS' : `CONTINUE - LV ${run.level}`, () => this.ladderFight(), { width: 108, height: 13, disabled: !activeOwned() }));
       L.add(button(this, px + 59, 151, 'ABANDON RUN', () => this.confirmAbandon(), { width: 108, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     } else {
-      L.add(text(this, px + 4, 119, `RUNS ${c.ladderRuns}  CLEARED ${c.ladderClears}`, PALETTE.fog));
       const unlocked = c.story.cleared >= WORLDS.length;
       const can = ledger.balance() >= LADDER_COST && !!activeOwned() && unlocked;
-      L.add(button(this, px + 59, 138, `START RUN  ${LADDER_COST} TOK`, () => this.confirmStart(), { width: 108, height: 13, disabled: !can }));
-      if (!unlocked) L.add(smallText(this, px + 4, 148, 'OPENS AFTER THE STORY', 0xff9a9a));
+      L.add(button(this, px + 59, 138, 'START RUN', () => this.confirmStart(), { width: 108, height: 13, disabled: !can }));
+      if (!unlocked) L.add(smallText(this, px + 4, 148, 'AFTER THE STORY', 0xff9a9a));
       else if (!activeOwned()) L.add(text(this, px + 4, 148, 'NEED A CREATURE', PALETTE.ash));
     }
   }
@@ -984,7 +972,7 @@ export class CreatureHub extends Phaser.Scene {
   private confirmStart(): void {
     if (this.dialog) return;
     this.dialog = confirmDialog(this, {
-      lines: [`START A LADDER RUN FOR ${LADDER_COST} TOKENS?`, `YOU HAVE ${ledger.balance()}.`, 'A LOSS ENDS THE RUN.'],
+      lines: [`START A LADDER RUN FOR ${LADDER_COST} TOKENS?`, `YOU HAVE ${ledger.balance()}.`],
       confirm: `PAY ${LADDER_COST}`,
       onConfirm: () => {
         this.dialog = null;
