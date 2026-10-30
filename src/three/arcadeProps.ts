@@ -934,28 +934,28 @@ export function buildHand(): THREE.Group {
   // single smooth skin; the wrist end runs straight into the forearm and the
   // fingers grow out of the front of it.
   g.add(new THREE.Mesh(loft([
-    [0.03, 0.034, 0.0245, 0, 0],
-    [0.0, 0.034, 0.0245, 0, 0],
-    [-0.025, 0.039, 0.0245, -0.002, 0],
-    [-0.055, 0.0485, 0.0232, 0, 0.0005],
-    [-0.083, 0.0505, 0.0205, 0, 0.002],
-    [-0.1, 0.0485, 0.0172, 0, 0.0035],
-    [-0.112, 0.0445, 0.0135, 0, 0.0035],
-    [-0.124, 0.034, 0.0105, 0, 0.0035],
-    [-0.133, 0.018, 0.007, 0, 0.0035],
-    [-0.137, 0.0, 0.0, 0, 0.0035],
+    [0.03, 0.033, 0.0205, 0, 0],
+    [0.0, 0.033, 0.0205, 0, 0],
+    [-0.025, 0.0385, 0.0205, -0.001, 0],
+    [-0.05, 0.0455, 0.0195, 0, 0.0005],
+    [-0.075, 0.047, 0.0175, 0, 0.0015],
+    [-0.098, 0.0455, 0.0148, 0, 0.003],
+    [-0.11, 0.041, 0.0125, 0, 0.003],
+    [-0.12, 0.032, 0.01, 0, 0.003],
+    [-0.128, 0.018, 0.007, 0, 0.003],
+    [-0.132, 0.0, 0.0, 0, 0.003],
   ]), skin));
 
   // ---- FOUR FINGERS, three joints each, tapering to the tips.  Each joint
   // is a group the next one hangs from, so a curl bends the whole finger the
   // way a finger bends: most at the middle joint, least at the tip.
   const LENS = [
-    [0.044, 0.027, 0.02],
-    [0.048, 0.03, 0.021],
-    [0.045, 0.028, 0.02],
-    [0.035, 0.022, 0.017],
+    [0.047, 0.029, 0.022],
+    [0.052, 0.033, 0.023],
+    [0.049, 0.031, 0.022],
+    [0.038, 0.024, 0.019],
   ];
-  const RAD = [0.0112, 0.0118, 0.0108, 0.0094];
+  const RAD = [0.0098, 0.0104, 0.0098, 0.0085];
   const joints: THREE.Group[][] = [];
   for (let i = 0; i < 4; i++) {
     const chain: THREE.Group[] = [];
@@ -963,7 +963,7 @@ export function buildHand(): THREE.Group {
     for (let j = 0; j < 3; j++) {
       const jt = new THREE.Group();
       if (j === 0) {
-        jt.position.set(-0.033 + i * 0.022, 0.002 - Math.abs(i - 1.3) * 0.002, -0.106);
+        jt.position.set(-0.0315 + i * 0.021, 0.002 - Math.abs(i - 1.3) * 0.002, -0.106);
         // a little fan, the way fingers sit when the hand is relaxed
         jt.rotation.y = (1.5 - i) * 0.07;
       } else {
@@ -987,17 +987,17 @@ export function buildHand(): THREE.Group {
 
   // ---- THE THUMB, set low on the inside edge and angled across, with its
   // own fleshy root on the palm.
-  blob(g, 0.017, 0.012, 0.036, -0.037, -0.003, -0.046);
+  blob(g, 0.0155, 0.0125, 0.034, -0.036, -0.004, -0.04).rotation.y = 0.45;
   const thumbRoot = new THREE.Group();
-  thumbRoot.position.set(-0.042, -0.008, -0.05);
+  thumbRoot.position.set(-0.04, -0.007, -0.046);
   thumbRoot.rotation.set(-0.15, 0.62, -0.5);
   g.add(thumbRoot);
-  bone(thumbRoot, 0.0158, 0.026);
+  bone(thumbRoot, 0.0128, 0.032);
   const thumbTip = new THREE.Group();
-  thumbTip.position.z = -0.034;
+  thumbTip.position.z = -0.04;
   thumbRoot.add(thumbTip);
-  bone(thumbTip, 0.0142, 0.022);
-  const tn = blob(thumbTip, 0.011, 0.0042, 0.0135, 0, 0.0105, -0.019, nail);
+  bone(thumbTip, 0.0113, 0.026);
+  const tn = blob(thumbTip, 0.0092, 0.0036, 0.0118, 0, 0.0088, -0.022, nail);
   tn.rotation.x = 0.08;
 
   // ---- THE WRIST AND THE ARM, going back out of the bottom of the frame.
@@ -1009,10 +1009,10 @@ export function buildHand(): THREE.Group {
   arm.rotation.x = 0.16;
   g.add(arm);
   // a shorter, sturdier forearm, with a heavier sleeve and cuff
-  const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.039, 0.029, 0.16, 22, 1, true), skin);
+  const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.028, 0.16, 22, 1, true), skin);
   fore.rotation.x = Math.PI / 2;
   fore.position.z = 0.07;
-  fore.scale.set(1.18, 1, 0.84);
+  fore.scale.set(1.18, 1, 0.73);
   arm.add(fore);
   const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.7, 24, 1, false), sleeve);
   sl.rotation.x = Math.PI / 2;
