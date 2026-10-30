@@ -13,7 +13,7 @@
 import Phaser from 'phaser';
 import { ELEMENTS, type Body, type BossBody, type Element } from '../game/creatures';
 import { BODY_DEFS } from './creatureBodies';
-import { raster, type Raster } from './sdf';
+import { organic, raster, type Mat, type Raster } from './sdf';
 
 export interface Drawable {
   element: Element;
@@ -22,6 +22,15 @@ export interface Drawable {
 
 const BOSS_BODIES: BossBody[] = ['lich', 'seraph', 'hydra', 'queen', 'maw', 'cloud', 'wyrm', 'sphinx', 'kraken', 'mammoth'];
 const FPS = 12;
+
+/** What each body is covered in (art/sdf surface). */
+export const MATERIAL: Partial<Record<Body | BossBody, Mat>> = {};
+const put = (m: Mat, ...bodies: (Body | BossBody)[]) => bodies.forEach((b) => (MATERIAL[b] = m));
+put('fur', 'mole', 'hound', 'ferret', 'fox', 'lynx', 'bear', 'sloth', 'hare', 'boar', 'ram', 'stag', 'yeti', 'hedgehog', 'otter', 'badger', 'ermine', 'mouse', 'possum', 'walrus', 'zebra', 'camel', 'koala', 'beaver', 'moose', 'lemur', 'goat', 'squirrel', 'raccoon', 'skunk', 'porcupine', 'bat', 'moth', 'rhino', 'sphinx', 'mammoth');
+put('scale', 'serpent', 'gecko', 'newt', 'salamander', 'crocodile', 'shark', 'puffer', 'angler', 'eel', 'seahorse', 'ray', 'pangolin', 'narwhal', 'hydra', 'wyrm');
+put('feather', 'owl', 'heron', 'falcon', 'crow', 'penguin', 'chick', 'parrot', 'flamingo', 'swan', 'vulture', 'peacock', 'seraph');
+put('shell', 'crab', 'beetle', 'scorpion', 'centipede', 'mantis', 'spider', 'golem', 'obelisk', 'lobster', 'cricket', 'ladybug', 'wasp', 'bee', 'firefly', 'dragonfly', 'urchin', 'armadillo', 'tortoise', 'starfish', 'roller', 'snail', 'lich', 'queen');
+put('skin', 'toad', 'slug', 'jelly', 'octopus', 'leech', 'worm', 'caterpillar', 'axolotl', 'shroom', 'sprout', 'maw', 'kraken');
 const cache = new Map<string, Raster>();
 const CACHE_MAX = 600;
 
@@ -44,7 +53,7 @@ export function drawCreature(g: Phaser.GameObjects.Graphics, c: Drawable, x: num
   const key = `${c.body}|${c.element}|${Math.round(s * 100)}|${fs}|${fr}`;
   let r = cache.get(key);
   if (!r) {
-    r = raster(def(fr / FPS), s, fs, e);
+    r = raster(organic(def(fr / FPS)), s, fs, e, MATERIAL[c.body]);
     if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
     cache.set(key, r);
   }

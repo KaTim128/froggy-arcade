@@ -173,6 +173,134 @@ function solid(t: Tone, p: Pal): number {
   return t === 'b' ? p.col : t === 'd' ? p.dark : t === 'l' ? p.light : t === 'w' ? 0xf0ead8 : t === 'k' ? 0x24202c : t;
 }
 
+// ------------------------------------------------------------------ texture
+
+/** What a body is covered in: each draws its own kind of surface. */
+export type Mat = 'fur' | 'scale' | 'feather' | 'shell' | 'skin';
+
+/** Where a shape sits, and which way it runs: texture follows the part. */
+function frame(s: Shape): [number, number, number] {
+  switch (s.t) {
+    case 'cap':
+      return [(s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2, Math.atan2(s.y2 - s.y1, s.x2 - s.x1)];
+    case 'tri':
+      return [(s.x1 + s.x2 + s.x3) / 3, (s.y1 + s.y2 + s.y3) / 3, Math.atan2(s.y3 - (s.y1 + s.y2) / 2, s.x3 - (s.x1 + s.x2) / 2)];
+    case 'e':
+    case 'box':
+      return [s.x, s.y, s.a];
+    default:
+      return [s.x, s.y, 0];
+  }
+}
+
+function hash(a: number, b: number, n: number): number {
+  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(n | 0, 2147483647)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Smooth value noise, features `fw` by `fh` pixels across. */
+function vnoise(x: number, y: number, fw: number, fh: number, seed: number): number {
+  const gx = x / fw;
+  const gy = y / fh;
+  const x0 = Math.floor(gx);
+  const y0 = Math.floor(gy);
+  const fx = gx - x0;
+  const fy = gy - y0;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const a = hash(x0, y0, seed);
+  const b = hash(x0 + 1, y0, seed);
+  const c = hash(x0, y0 + 1, seed);
+  const d = hash(x0 + 1, y0 + 1, seed);
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+}
+
+/**
+ * The surface at one pixel.  `ax`, `ay` are pixels from the part's centre,
+ * along and across it; `base` is the lit/shadowed colour the shading chose,
+ * and `sh` its shades.  Returns the colour to draw.
+ */
+function surface(mat: Mat, ax: number, ay: number, seed: number, lit: number, sh: [number, number, number, number]): number {
+  const base = lit > 0.32 ? sh[0] : lit < -0.3 ? sh[2] : sh[1];
+  switch (mat) {
+    case 'fur': {
+      // strokes: long along the part, thin across, in clumps of tufts
+      const n = vnoise(ax, ay, 3.6, 1.1, seed) * 0.7 + vnoise(ax + 9, ay, 1.8, 0.7, seed + 3) * 0.3;
+      if (n > 0.7) return mix(base, sh[0], 0.55);
+      if (n < 0.3) return mix(base, sh[2], 0.6);
+      return base;
+    }
+    case 'scale': {
+      // rows of scales, every other row half a scale along
+      const R = 3;
+      const row = Math.floor(ay / R);
+      const bx = ax + (row & 1) * 1.5;
+      const col = Math.floor(bx / R);
+      const fx = bx / R - col - 0.5;
+      const fy = ay / R - row - 0.15;
+      const d = Math.hypot(fx, fy * 0.9);
+      const j = hash(col, row, seed);
+      if (d > 0.5) return mix(base, sh[3], 0.5);
+      if (fx + fy < -0.35) return mix(base, sh[0], 0.45);
+      return j < 0.2 ? mix(base, sh[2], 0.3) : base;
+    }
+    case 'feather': {
+      // rows of rounded feathers lying over one another, tips to the rear
+      const R = 3.4;
+      const row = Math.floor(ax / R);
+      const fx = ax / R - row;
+      const w = ay / 2.6 + (row & 1) * 0.5;
+      const fy = w - Math.floor(w) - 0.5;
+      const tip = fx + Math.abs(fy) * 0.9;
+      if (tip > 0.96) return mix(base, sh[3], 0.45);
+      if (tip > 0.8) return mix(base, sh[2], 0.5);
+      if (fx < 0.22) return mix(base, sh[0], 0.4);
+      return base;
+    }
+    case 'shell': {
+      // plates with fine seams, a sheen on the lit side
+      const cx = Math.floor((ax + hash(Math.floor(ay / 5), 0, seed) * 5) / 5);
+      const cy = Math.floor(ay / 5);
+      const fx = (ax + hash(cy, 0, seed) * 5) / 5 - cx;
+      const fy = ay / 5 - cy;
+      const e = Math.min(fx, 1 - fx, fy, 1 - fy);
+      if (e < 0.1) return mix(base, sh[3], 0.4);
+      if (lit > 0.1 && e < 0.22) return mix(base, sh[0], 0.4);
+      return hash(cx, cy, seed + 5) < 0.25 ? mix(base, sh[2], 0.25) : base;
+    }
+    default: {
+      // skin: soft blotches, no grit
+      const n = vnoise(ax, ay, 4, 4, seed);
+      if (n > 0.72) return mix(base, sh[0], 0.4);
+      if (n < 0.25) return mix(base, sh[2], 0.4);
+      return base;
+    }
+  }
+}
+
+/**
+ * Natural limbs.  A leg that is a bare stick stuck on a body reads as
+ * shapes joined; here every leg gets a haunch where it leaves the body and a
+ * foot where it lands, so the joints have mass and the legs have an ending.
+ */
+export function organic(d: BodyDesc): BodyDesc {
+  const parts: Part[] = [];
+  let grew = false;
+  for (const pt of d.parts) {
+    parts.push(pt);
+    const s = pt.s;
+    if (pt.cut || s.t !== 'cap' || pt.tone === 'w') continue;
+    const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+    if (len < 2.5 || s.r1 < 0.4 || s.r2 < 0.3 || s.y2 < 6.2 || s.y2 - s.y1 < 2) continue;
+    // (each goes right after its leg, so a later cut carves them too)
+    parts.push({ s: { t: 'c', x: s.x1 + (s.x2 - s.x1) * 0.16, y: s.y1 + (s.y2 - s.y1) * 0.16, r: s.r1 * 1.12 }, tone: pt.tone, k: 0.9, g: pt.g });
+    parts.push({ s: { t: 'e', x: s.x2 + s.r2 * 0.55, y: s.y2 - s.r2 * 0.25, rx: s.r2 * 1.7, ry: s.r2 * 0.8, a: 0 }, tone: pt.tone, k: 0.9, g: pt.g });
+    grew = true;
+  }
+  return grew ? { parts, decals: d.decals } : d;
+}
+
 // ------------------------------------------------------------------ raster
 
 /** Runs of one colour: x, y (pixels from the snapped origin), width. */
@@ -188,7 +316,7 @@ const LY = -0.83;
  * Draw `d` at scale `s`, facing `f` (1 right, -1 left), into runs of pixels
  * relative to the creature's own (integer) origin.
  */
-export function raster(d: BodyDesc, s: number, f: number, p: Pal): Raster {
+export function raster(d: BodyDesc, s: number, f: number, p: Pal, mat?: Mat): Raster {
   if (!d.parts.length) return { cols: [], runs: [] };
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const pt of d.parts) {
@@ -228,7 +356,7 @@ export function raster(d: BodyDesc, s: number, f: number, p: Pal): Raster {
             D = Math.max(D, -dd);
             continue;
           }
-          D = D === Infinity ? dd : smin(D, dd, pt.k);
+          D = D === Infinity ? dd : smin(D, dd, mat && pt.k >= 0.6 ? Math.max(pt.k * 1.45, 0.9) : pt.k);
           if (dd < bestD) {
             bestD = dd;
             best = n;
@@ -263,7 +391,15 @@ export function raster(d: BodyDesc, s: number, f: number, p: Pal): Raster {
         // lit where the surface faces the light; it fades a few units in
         const depth = Math.max(0, Math.min(1, 1 + field[at] / (2.6 / s)));
         const lit = ((gx / m) * LX + (gy / m) * LY) * depth;
-        out[j * W + i] = lit > 0.32 ? sh[0] : lit < -0.3 ? sh[2] : sh[1];
+        if (mat) {
+          // THE SKIN: the surface this body is covered in, laid along each part
+          const fr = frame(pt.s);
+          const u = (px0 + i + 0.5) / (s * f) - fr[0];
+          const v = (py0 + j + 0.5) / s - fr[1];
+          const c = Math.cos(-fr[2]);
+          const n = Math.sin(-fr[2]);
+          out[j * W + i] = surface(mat, (u * c - v * n) * s, (u * n + v * c) * s, tone[at], lit, sh);
+        } else out[j * W + i] = lit > 0.32 ? sh[0] : lit < -0.3 ? sh[2] : sh[1];
         break;
       }
     }
