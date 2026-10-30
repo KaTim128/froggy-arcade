@@ -181,6 +181,8 @@ let keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
 let hud: Phaser.GameObjects.BitmapText | null = null;
 let chips: Phaser.GameObjects.GameObject[] = [];
 let banner: Phaser.GameObjects.BitmapText | null = null;
+/** "YOU" over the player's own frog, so there is never any doubt which it is. */
+let youTag: Phaser.GameObjects.BitmapText | null = null;
 let nextPlace = 4;
 let objs: Phaser.GameObjects.GameObject[] = [];
 
@@ -1088,6 +1090,26 @@ function drawFrog(f: Frog, t: number): void {
     .setDepth(9 + f.z * 0.05);
 }
 
+/**
+ * WHICH FROG IS YOURS (user, 30 Oct): a gold ring pulsing under it and a bobbing
+ * YOU with an arrow over it, for as long as it is in the match.
+ */
+function drawYou(g: Phaser.GameObjects.Graphics, t: number): void {
+  const f = player();
+  const tag = youTag;
+  if (!tag) return;
+  if (!f.alive || f.fall) {
+    tag.setVisible(false);
+    return;
+  }
+  const x = sx(f.x);
+  const ground = sy(f.z);
+  const top = sy(f.z, f.y) - 15 + Math.sin(t * 5) * 1.2;
+  g.lineStyle(1, 0xffd45e, 0.55 + 0.3 * Math.sin(t * 6)).strokeEllipse(x, ground + 1, 18 + Math.sin(t * 6) * 1.2, 9.5);
+  g.fillStyle(0xffd45e, 1).fillTriangle(x - 3, top + 1, x + 3, top + 1, x, top + 5);
+  tag.setVisible(true).setPosition(x, top).setDepth(60);
+}
+
 function drawTongues(g: Phaser.GameObjects.Graphics): void {
   for (const f of frogs) {
     if (f.tongue <= 0 || !f.alive) continue;
@@ -1142,6 +1164,7 @@ function draw(t: number): void {
   drawPads(t);
   drawCracks(fx);
   for (const f of frogs) drawFrog(f, t);
+  drawYou(fx, t);
   drawTongues(fx);
   drawBits(fx);
 }
@@ -1158,7 +1181,8 @@ function drawChips(): void {
     const x = 6 + i * 40;
     const y = api.area.y + 3;
     chips.push(s.add.rectangle(x, y, 37, 10, 0x0a0c16, 0.8).setOrigin(0, 0).setStrokeStyle(1, f.alive ? f.col : 0x3a3a48).setDepth(40));
-    chips.push(text(s, x + 3, y + 1, f.name, f.alive ? PALETTE.cream : 0x5a5a68).setDepth(41));
+    // (the player's own chip says YOU, in gold, so it can be told at a glance)
+    chips.push(text(s, x + 3, y + 1, i === 0 ? 'YOU' : f.name, f.alive ? (i === 0 ? PALETTE.gold : PALETTE.cream) : 0x5a5a68).setDepth(41));
     if (!f.alive) chips.push(s.add.rectangle(x + 2, y + 5, 33, 1, 0xff5a5a).setOrigin(0, 0).setDepth(42));
   });
 }
@@ -1218,7 +1242,7 @@ export const padBattles: MinigameModule = {
   tutorial: {
     pitch: 'FOUR FROGS, 35 LILY PADS, DEEP WATER BETWEEN THEM. BE THE LAST ONE DRY.',
     steps: [
-      { say: 'FOUR FROGS, EACH ON A LILY PAD, WITH WATER BETWEEN THE PADS. FALL IN AND YOU ARE OUT. LAST FROG STANDING WINS.', demo: 'pads.grid' },
+      { say: 'FOUR FROGS, EACH ON A LILY PAD, WITH WATER BETWEEN THE PADS. YOU ARE THE ONE MARKED YOU, IN GOLD. FALL IN AND YOU ARE OUT. LAST FROG STANDING WINS.', demo: 'pads.grid' },
       { say: 'YOU CAN WALK ABOUT ON YOUR OWN PAD. TO GET TO ANOTHER ONE, JUMP: SPACE JUMPS TO THE NEXT PAD THE WAY YOU FACE.', phone: 'YOU CAN WALK ABOUT ON YOUR OWN PAD. TO GET TO ANOTHER ONE, PRESS JUMP: IT JUMPS TO THE NEXT PAD THE WAY YOU FACE.', demo: 'pads.jump' },
       { say: 'A PAD ABOUT TO GO FLASHES, SHAKES AND CRACKS - THEN SINKS. JUMP OFF IT IN TIME. STAND ON ONE PAD TOO LONG AND IT GOES, TOO.', demo: 'pads.collapse' },
       { say: 'J WHIPS YOUR TONGUE OUT IN FRONT - EVEN ACROSS A GAP. WHOEVER IT CATCHES IS KNOCKED BACK, MAYBE INTO THE WATER.', phone: 'TONGUE WHIPS IT OUT IN FRONT - EVEN ACROSS A GAP. WHOEVER IT CATCHES IS KNOCKED BACK, MAYBE INTO THE WATER.', demo: 'pads.tongue' },
@@ -1292,6 +1316,8 @@ export const padBattles: MinigameModule = {
     }
     flies = Array.from({ length: 7 }, () => ({ x: 20 + Math.random() * (GAME_W - 40), y: api.area.y + 20 + Math.random() * (api.area.h - 30), a: Math.random() * 6, s: 0.6 + Math.random() }));
     hud = text(scene, GAME_W - 6, api.area.y + 4, '', PALETTE.cream).setOrigin(1, 0).setDepth(41);
+    youTag = text(scene, 0, 0, 'YOU', PALETTE.gold).setOrigin(0.5, 1).setDepth(60).setVisible(false);
+    objs.push(youTag);
     banner = centerText(scene, GAME_W / 2, api.area.y + 26, '', PALETTE.gold, 16).setDepth(45).setAlpha(0);
     drawChips();
     const kb = scene.input.keyboard!;
