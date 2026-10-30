@@ -416,6 +416,7 @@ Rules for every batch:
 | Q26 | (30 Oct) Creature Clash cooldown ring | done: touchControls.setCooldown draws a filling ring, dark sector, seconds and muted icon on each move button from the arena's real cds |
 | Q27 | (30 Oct) Croaked: PAC FROG renamed BIG FROG; easier to catch as the frog; better look and map | done: frog faster than the tadpole (6.5 v 5.2) when you are it, 60 s, wider catch, 5 traps / 1.6 s / 3.4 s hold, tadpole AI less sharp; maze has 16 extra loops and a start two thirds of the way instead of the far ends; new frog, tadpole and water drawing |
 | Q28 | (30 Oct) Bog Ball: full power reachable at the side of the field | done: the pull that reaches the screen edge in the pull direction counts as 100% (min 12) |
+| Q29 | (30 Oct) Pad Battles: a frog that stands on one pad too long falls | done: after 6 s on the same pad it cracks (the normal warning) and sinks 1.8 s later; jumping to another pad restarts the count; the tutorial says so. Checked: a standing player falls at about 6.5 s |
 
 ### Batch 8 — Per-game fixes (items 8, 9-blackjack, 10-games, 12, 13, 19-bog/crane, 21-whack, 28, 32-fence, 38, 47, 49). Depends on B4.
 - **Fence Wars:**
