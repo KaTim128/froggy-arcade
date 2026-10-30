@@ -878,10 +878,11 @@ export function buildHand(): THREE.Group {
   // ---- THE PALM.  Two soft overlapping ovals -- the broad back of the hand
   // and the heel under it -- so it narrows into the wrist rather than ending
   // on a straight edge.
-  blob(g, 0.047, 0.019, 0.058, 0.002, 0, -0.058);
-  blob(g, 0.04, 0.02, 0.04, -0.006, -0.004, -0.022);
+  // (broader and thicker than it was -- user, 30 Oct: it read thin, small and long)
+  blob(g, 0.058, 0.027, 0.06, 0.002, 0, -0.058);
+  blob(g, 0.05, 0.028, 0.044, -0.006, -0.004, -0.022);
   // the ridge of the knuckles across the back
-  for (let i = 0; i < 4; i++) blob(g, 0.0105, 0.009, 0.0105, -0.03 + i * 0.0195, 0.011, -0.104);
+  for (let i = 0; i < 4; i++) blob(g, 0.0145, 0.0125, 0.0135, -0.03 + i * 0.0195, 0.015, -0.104);
 
   // ---- FOUR FINGERS, three joints each, tapering to the tips.  Each joint
   // is a group the next one hangs from, so a curl bends the whole finger the
@@ -892,7 +893,7 @@ export function buildHand(): THREE.Group {
     [0.045, 0.028, 0.02],
     [0.035, 0.022, 0.017],
   ];
-  const RAD = [0.0098, 0.0102, 0.0095, 0.0082];
+  const RAD = [0.0132, 0.0138, 0.0128, 0.0112];
   const joints: THREE.Group[][] = [];
   for (let i = 0; i < 4; i++) {
     const chain: THREE.Group[] = [];
@@ -921,17 +922,17 @@ export function buildHand(): THREE.Group {
 
   // ---- THE THUMB, set low on the inside edge and angled across, with its
   // own fleshy root on the palm.
-  blob(g, 0.019, 0.017, 0.03, -0.034, -0.008, -0.04);
+  blob(g, 0.026, 0.023, 0.034, -0.036, -0.008, -0.04);
   const thumbRoot = new THREE.Group();
   thumbRoot.position.set(-0.042, -0.008, -0.05);
   thumbRoot.rotation.set(-0.15, 0.62, -0.5);
   g.add(thumbRoot);
-  bone(thumbRoot, 0.0115, 0.026);
+  bone(thumbRoot, 0.0158, 0.026);
   const thumbTip = new THREE.Group();
   thumbTip.position.z = -0.034;
   thumbRoot.add(thumbTip);
-  bone(thumbTip, 0.0105, 0.022);
-  const tn = blob(thumbTip, 0.0085, 0.0034, 0.011, 0, 0.0078, -0.019, nail);
+  bone(thumbTip, 0.0142, 0.022);
+  const tn = blob(thumbTip, 0.011, 0.0042, 0.0135, 0, 0.0105, -0.019, nail);
   tn.rotation.x = 0.08;
 
   // ---- THE WRIST AND THE ARM, going back out of the bottom of the frame.
@@ -942,20 +943,21 @@ export function buildHand(): THREE.Group {
   arm.name = 'arm';
   arm.rotation.x = 0.16;
   g.add(arm);
-  const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.03, 0.2, 20, 1, true), skin);
+  // a shorter, sturdier forearm, with a heavier sleeve and cuff
+  const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.044, 0.16, 22, 1, true), skin);
   fore.rotation.x = Math.PI / 2;
-  fore.position.z = 0.09;
-  fore.scale.set(1.18, 1, 0.82);
+  fore.position.z = 0.07;
+  fore.scale.set(1.18, 1, 0.84);
   arm.add(fore);
-  blob(arm, 0.031, 0.021, 0.028, 0, 0, 0.002);
-  const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.043, 0.7, 22, 1, false), sleeve);
+  blob(arm, 0.042, 0.03, 0.032, 0, 0, 0.002);
+  const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.7, 24, 1, false), sleeve);
   sl.rotation.x = Math.PI / 2;
-  sl.position.z = 0.485;
-  sl.scale.set(1.12, 1, 0.9);
+  sl.position.z = 0.5;
+  sl.scale.set(1.12, 1, 0.92);
   arm.add(sl);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.0065, 10, 26), cuff);
-  ring.position.z = 0.135;
-  ring.scale.set(1.12, 0.9, 1);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.049, 0.0085, 10, 28), cuff);
+  ring.position.z = 0.15;
+  ring.scale.set(1.12, 0.92, 1);
   arm.add(ring);
 
   g.userData.joints = joints;
