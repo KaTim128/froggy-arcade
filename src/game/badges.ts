@@ -83,6 +83,7 @@ export const BADGES: BadgeDef[] = [
   { id: 's_lazy', name: 'LAZY HIDING', desc: 'HID IN ONE SPOT FOR A WHOLE ROUND OF HIDE AND SEEK.', hint: 'A SECRET.', col: 0x6a8a5a, kind: 'secret' },
   { id: 's_404', name: 'ERROR FROG-04', desc: 'SAW SOMETHING IN WHACK-A-FROG THAT WAS NOT A FROG.', hint: 'A SECRET.', col: 0x40404a, kind: 'secret' },
   { id: 's_alley', name: 'OFF THE MAP', desc: 'WALKED DOWN EVERY ONE OF THE SIDE ALLEYS.', hint: 'A SECRET.', col: 0x4a5a6a, kind: 'secret' },
+  { id: 's_back', name: 'THE WAY AROUND', desc: 'FOUND THE ALLEY BESIDE THE ARCADE.', hint: 'A SECRET.', col: 0x3a4a5a, kind: 'secret' },
   { id: 's_roof', name: 'UP ON THE ROOF', desc: 'FOUND THE WAY OUT ON TO THE ROOF FROM THE STAIRS.', hint: 'A SECRET.', col: 0x2a3a6a, kind: 'secret' },
 ];
 

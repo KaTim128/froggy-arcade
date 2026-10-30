@@ -24,12 +24,12 @@ import { caughtByPolice, stealthPhase } from '../game/patrol';
 import { lookFor } from '../game/catalog';
 import { Patrol } from '../game/patrol';
 import { TokenHud } from '../ui/hud';
-import { PALETTE } from '../render/palette';
+import { PALETTE, daylight } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
-import { paintExterior, startSignFlicker, KERB_Y, MAN_X } from '../art/exterior';
+import { paintEntrance, paintExterior, startSignFlicker, KERB_Y, MAN_X } from '../art/exterior';
 import { MysteryMan } from '../art/mysteryMan';
 import { Player } from '../art/player';
 import { CAMERA_PRIZE, shelfStock } from '../game/content';
@@ -114,7 +114,8 @@ export class ExteriorDay extends Phaser.Scene {
   /** Sunrise has just come: the shutters go up as you watch. */
   private opening = false;
   /** Down over the doors at night (after the night in the arcade, when it keeps hours). */
-  private shutter: Phaser.GameObjects.Container | null = null;
+  /** The shut, chained doors drawn over the open ones, until sunrise. */
+  private shutter: Phaser.GameObjects.GameObject[] | null = null;
 
   create(): void {
     this.talking = null;
@@ -158,7 +159,7 @@ export class ExteriorDay extends Phaser.Scene {
     // the shutters roll up at sunrise
     this.shutter = null;
     // (and before it, once it has shut for the night: nobody is let back in at the front)
-    if (time !== 'midnight' && (this.lifeDark || ((this.opening || this.woke) && st0.froggyGone))) this.shutter = this.paintShutter(refs.doorRect);
+    if (time !== 'midnight' && (this.lifeDark || ((this.opening || this.woke) && st0.froggyGone))) this.shutter = this.paintLockedDoor(refs.doorRect, sunny);
     startSignFlicker(this, refs);
     this.doorX = refs.doorX;
     this.errand = null;
@@ -466,7 +467,7 @@ export class ExteriorDay extends Phaser.Scene {
       }
       if (this.shutter) {
         audio.sfx('door_rattle', 0.7);
-        this.say(`THE SHUTTERS ARE DOWN. THE ARCADE OPENS AT ${twelveHour(SUNRISE_HOUR)}.`);
+        this.say(`THE DOORS ARE CHAINED SHUT. THE ARCADE OPENS AT ${twelveHour(SUNRISE_HOUR)}.`);
         return;
       }
       this.locked = true;
@@ -665,46 +666,41 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   /**
-   * The roller shutter over the doors: steel slats in a box under the sign,
-   * a padlocked bottom rail, and OPENS 7:00 AM stencilled on it.
+   * The arcade shut for the night: the same glass double doors as by day,
+   * closed, a steel hasp across them, a chain looped through both pull bars
+   * and a brass padlock hanging from it -- all on the INSIDE of the glass,
+   * with the street's reflections over it, as the shops along the street are
+   * locked.  Drawn over the open doors, so sunrise only has to take it away.
    */
-  private paintShutter(door: { x: number; y: number; w: number; h: number }): Phaser.GameObjects.Container {
-    const x = door.x - 3;
-    const w = door.w + 6;
-    const top = door.y - 4;
-    const h = door.h + 4;
-    const g = this.add.graphics();
-    g.fillStyle(0x14100c, 1).fillRect(0, 0, w, h);
-    g.fillStyle(0x8a929e, 1).fillRect(1, 0, w - 2, h - 1);
-    for (let y = 2; y < h - 3; y += 3) {
-      g.fillStyle(0x5a626e, 1).fillRect(1, y, w - 2, 1);
-      g.fillStyle(0xb8c0ca, 0.6).fillRect(1, y + 1, w - 2, 1);
-    }
-    g.fillStyle(0x3a3f48, 1).fillRect(0, h - 4, w, 4);
-    g.fillStyle(0xd8a838, 1).fillRect(w / 2 - 2, h - 4, 4, 3);
-    const label = centerText(this, w / 2, h / 2 - 2, 'OPENS', 0x2a2e36);
-    const label2 = centerText(this, w / 2, h / 2 + 7, twelveHour(SUNRISE_HOUR).replace(':00', ''), 0x2a2e36);
-    // the box it rolls up into
-    const box = this.add.rectangle(x - 1, top - 4, w + 2, 5, 0x3a3f48).setOrigin(0, 0).setStrokeStyle(1, 0x14100c).setDepth(46);
-    const c = this.add.container(x, top, [g, label, label2]).setDepth(45);
-    c.setData('h', h);
-    c.once(Phaser.GameObjects.Events.DESTROY, () => box.destroy());
-    return c;
+  private paintLockedDoor(door: { x: number; y: number; w: number; h: number }, sunny: boolean): Phaser.GameObjects.GameObject[] {
+    const before = new Set(this.children.list);
+    const wall = this.add.graphics();
+    paintEntrance(this, wall, {
+      doorX: door.x + door.w / 2,
+      base: door.y + door.h,
+      lampY: 0,
+      closed: true,
+      day: sunny,
+      night: false,
+      c: sunny ? daylight : (n: number) => n,
+      depth: 45,
+      bare: true,
+    });
+    return this.children.list.filter((o) => !before.has(o));
   }
 
-  /** Sunrise: the shutter rattles up into its box, and the doors are open. */
+  /** Sunrise: the chain comes off and the doors are open. */
   private raiseShutter(): void {
     const sh = this.shutter;
     if (!sh) return;
     audio.sfx('door_rattle', 0.6);
     this.tweens.add({
       targets: sh,
-      scaleY: 0.04,
+      alpha: 0,
       delay: 500,
-      duration: 1800,
-      ease: 'Quad.InOut',
+      duration: 1200,
       onComplete: () => {
-        sh.destroy();
+        sh.forEach((o) => o.destroy());
         if (this.shutter === sh) this.shutter = null;
         this.say(`${twelveHour(SUNRISE_HOUR)}. SUNRISE - THE ARCADE IS OPEN.`);
       },
@@ -927,8 +923,14 @@ export class ExteriorDay extends Phaser.Scene {
       return;
     }
 
+    // the alley is a secret: no prompt, ever -- [E] (or INTERACT) there just goes
+    if (this.spot === 'alley') {
+      this.prompt.setVisible(false);
+      this.promptPlate.setVisible(false);
+      return;
+    }
     const begLabel = !canBeg() ? 'YOUR BED IS AT LILY\'S' : clock().dark ? '[E] BEG OR SLEEP' : '[E] BEG';
-    const label = this.spot === 'beg' ? begLabel : this.spot === 'man' ? '[E] TALK' : this.spot === 'alley' ? '[E] ALLEY' : this.time0 === 'midnight' ? '[E] DOOR' : '[E] GO IN';
+    const label = this.spot === 'beg' ? begLabel : this.spot === 'man' ? '[E] TALK' : this.time0 === 'midnight' ? '[E] DOOR' : '[E] GO IN';
     this.showPrompt(label);
   }
 

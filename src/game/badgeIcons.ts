@@ -289,6 +289,13 @@ const ICONS: Record<string, Draw> = {
     box(g, x + 3 * k, y, 3 * k, 9 * k, ink);
     disc(g, x, y + 2 * k, 1.2 * k, hi);
   },
+  s_back: (g, x, y, k, ink, hi) => {
+    // a side door left ajar in a dark wall, a sliver of light down its edge
+    box(g, x, y, 8 * k, 9 * k, ink);
+    box(g, x + 1 * k, y + 0.5 * k, 3 * k, 7 * k, 0x101830);
+    line(g, x - 1 * k, y - 3.5 * k, x - 1 * k, y + 4 * k, hi, 0.9);
+    disc(g, x + 2.4 * k, y + 0.5 * k, 0.4 * k, hi);
+  },
   s_roof: (g, x, y, k, ink, hi) => {
     // a stair up to a door open on stars
     for (let i = 0; i < 3; i++) box(g, x - 3 * k + i * 2 * k, y + 3 * k - i * 1.6 * k, 2 * k, 1.6 * k, ink);

@@ -3,7 +3,7 @@
  *
  * Two ways round, chosen after PLAY:
  *
- *   PAC FROG   you are the frog.  Catch the tadpole before the clock runs out.
+ *   BIG FROG   you are the frog.  Catch the tadpole before the clock runs out.
  *              It is QUICKER than you, and it runs: every turn it takes keeps
  *              it farthest from you with the most room behind it.  What the
  *              frog has is TRAPS -- drop one where you stand (SPACE), and a
@@ -13,7 +13,11 @@
  *              off now and then, and lays traps at the junctions as it goes --
  *              a faint ring on the water.  Caught is a loss.
  *
- * (Log, follow-up to #70: the hunter has traps; the survivor is the faster.)
+ * (Log, follow-up to #70: the hunter has traps; the survivor is the faster.
+ * User, 30 Oct: the frog was too hard to play -- now it is the quicker of the
+ * two when you are it, with more time, a wider reach, and more and longer
+ * traps; the maze has more loops (so a tadpole still has somewhere to run),
+ * and the two start nearer, not at the far ends.)
  *
  * A NEW MAZE EVERY ROUND, AND EVERY CORNER OF IT REACHABLE.  It is carved as a
  * perfect maze (one path between any two cells), then most of its dead ends
@@ -44,18 +48,28 @@ const COLS = 27;
 const ROWS = 13;
 const CELL = 11;
 /** How long the frog has to catch the tadpole. */
-const HUNT_S = 45;
+const HUNT_S = 60;
 /** Cells a second, whoever is playing which: the tadpole is always the quicker. */
 const SURVIVOR_SPEED = 6.2;
 const HUNTER_SPEED = 5.1;
+/** When YOU are the frog: the frog is the quicker, and the tadpole slows to a chase it can lose. */
+const PLAYER_FROG_SPEED = 6.5;
+const PLAYER_TADPOLE_SPEED = 5.2;
 /** Traps: how many may lie at once, the wait between two, and how long one holds. */
 const MAX_TRAPS = 3;
 const TRAP_COOLDOWN = 4;
 const TRAP_HOLD = 2.2;
+/** The player-frog's own: more of them, sooner, holding longer. */
+const PLAYER_MAX_TRAPS = 5;
+const PLAYER_TRAP_COOLDOWN = 1.6;
+const PLAYER_TRAP_HOLD = 3.4;
+const maxTraps = (): number => (role === 'frog' ? PLAYER_MAX_TRAPS : MAX_TRAPS);
 /** The odds the computer's tadpole spots a trap it is about to swim into. */
 const SPOT_TRAP = 0.4;
+/** ...and the player-frog's tadpole is less watchful. */
+const PLAYER_SPOT_TRAP = 0.15;
 /** How close counts as caught, in cells. */
-const CATCH = 0.62;
+const CATCH = 0.95;
 
 interface Mover {
   /** The cell it is leaving and the one it is going to, and how far between (0..1). */
@@ -128,7 +142,7 @@ export function makeMaze(rng: () => number = Math.random): boolean[][] {
   const openNeighbours = (x: number, y: number): number => [0, 1, 2, 3].filter((d) => g[y + DY[d]]?.[x + DX[d]]).length;
   for (let y = 1; y < ROWS - 1; y += 2) {
     for (let x = 1; x < COLS - 1; x += 2) {
-      if (openNeighbours(x, y) !== 1 || rng() > 0.85) continue;
+      if (openNeighbours(x, y) !== 1 || rng() > 0.95) continue;
       const walls = ([0, 1, 2, 3] as Dir[]).filter((d) => {
         const wx = x + DX[d];
         const wy = y + DY[d];
@@ -142,7 +156,7 @@ export function makeMaze(rng: () => number = Math.random): boolean[][] {
       }
     }
   }
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 16; i++) {
     const x = 1 + Math.floor(rng() * ((COLS - 2) / 2)) * 2 + (rng() < 0.5 ? 1 : 0);
     const y = 1 + Math.floor(rng() * ((ROWS - 2) / 2)) * 2 + (x % 2 ? 1 : 0);
     if (x > 0 && y > 0 && x < COLS - 1 && y < ROWS - 1) g[y][x] = true;
@@ -166,6 +180,25 @@ export function distances(g: boolean[][], sx: number, sy: number, block?: string
     }
   }
   return d;
+}
+
+/** The open cell about two thirds as far as the farthest from (x, y). */
+function nearTwoThirds(g: boolean[][], x: number, y: number): [number, number] {
+  const d = distances(g, x, y);
+  let far = 0;
+  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) far = Math.max(far, d[j][i]);
+  const want = Math.round(far * 0.62);
+  let best: [number, number] = [x, y];
+  let gap = Infinity;
+  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
+    if (d[j][i] < 0) continue;
+    const e = Math.abs(d[j][i] - want);
+    if (e < gap) {
+      gap = e;
+      best = [i, j];
+    }
+  }
+  return best;
 }
 
 /** The farthest open cell from (x, y). */
@@ -239,7 +272,7 @@ function runnerChoice(m: Mover): Dir | null {
     // a trap ahead: seen (once, by the odds) it is a wall; unseen it is swum into
     const tk = keyOf(nx, ny);
     if (traps.has(tk)) {
-      if (!spotted.has(tk)) spotted.set(tk, Math.random() < SPOT_TRAP);
+      if (!spotted.has(tk)) spotted.set(tk, Math.random() < (role === 'frog' ? PLAYER_SPOT_TRAP : SPOT_TRAP));
       if (spotted.get(tk)) continue;
     }
     // room to run: the cells it reaches first, from there, not passing back through here
@@ -247,7 +280,7 @@ function runnerChoice(m: Mover): Dir | null {
     let room = 0;
     for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) if (mine[j][i] >= 0 && mine[j][i] < 14 && (hunter[j][i] < 0 || mine[j][i] + 1 < hunter[j][i])) room++;
     const back = d === ((m.dir + 2) % 4) ? -3 : 0;
-    const s = hunter[ny][nx] * 2 + room * 0.6 + back + Math.random() * 0.8;
+    const s = hunter[ny][nx] * 2 + room * 0.6 + back + Math.random() * (role === 'frog' ? 3.2 : 0.8);
     if (s > score) {
       score = s;
       best = d;
@@ -295,7 +328,7 @@ function landed(m: Mover): boolean {
   const k = keyOf(m.cx, m.cy);
   if (!traps.delete(k)) return false;
   spotted.delete(k);
-  m.held = TRAP_HOLD;
+  m.held = role === 'frog' ? PLAYER_TRAP_HOLD : TRAP_HOLD;
   audio.sfx('ui_blip', 0.6);
   return true;
 }
@@ -303,13 +336,13 @@ function landed(m: Mover): boolean {
 /** Drop a trap where the frog is (the cell it is nearer).  False if it cannot. */
 function dropTrap(): boolean {
   const frog = role === 'frog' ? you : them;
-  if (phase !== 'play' || !frog || trapCd > 0 || traps.size >= MAX_TRAPS) return false;
+  if (phase !== 'play' || !frog || trapCd > 0 || traps.size >= maxTraps()) return false;
   const x = frog.k < 0.5 ? frog.cx : frog.tx;
   const y = frog.k < 0.5 ? frog.cy : frog.ty;
   const k = keyOf(x, y);
   if (traps.has(k)) return false;
   traps.add(k);
-  trapCd = TRAP_COOLDOWN;
+  trapCd = role === 'frog' ? PLAYER_TRAP_COOLDOWN : TRAP_COOLDOWN;
   audio.sfx('water_plip', 0.5);
   return true;
 }
@@ -341,12 +374,14 @@ function arrived(m: Mover): void {
 function newRound(): void {
   grid = makeMaze();
   // the two start at the two ends of the longest way through it
+  // (not the far ends any more: about two thirds of the way, so a chase starts
+  // near enough to be a chase)
   const a = farthest(grid, 1, 1);
-  const b = farthest(grid, a[0], a[1]);
+  const b = nearTwoThirds(grid, a[0], a[1]);
   const mine = role === 'frog' ? a : b;
   const theirs = role === 'frog' ? b : a;
-  you = mover(mine[0], mine[1], role === 'frog' ? HUNTER_SPEED : SURVIVOR_SPEED);
-  them = mover(theirs[0], theirs[1], role === 'frog' ? SURVIVOR_SPEED : HUNTER_SPEED);
+  you = mover(mine[0], mine[1], role === 'frog' ? PLAYER_FROG_SPEED : SURVIVOR_SPEED);
+  them = mover(theirs[0], theirs[1], role === 'frog' ? PLAYER_TADPOLE_SPEED : HUNTER_SPEED);
   traps = new Set();
   spotted = new Map();
   trapCd = 1.5;
@@ -388,6 +423,16 @@ function drawWalls(): void {
         const h = hash(x * 5 + i, y * 3 - i);
         g.fillStyle(h > 0.5 ? 0x14303b : 0x0b1f27, 1).fillRect(px + Math.floor(h * CELL), py + Math.floor(hash(y + i, x - i) * CELL), 1, 1);
       }
+      // ripples: a pale arc and its fainter twin, here and there, and a shaft of
+      // light across the water where the cell is clear of banks to the north
+      const rp = hash(x * 3 + 1, y * 5 + 2);
+      if (rp > 0.82) {
+        const rx = px + 2 + Math.floor(hash(y, x + 9) * 6);
+        const ry = py + 3 + Math.floor(hash(x, y + 4) * 5);
+        g.lineStyle(1, 0x3a7a8a, 0.55).beginPath().arc(rx, ry, 2.6, Math.PI * 1.1, Math.PI * 1.9, false).strokePath();
+        g.lineStyle(1, 0x2a5a6a, 0.35).beginPath().arc(rx, ry, 4.2, Math.PI * 1.15, Math.PI * 1.85, false).strokePath();
+      }
+      if (!wall(x, y - 1) && (x + y) % 3 === 0) g.fillStyle(0x2a6a7a, 0.1).fillRect(px, py, CELL, CELL);
       if (hash(x, y) > 0.93) {
         const lx = px + 2 + Math.floor(hash(y, x) * 4);
         const ly = py + 6;
@@ -448,7 +493,7 @@ function showPicker(scene: Phaser.Scene): void {
     picker.push(centerText(scene, x, top + 64, line2, PALETTE.ash).setDepth(41));
     picker.push(centerText(scene, x, top + 82, key, PALETTE.tealLight).setDepth(41));
   };
-  side(cx - 58, 'PAC FROG', 'CATCH IT: IT IS', 'QUICKER - TRAP IT', 'frog', '[1]');
+  side(cx - 58, 'BIG FROG', 'RUN IT DOWN, OR', 'TRAP IT IN TIME', 'frog', '[1]');
   side(cx + 58, 'SURVIVOR', 'EAT EVERY FLY,', 'MIND THE TRAPS', 'survivor', '[2]');
 }
 
@@ -489,46 +534,118 @@ function drawLive(t: number): void {
   }
   const frogM = role === 'frog' ? you : them;
   const tadM = role === 'frog' ? them : you;
-  if (tadM) {
-    const p = posOf(tadM);
-    const px = ox + p.x * CELL + CELL / 2;
-    const py = oy + p.y * CELL + CELL / 2;
-    // a tadpole: a round head, and a tail that wags behind it
-    const back = (tadM.dir + 2) % 4;
-    for (let i = 1; i <= 3; i++) {
-      const w = Math.sin(t * 16 - i) * i * 0.5;
-      g.fillStyle(0x3a6ad8, 1 - i * 0.2).fillCircle(px + DX[back] * i * 1.6 + DY[back] * w, py + DY[back] * i * 1.6 + DX[back] * w, 1.6 - i * 0.3);
-    }
-    g.fillStyle(0x1a2a5a, 1).fillCircle(px, py, 3.6);
-    g.fillStyle(0x4a7ae0, 1).fillCircle(px, py, 3);
-    g.fillStyle(0x8ab4ff, 1).fillCircle(px - 0.8, py - 0.8, 1.3);
-    if (tadM.held > 0) {
-      // caught in the reeds: a net that shrinks as it lets go
-      g.lineStyle(1, 0xf0d060, 1).strokeCircle(px, py, 3 + tadM.held * 1.4);
-      g.lineStyle(1, 0xc8a050, 0.8).lineBetween(px - 5, py, px + 5, py).lineBetween(px, py - 5, px, py + 5);
-    }
-    g.fillStyle(0xffffff, 1).fillCircle(px + DX[tadM.dir] * 1.2 - DY[tadM.dir], py + DY[tadM.dir] * 1.2 - DX[tadM.dir], 0.8);
+  if (tadM) drawTadpole(g, tadM, t);
+  if (frogM) drawFrog(g, frogM, t);
+}
+
+/**
+ * THE TADPOLE: a plump glossy body with a belly, a long tail that sweeps
+ * behind it in a wave, two eyes on top and a sheen -- and in a trap, a net.
+ */
+function drawTadpole(g: Phaser.GameObjects.Graphics, m: Mover, t: number): void {
+  const p = posOf(m);
+  const px = ox + p.x * CELL + CELL / 2;
+  const py = oy + p.y * CELL + CELL / 2;
+  const fx = DX[m.dir];
+  const fy = DY[m.dir];
+  const sx = -fy;
+  const sy = fx;
+  const at = (a: number, b: number): [number, number] => [px + fx * a + sx * b, py + fy * a + sy * b];
+  g.fillStyle(0x000000, 0.3).fillEllipse(px + 0.5, py + 3.6, 8, 2.4);
+  // the tail: a ribbon of shrinking beads, swinging as it swims
+  for (let i = 1; i <= 6; i++) {
+    const w = Math.sin(t * 15 - i * 0.9) * (0.4 + i * 0.28);
+    const [x, y] = at(-i * 1.35, w);
+    g.fillStyle(0x1a2f6a, 1).fillCircle(x, y, 1.9 - i * 0.22);
+    g.fillStyle(0x3f6ed4, 1).fillCircle(x - 0.2, y - 0.3, Math.max(0.3, 1.5 - i * 0.2));
   }
-  if (frogM) {
-    const p = posOf(frogM);
-    const px = ox + p.x * CELL + CELL / 2;
-    const py = oy + p.y * CELL + CELL / 2;
-    // PAC FROG: a round green frog whose mouth opens and shuts the way it goes
-    const gape = 0.15 + Math.abs(Math.sin(t * 12)) * 0.6;
-    const face = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][frogM.dir];
-    g.fillStyle(0x000000, 0.35).fillEllipse(px + 0.5, py + 4.5, 10, 3);
-    g.fillStyle(0x0e3a1e, 1).slice(px, py, 6, face + gape, face - gape + Math.PI * 2, false).fillPath();
-    g.fillStyle(0x3aa048, 1).slice(px, py, 5, face + gape, face - gape + Math.PI * 2, false).fillPath();
-    // lit from the top left: a light cap and a few darker spots on the back
-    g.fillStyle(0x6ad86a, 1).fillCircle(px - 1.2, py - 1.2, 2.6);
-    g.fillStyle(0x2a7a34, 1).fillRect(px - 3, py + 1, 1, 1).fillRect(px + 1, py + 2, 1, 1).fillRect(px - 1, py + 3, 1, 1);
-    g.fillStyle(0x5a0a18, 1).slice(px, py, 3.6, face - gape * 0.75, face + gape * 0.75, false).fillPath();
-    g.fillStyle(0xe05a7a, 1).slice(px, py, 1.6, face - gape * 0.5, face + gape * 0.5, false).fillPath();
-    // its eyes, on top
-    const ex = -DY[frogM.dir] * 2.4;
-    const ey = DX[frogM.dir] * 2.4 - 3;
-    g.fillStyle(0xffffff, 1).fillCircle(px + ex, py + ey, 1.4).fillCircle(px - ex, py + (DX[frogM.dir] ? -3 : ey), 1.4);
-    g.fillStyle(0x0a0812, 1).fillCircle(px + ex, py + ey, 0.7).fillCircle(px - ex, py + (DX[frogM.dir] ? -3 : ey), 0.7);
+  // the body: dark rim, blue mass, pale belly, a bright sheen top-left
+  g.fillStyle(0x14224a, 1).fillCircle(px, py, 4.1);
+  g.fillStyle(0x3a66d0, 1).fillCircle(px, py, 3.5);
+  const [bx, by] = at(-0.3, 0);
+  g.fillStyle(0x6a9aee, 1).fillEllipse(bx + 0.2, by + 0.9, 4.4, 2.6);
+  g.fillStyle(0x2a4a9a, 1).fillCircle(px - sx * 1.6 - fx * 1.3, py - sy * 1.6 - fy * 1.3, 0.9).fillCircle(px + sx * 1.4 - fx * 1.7, py + sy * 1.4 - fy * 1.7, 0.7);
+  g.fillStyle(0xd8ecff, 0.95).fillCircle(px - 1.1, py - 1.4, 1.1);
+  // eyes, on the front of the head
+  for (const side of [-1, 1]) {
+    const [ex, ey] = at(1.6, side * 1.7);
+    g.fillStyle(0xffffff, 1).fillCircle(ex, ey, 1);
+    g.fillStyle(0x0a0812, 1).fillCircle(ex + fx * 0.3, ey + fy * 0.3, 0.55);
+  }
+  if (m.held > 0) {
+    // caught in the reeds: a net that shrinks as it lets go
+    g.lineStyle(1, 0xf0d060, 1).strokeCircle(px, py, 3 + m.held * 1.4);
+    g.lineStyle(1, 0xc8a050, 0.8).lineBetween(px - 5, py, px + 5, py).lineBetween(px, py - 5, px, py + 5);
+  }
+}
+
+/**
+ * THE BIG FROG, from above: a green body with a pale belly, back legs folded
+ * out behind, front legs forward, a head with two raised eyes and a wide
+ * mouth, spots down its back -- and it hops: the body stretches and squashes
+ * with its stride.  Facing whichever way it is going.
+ */
+function drawFrog(g: Phaser.GameObjects.Graphics, m: Mover, t: number): void {
+  const p = posOf(m);
+  const px = ox + p.x * CELL + CELL / 2;
+  const py = oy + p.y * CELL + CELL / 2;
+  const fx = DX[m.dir];
+  const fy = DY[m.dir];
+  const sx = -fy;
+  const sy = fx;
+  const at = (a: number, b: number): [number, number] => [px + fx * a + sx * b, py + fy * a + sy * b];
+  const moving = m.held <= 0 && m.k < 1;
+  const hop = moving ? Math.abs(Math.sin(t * 14)) : 0;
+  const L = 1 + hop * 0.18;
+  g.fillStyle(0x000000, 0.34).fillEllipse(px + 0.5, py + 5, 11 - hop * 2, 3);
+  // back legs: thigh out to the side, shin and webbed foot back
+  for (const side of [-1, 1]) {
+    const [kx, ky] = at(-2.2, side * 4.2);
+    const [fxp, fyp] = at(-5.2 - hop * 1.2, side * 3.4);
+    g.fillStyle(0x1e5a2a, 1).fillCircle(kx, ky, 2.2).fillCircle(fxp, fyp, 1.6);
+    g.fillStyle(0x3aa048, 1).fillCircle(kx - 0.2, ky - 0.2, 1.7);
+    g.fillStyle(0x2a7a34, 1).fillCircle(fxp, fyp, 1.1);
+    const [t1x, t1y] = at(-6.4 - hop * 1.2, side * 3.9);
+    const [t2x, t2y] = at(-6.2 - hop * 1.2, side * 2.6);
+    g.fillStyle(0x6ad86a, 1).fillCircle(t1x, t1y, 0.7).fillCircle(t2x, t2y, 0.7);
+  }
+  // front legs
+  for (const side of [-1, 1]) {
+    const [hx, hy] = at(2.4 * L, side * 3.4);
+    g.fillStyle(0x1e5a2a, 1).fillCircle(hx, hy, 1.7);
+    g.fillStyle(0x4ab858, 1).fillCircle(hx, hy, 1.2);
+  }
+  // the body: a rim, the green back, a pale belly edge, a lit shoulder, spots
+  const [cx, cy] = at(-0.6, 0);
+  g.fillStyle(0x0e3a1e, 1).fillEllipse(cx, cy, 11 * L, 8.4);
+  g.fillStyle(0x3aa048, 1).fillEllipse(cx, cy, 9.8 * L, 7.2);
+  g.fillStyle(0x8ad878, 1).fillEllipse(cx + sx * 0.2 - fx * 0.2, cy + sy * 0.2 - fy * 0.2, 5.4, 3.4);
+  g.fillStyle(0x6ad86a, 1).fillCircle(px - 1.3, py - 1.5, 2.1);
+  for (const [a, b, r] of [[-2.4, -1.8, 0.9], [-3.4, 1.6, 0.8], [-0.8, 2.4, 0.7], [-1.6, -0.2, 0.6]] as const) {
+    const [spx, spy] = at(a, b);
+    g.fillStyle(0x1e6a2c, 1).fillCircle(spx, spy, r);
+  }
+  // the head and its wide mouth, working as it goes
+  const gape = moving ? 0.5 + 0.5 * Math.abs(Math.sin(t * 9)) : 0.15;
+  const [hx, hy] = at(3.4, 0);
+  g.fillStyle(0x0e3a1e, 1).fillCircle(hx, hy, 3.5);
+  g.fillStyle(0x3aa048, 1).fillCircle(hx, hy, 3);
+  const [m1x, m1y] = at(4.9, -2.2);
+  const [m2x, m2y] = at(4.9, 2.2);
+  g.lineStyle(1, 0x3a0a14, 1).lineBetween(m1x, m1y, m2x, m2y);
+  if (gape > 0.3) {
+    const [m3x, m3y] = at(5.1 + gape * 0.8, 0);
+    g.fillStyle(0x5a0a18, 1).fillTriangle(m1x, m1y, m2x, m2y, m3x, m3y);
+    const [tx, ty] = at(5 + gape * 0.5, 0);
+    g.fillStyle(0xe05a7a, 1).fillCircle(tx, ty, 0.7);
+  }
+  // two raised eyes, gold-ringed
+  for (const side of [-1, 1]) {
+    const [ex, ey] = at(2.7, side * 2.4);
+    g.fillStyle(0x1e5a2a, 1).fillCircle(ex, ey, 1.9);
+    g.fillStyle(0xe8c850, 1).fillCircle(ex, ey, 1.5);
+    g.fillStyle(0x0a0812, 1).fillCircle(ex + fx * 0.35, ey + fy * 0.35, 0.8);
+    g.fillStyle(0xffffff, 1).fillRect(ex - 0.9, ey - 1, 1, 1);
   }
 }
 
@@ -536,8 +653,8 @@ function refreshHud(): void {
   if (!hud) return;
   if (phase === 'pick') hud.setText('');
   else if (role === 'frog') {
-    const trap = traps.size >= MAX_TRAPS ? 'ALL DOWN' : trapCd > 0 ? `${Math.ceil(trapCd)}S` : 'READY';
-    hud.setText(`PAC FROG   CATCH IT: ${Math.max(0, Math.ceil(HUNT_S - clock))}S   TRAP ${trap}  ${traps.size}/${MAX_TRAPS}`);
+    const trap = traps.size >= maxTraps() ? 'ALL DOWN' : trapCd > 0 ? `${Math.ceil(trapCd)}S` : 'READY';
+    hud.setText(`BIG FROG   CATCH IT: ${Math.max(0, Math.ceil(HUNT_S - clock))}S   TRAP ${trap}  ${traps.size}/${maxTraps()}`);
   }
   else hud.setText(`SURVIVOR    FLIES LEFT ${flies.size}    ${Math.floor(clock)}S`);
 }
@@ -551,17 +668,17 @@ export const croaked: MinigameModule = {
   tutorial: {
     pitch: 'A MAZE, A BIG FROG, AND SOMETHING SMALL. PICK A SIDE.',
     steps: [
-      { say: 'AFTER PLAY, PICK A SIDE: PAC FROG HUNTS, THE SURVIVOR RUNS.', demo: 'croak.pick' },
-      { say: `PAC FROG: CATCH THE TADPOLE IN ${HUNT_S} SECONDS. IT IS QUICKER THAN YOU, SO CORNER IT.`, demo: 'croak.hunt' },
-      { say: `SPACE DROPS A TRAP WHERE YOU STAND (${MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, phone: `TAP TRAP TO DROP ONE WHERE YOU STAND (${MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, demo: 'croak.trap' },
-      { say: 'SURVIVOR: YOU ARE QUICKER. EAT EVERY FLY, AND MIND THE FAINT RINGS - THE FROG\'S TRAPS.', demo: 'croak.survive' },
+      { say: 'AFTER PLAY, PICK A SIDE: BIG FROG HUNTS, THE SURVIVOR RUNS.', demo: 'croak.pick' },
+      { say: `BIG FROG: CATCH THE TADPOLE IN ${HUNT_S} SECONDS. YOU ARE THE QUICKER, SO RUN IT DOWN OR TRAP IT.`, demo: 'croak.hunt' },
+      { say: `SPACE DROPS A TRAP WHERE YOU STAND (${PLAYER_MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, phone: `TAP TRAP TO DROP ONE WHERE YOU STAND (${PLAYER_MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, demo: 'croak.trap' },
+      { say: 'SURVIVOR: YOU ARE THE SMALL ONE. EAT EVERY FLY, AND MIND THE FAINT RINGS - THE FROG\'S TRAPS.', demo: 'croak.survive' },
       { say: 'W A S D OR THE ARROWS STEER. PRESS A WAY EARLY AND YOU TURN AT THE NEXT GAP.', phone: 'THE STICK STEERS. PUSH A WAY EARLY AND YOU TURN AT THE NEXT GAP.', demo: 'croak.steer' },
     ],
-    objective: ['PICK A SIDE. PAC FROG: TRAP AND CATCH THE QUICKER TADPOLE IN TIME.', 'SURVIVOR: EAT EVERY FLY, DODGE THE FROG AND ITS TRAPS.', 'A NEW MAZE EVERY ROUND.'],
+    objective: ['PICK A SIDE. BIG FROG: RUN DOWN OR TRAP THE TADPOLE IN TIME.', 'SURVIVOR: EAT EVERY FLY, DODGE THE FROG AND ITS TRAPS.', 'A NEW MAZE EVERY ROUND.'],
     controls: [
       ['W A S D', 'STEER'],
       ['ARROWS', 'STEER'],
-      ['SPACE', 'DROP A TRAP (PAC FROG)'],
+      ['SPACE', 'DROP A TRAP (BIG FROG)'],
       ['1 / 2', 'PICK A SIDE'],
     ],
   },

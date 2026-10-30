@@ -33,7 +33,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { centerText, text } from '../core/ui';
-import { GAME_W } from '../render/pixelScaler';
+import { GAME_H, GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 // ------------------------------------------------------------------ layout
@@ -622,11 +622,27 @@ function onUp(p: Phaser.Input.Pointer): void {
   launch(selected, angle, power);
 }
 
+/**
+ * How far back the pull must go for FULL power, from where this frog stands,
+ * when it is pulled the way `angle` sends it (the finger goes the other way).
+ * A frog by the side of the field has no room to pull the whole PULL_MAX
+ * before the finger runs off the screen, so the pull that reaches the edge IS
+ * full power there (user, 30 Oct) -- but never less than a short, easy pull.
+ */
+function pullCap(f: Body, angle: number): number {
+  const ux = -Math.cos(angle);
+  const uy = -Math.sin(angle);
+  const room = (v: number, u: number, size: number): number => (u > 0.001 ? (size - 3 - v) / u : u < -0.001 ? (3 - v) / u : Infinity);
+  const edge = Math.min(room(f.x, ux, GAME_W), room(f.y, uy, GAME_H));
+  return Math.max(12, Math.min(PULL_MAX, edge));
+}
+
 /** Where a pull to (px, py) sends frog f: the opposite way, harder the further. */
 function pullOf(f: Body, px: number, py: number): { angle: number; power: number } {
   const dx = f.x - px;
   const dy = f.y - py;
-  return { angle: Math.atan2(dy, dx), power: Math.min(1, Math.hypot(dx, dy) / PULL_MAX) };
+  const angle = Math.atan2(dy, dx);
+  return { angle, power: Math.min(1, Math.hypot(dx, dy) / pullCap(f, angle)) };
 }
 
 // ------------------------------------------------------------------ the machine
@@ -705,7 +721,7 @@ function aiTurn(): void {
     duration: 700,
     ease: 'Sine.easeOut',
     onUpdate: () => {
-      const d = pull.k * power * PULL_MAX;
+      const d = pull.k * power * pullCap(f, angle);
       pullX = f.x - Math.cos(angle) * d;
       pullY = f.y - Math.sin(angle) * d;
     },

@@ -135,7 +135,7 @@ export function paintShopfront(scene: Phaser.Scene, o: ShopfrontOpts): { doorRec
 /** What is in the window. */
 function paintGoods(g: Phaser.GameObjects.Graphics, o: ShopfrontOpts, x: number, y: number, w: number, h: number, c: (n: number) => number): void {
   const ink = c(PALETTE.ink);
-  const col = (i: number) => (o.closed ? c(PALETTE.nightMid) : o.stock[i % o.stock.length]);
+  const col = (i: number) => (o.closed ? c(PALETTE.nightMid) : c(o.stock[i % o.stock.length]));
   if (o.goods === 'furniture') {
     // an armchair, a lamp, a picture on the back wall
     const fl = y + h - 3;
@@ -145,7 +145,7 @@ function paintGoods(g: Phaser.GameObjects.Graphics, o: ShopfrontOpts, x: number,
       g.fillStyle(tone(col(i), 1.25), 1).fillRect(cx - 5, fl - 7, 10, 3);
       if (cx + 16 < x + w - 4) {
         g.fillStyle(ink, 1).fillRect(cx + 13, fl - 20, 1, 20);
-        g.fillStyle(o.closed ? ink : 0xfff0c0, 1).fillRect(cx + 10, fl - 24, 7, 4);
+        g.fillStyle(o.closed ? ink : c(0xfff0c0), 1).fillRect(cx + 10, fl - 24, 7, 4);
       }
     }
     g.fillStyle(ink, 1).fillRect(x + w / 2 - 7, y + 4, 14, 10);
@@ -155,7 +155,7 @@ function paintGoods(g: Phaser.GameObjects.Graphics, o: ShopfrontOpts, x: number,
     for (let i = 0, cx = x + 9; cx < x + w - 6; i++, cx += 16) {
       const top = y + 8;
       g.fillStyle(ink, 1).fillCircle(cx, top + 2, 3.5);
-      g.fillStyle(o.closed ? ink : 0xe8e2d8, 1).fillCircle(cx, top + 2, 2.5);
+      g.fillStyle(o.closed ? ink : c(0xe8e2d8), 1).fillCircle(cx, top + 2, 2.5);
       g.fillStyle(ink, 1).fillRect(cx - 6, top + 5, 12, 15);
       g.fillStyle(col(i), 1).fillRect(cx - 5, top + 6, 10, 13);
       g.fillStyle(tone(col(i), 0.75), 1).fillRect(cx - 1, top + 6, 1, 13);
@@ -166,15 +166,15 @@ function paintGoods(g: Phaser.GameObjects.Graphics, o: ShopfrontOpts, x: number,
     // a chair in the window and the style posters behind it
     for (let i = 0, cx = x + 8; cx < x + w - 10; i++, cx += 16) {
       g.fillStyle(ink, 1).fillRect(cx - 1, y + 4, 12, 14);
-      g.fillStyle(0xf8f0e0, 1).fillRect(cx, y + 5, 10, 12);
+      g.fillStyle(c(0xf8f0e0), 1).fillRect(cx, y + 5, 10, 12);
       g.fillStyle(col(i), 1).fillRect(cx + 2, y + 6, 6, 4);
-      g.fillStyle(0xe0b090, 1).fillRect(cx + 3, y + 9, 4, 5);
+      g.fillStyle(c(0xe0b090), 1).fillRect(cx + 3, y + 9, 4, 5);
     }
     const cx = x + w / 2;
     const fl = y + h - 3;
     g.fillStyle(ink, 1).fillRect(cx - 8, fl - 18, 16, 14);
-    g.fillStyle(o.closed ? ink : 0xa82a2a, 1).fillRect(cx - 7, fl - 17, 14, 8).fillRect(cx - 7, fl - 9, 14, 4);
-    g.fillStyle(0xb8b8c0, 1).fillRect(cx - 1, fl - 5, 2, 5).fillRect(cx - 5, fl - 1, 10, 1);
+    g.fillStyle(o.closed ? ink : c(0xa82a2a), 1).fillRect(cx - 7, fl - 17, 14, 8).fillRect(cx - 7, fl - 9, 14, 4);
+    g.fillStyle(c(0xb8b8c0), 1).fillRect(cx - 1, fl - 5, 2, 5).fillRect(cx - 5, fl - 1, 10, 1);
   }
 }
 
