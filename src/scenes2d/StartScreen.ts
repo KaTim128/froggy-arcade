@@ -15,6 +15,7 @@ import { button, centerText, fadeIn, fadeToScene, FADE_MS } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import { paintExterior, startMoth, startSignFlicker } from '../art/exterior';
 import { froggyLayer } from '../render/froggyLayer';
+import { exitGame } from '../core/exitGame';
 
 export class StartScreen extends Phaser.Scene {
   private who!: Phaser.GameObjects.BitmapText;
@@ -37,16 +38,23 @@ export class StartScreen extends Phaser.Scene {
     centerText(this, GAME_W / 2, 20, 'FROGGY ARCADE', PALETTE.gold, 16).setLetterSpacing?.(1);
     centerText(this, GAME_W / 2, 34, 'Tons of froggy fun awaits! ', PALETTE.cream, 8).setAlpha(0.75);
 
-    button(this, GAME_W / 2, 112, 'START', () => this.onStart(), { width: 74 });
-    button(this, GAME_W / 2, 130, 'PROFILES', () => this.openProfiles(), { width: 74 });
-    button(this, GAME_W / 2, 148, 'SETTINGS', () => this.scene.launch('SettingsModal', { from: 'StartScreen' }), {
-      width: 74,
+    // The menu: START on its own, PROFILES and SETTINGS side by side under
+    // it, and EXIT GAME across the bottom in red -- four buttons in the
+    // three rows the old column of three took, so nothing moves down onto
+    // the pavement or off a phone's screen.
+    const MW = 124;
+    const half = (MW - 4) / 2;
+    button(this, GAME_W / 2, 110, 'START', () => this.onStart(), { width: MW });
+    button(this, GAME_W / 2 - (half + 4) / 2, 128, 'PROFILES', () => this.openProfiles(), { width: half });
+    button(this, GAME_W / 2 + (half + 4) / 2, 128, 'SETTINGS', () => this.scene.launch('SettingsModal', { from: 'StartScreen' }), {
+      width: half,
     });
+    button(this, GAME_W / 2, 146, 'EXIT GAME', () => this.confirmExit(), { width: MW, fill: 0x5a1e2e, hoverFill: 0x9a2a40 });
 
     // the story's milestones, top right (separate from the achievements in play)
     button(this, GAME_W - 34, 12, 'BADGES', () => this.scene.launch('BadgesModal', { from: 'StartScreen' }), { width: 56, height: 13 });
 
-    this.who = centerText(this, GAME_W / 2, 166, '', PALETTE.ash, 8).setAlpha(0.85);
+    this.who = centerText(this, GAME_W / 2, 164, '', PALETTE.ash, 8).setAlpha(0.85);
     this.refreshWho();
     this.events.on('profiles-closed', () => this.refreshWho());
 
@@ -89,6 +97,20 @@ export class StartScreen extends Phaser.Scene {
   }
 
   private notice: Phaser.GameObjects.Container | null = null;
+
+  /** Are you sure: EXIT GAME closes the whole thing (see core/exitGame). */
+  private confirmExit(): void {
+    this.notice?.destroy();
+    const c = this.add.container(0, 0).setDepth(1000);
+    c.add(this.add.rectangle(0, 0, GAME_W, 180, PALETTE.black, 0.6).setOrigin(0, 0).setInteractive());
+    c.add(this.add.rectangle(GAME_W / 2, 92, 210, 62, PALETTE.ink, 0.97).setStrokeStyle(1, PALETTE.neon));
+    c.add(centerText(this, GAME_W / 2, 72, 'EXIT FROGGY ARCADE?', PALETTE.gold));
+    c.add(centerText(this, GAME_W / 2, 86, 'YOUR PROGRESS IS SAVED.', PALETTE.cream));
+    c.add(button(this, GAME_W / 2 - 40, 106, 'EXIT', () => exitGame(), { width: 70, height: 15, fill: 0x5a1e2e, hoverFill: 0x9a2a40 }));
+    c.add(button(this, GAME_W / 2 + 40, 106, 'CANCEL', () => c.destroy(), { width: 70, height: 15 }));
+    this.input.keyboard?.once('keydown-ESC', () => c.active && c.destroy());
+    this.notice = c;
+  }
 
   private onStart(): void {
     if (!store.activeSlotId()) {
