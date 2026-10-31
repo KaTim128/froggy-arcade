@@ -276,7 +276,9 @@ export function buildHotelLobby(
   const sd1 = STAIR_X + sdHalf;
   wall(X0, sd0, back);
   wall(sd1, X1, back);
-  wall(sd0, sd1, back, CEIL_H, 2.25);
+  // (over it: in the police scene down into the steel frame head, 2.12-2.24,
+  // so there is no slit between the head and the wallpaper)
+  wall(sd0, sd1, back, CEIL_H, opts.police ? 2.2 : 2.25);
   // the front wall
   wall(X0, X1, (m, mid) => {
     m.position.x = mid;
