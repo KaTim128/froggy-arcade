@@ -865,7 +865,11 @@ export class PoliceBuilding {
       // left of the door, right of the door, over the door, the slab band below
       plane(SDOOR.x0 + WX, FH, back, S, (-WX + SDOOR.x0) / 2, y0 + FH / 2 - 0.3, WZ1, Math.PI);
       plane(WX - SDOOR.x1, FH, back, S, (SDOOR.x1 + WX) / 2, y0 + FH / 2 - 0.3, WZ1, Math.PI);
-      plane(dw, FH - 2.15, back, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.15 + (FH - 2.15) / 2 - 0.3, WZ1, Math.PI);
+      // (the wall bands are all dropped 0.3 m for the slab, so this one's own foot was
+      // 0.3 m under the top of the doorway: a strip of wall showed across the
+      // top of the open door at G.  It starts at the door's head, 2.15 m, and
+      // runs to the same ceiling line as the rest)
+      plane(dw, FH - 0.3 - 2.15, back, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.15 + (FH - 0.3 - 2.15) / 2, WZ1, Math.PI);
       if (f === 0) plane(W, 0.3, back, S, 0, -0.15, WZ1, Math.PI);
     }
     const roof = plane(W, D, new THREE.MeshLambertMaterial({ color: 0xb8b2a4 }), S, 0, top, cz, 0, Math.PI / 2);
@@ -987,13 +991,16 @@ export class PoliceBuilding {
       // -- no slit of the corridor's light down the sides, no gap over the
       // top, from the stairs or from the corridor
       const y0 = f * FH;
-      const fz = 0.2;
+      // (at G the leaf is gone and the doorway opens straight on the lobby, where
+      // a frame 0.2 m deep stood out of the wall like a stub of masonry: there it
+      // is a flat trim, flush with the wall's thickness, slim jambs)
+      const fz = f === 0 ? 0.06 : 0.2;
       for (const [x, w] of [
-        [SDOOR.x0 - 0.035, 0.1],
-        [SDOOR.x1 + 0.035, 0.1],
+        [SDOOR.x0 - (f === 0 ? 0.025 : 0.035), f === 0 ? 0.06 : 0.1],
+        [SDOOR.x1 + (f === 0 ? 0.025 : 0.035), f === 0 ? 0.06 : 0.1],
       ] as const)
         box(w, 2.24, fz, frameMat, S, x, y0 + 1.12, SDOOR.z);
-      box(SDOOR.x1 - SDOOR.x0 + 0.17, 0.12, fz, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.18, SDOOR.z);
+      box(SDOOR.x1 - SDOOR.x0 + (f === 0 ? 0.11 : 0.17), f === 0 ? 0.09 : 0.12, fz, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.18, SDOOR.z);
       // the stops the leaf shuts against, inside the jambs and under the head
       // (not at G: there is no leaf there now, and with nothing to shut
       // against them they read as a second, smaller frame inside the first)
