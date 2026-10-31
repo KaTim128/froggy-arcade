@@ -513,7 +513,7 @@ export class ExteriorDay extends Phaser.Scene {
 
   /**
    * ---- THE PITCH: BEG, OR SLEEP.  With no place of your own the cardboard
-   * is both -- sit with the can ($1 every 15 minutes, any time), or, at
+   * is both -- sit with the can ($1 every 7 minutes, any time), or, at
    * night only, lie down on it.  The card says plainly what a night out here
    * risks before you choose it.
    */
@@ -521,8 +521,8 @@ export class ExteriorDay extends Phaser.Scene {
     if (this.talking) return;
     const dark = clock().dark;
     const line = dark
-      ? `BEG WITH THE CAN ($1 EVERY 15 MINUTES), OR SLEEP HERE TILL MORNING. THIEVES WORK THIS STREET AT NIGHT: ONE NIGHT IN FOUR THEY TAKE HALF YOUR CASH AND TOKENS.`
-      : `BEG WITH THE CAN: $1 EVERY 15 MINUTES. SLEEPING OUT HERE IS FOR NIGHT-TIME ONLY.`;
+      ? `BEG WITH THE CAN ($1 EVERY 7 MINUTES), OR SLEEP HERE TILL MORNING. THIEVES WORK THIS STREET AT NIGHT: ONE NIGHT IN FOUR THEY TAKE HALF YOUR CASH AND TOKENS.`
+      : `BEG WITH THE CAN: $1 EVERY 7 MINUTES. SLEEPING OUT HERE IS FOR NIGHT-TIME ONLY.`;
     this.talking = openTalkPanel(this, {
       who: 'YOUR PITCH',
       color: PALETTE.gold,
@@ -560,7 +560,7 @@ export class ExteriorDay extends Phaser.Scene {
     this.player.setPosition(BEG_X - 3, BEG_Y);
     this.player.sit('floor', { can: true, facing: 1 });
     this.cup?.setVisible(false);
-    this.say('YOU SIT DOWN WITH THE CAN. $1 EVERY 15 MINUTES. [E] TO GET UP.');
+    this.say('YOU SIT DOWN WITH THE CAN. $1 EVERY 7 MINUTES. [E] TO GET UP.');
   }
 
   /** Up off the cardboard: begging over, and what is in the can is yours. */
