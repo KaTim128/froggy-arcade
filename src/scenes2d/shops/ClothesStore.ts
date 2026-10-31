@@ -16,8 +16,8 @@ import { store } from '../../core/state';
 import { text } from '../../core/ui';
 import { GAME_H, GAME_W } from '../../render/pixelScaler';
 import { Player, depthFor, type Look } from '../../art/player';
-import { COSMETICS, CROWNS, cosmeticById, lookFor, type CosmeticDef } from '../../game/catalog';
-import { attireProgress, record } from '../../game/life';
+import { CROWNS, cosmeticById, cosmeticStockFor, lookFor, type CosmeticDef } from '../../game/catalog';
+import { attireProgress, clock, record } from '../../game/life';
 import { stealthPhase } from '../../game/patrol';
 import { COUNTER_RIGHT, WalkRoom, type Fixture } from '../rooms/WalkRoom';
 import { ASSISTANT_LOOK } from '../../ui/portraits';
@@ -103,7 +103,8 @@ export class ClothesStore extends WalkRoom {
   }
 
   private forSale(slot: CosmeticDef['slot']): CosmeticDef[] {
-    return COSMETICS.filter((c) => c.shop === 'clothes' && c.slot === slot && !c.reward && c.price > 0);
+    // what is out today: the rails turn over every game day (catalog `cosmeticStockFor`)
+    return cosmeticStockFor(clock().day, 'clothes').filter((c) => c.slot === slot);
   }
 
   protected paintRoom(): void {
