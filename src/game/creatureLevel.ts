@@ -27,6 +27,8 @@ export const MAX_XP = LEVEL_XP[MAX_LEVEL - 1];
 /** Experience for a won battle, and for beating a place's boss. */
 export const XP_WIN = 40;
 export const XP_BOSS = 60;
+/** ...and a little for a lost one: it still learnt something (user, 31 Oct). */
+export const XP_LOSS = 10;
 
 /** What a level adds, on top of the creature as it was caught. */
 function growth(level: number): { hp: number; dmg: number; speed: number } {

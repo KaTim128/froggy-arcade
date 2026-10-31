@@ -1961,6 +1961,31 @@ export class PoliceEscape3D extends Phaser.Scene {
     }
   }
 
+  /** A flat's group's children that are inside it: not its front door, frame or the wall it is in. */
+  private innerOf(r: { group: THREE.Group | null; side: number; dz: number; door: { pivot: THREE.Object3D } }): THREE.Object3D[] {
+    const g = r.group!;
+    const cached = g.userData.inner as THREE.Object3D[] | undefined;
+    if (cached) return cached;
+    const wallX = r.side * CH;
+    const box = new THREE.Box3();
+    const inner: THREE.Object3D[] = [];
+    g.updateMatrixWorld(true);
+    for (const o of g.children) {
+      let door = false;
+      r.door.pivot.traverseAncestors((a) => (door = door || a === o));
+      if (o === r.door.pivot || door) continue;
+      box.setFromObject(o);
+      if (!box.isEmpty()) {
+        const dx = Math.max(0, box.min.x - wallX, wallX - box.max.x);
+        const dzOut = Math.max(0, box.min.z - (r.dz + 1), r.dz - 1 - box.max.z);
+        if (dx < 0.3 && dzOut === 0) continue;
+      }
+      inner.push(o);
+    }
+    g.userData.inner = inner;
+    return inner;
+  }
+
   /** Only what can be seen is drawn: your floor, the well, the one through an open fire door. */
   private lightsAndVisibility(dt: number): void {
     const b = this.b!;
@@ -1982,7 +2007,15 @@ export class PoliceEscape3D extends Phaser.Scene {
     const mine = playing && !me.well ? b.roomAt(me.f, me.x, me.z) : null;
     for (const r of b.rooms) {
       if (!r.group || r.floor !== lvl) continue;
-      r.group.visible = !playing || r === mine || r.special === '612' || r.door.k > 0.01 || r.door.want > 0.01;
+      const show = !playing || r === mine || r.special === '612' || r.door.k > 0.01 || r.door.want > 0.01;
+      // THE DOOR STAYS.  Hiding the flat whole took its front door and frame
+      // with it, and from the corridor every shut flat was a black hole where
+      // its door should be.  Only what is inside goes: everything in the
+      // group but the door, its frame and the wall round it.
+      const inner = this.innerOf(r);
+      if (r.group.userData.shown === show) continue;
+      r.group.userData.shown = show;
+      for (const o of inner) o.visible = show;
     }
     for (const c of this.cops) {
       const near = !playing || (!c.m.well && !me.well ? c.m.f === me.f : Math.abs(c.m.h - me.h) < FH * 1.6);

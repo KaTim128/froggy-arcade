@@ -1432,7 +1432,10 @@ class TouchControls {
     const r = (this.dpad as HTMLElement).getBoundingClientRect();
     const dx = x - (r.left + r.width / 2);
     const dy = y - (r.top + r.height / 2);
-    if (Math.hypot(dx, dy) < r.width * 0.15) return { x: 0, y: 0 };
+    // (the middle used to be dead for 15% of the pad, so a thumb sliding across it
+    // from one arrow to the opposite one stopped dead there: now only a thumb
+    // right on the centre, 5%, is no input, and anywhere else steers by its side)
+    if (Math.hypot(dx, dy) < r.width * 0.05) return { x: 0, y: 0 };
     const axis = this.layout.stick ?? 'wasd';
     if (axis === 'lr') return { x: Math.sign(dx), y: 0 };
     if (axis === 'ud') return { x: 0, y: Math.sign(dy) };
