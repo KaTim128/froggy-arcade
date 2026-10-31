@@ -38,7 +38,7 @@ import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { REST_MS, REVIVE_COST, abandonLadder, activeCreature, activeOwned, isReplay, worldOpen, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
+import { REVIVE_COST, abandonLadder, activeCreature, activeOwned, isReplay, worldOpen, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
 type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'ladder' | 'controls';
 const SCREENS: Screen[] = ['home', 'story', 'ladder', 'recruit', 'controls'];
@@ -231,7 +231,7 @@ export class CreatureHub extends Phaser.Scene {
       backPlate(this, m, PALETTE.gold);
     } else if (this.screen === 'home') {
       const tired = store.get().creatures.owned.some((o) => restLeft(o) > 0);
-      L.add(text(this, 8, GAME_H - 10, tired ? `FAINTED: RESTS ${REST_MS / 60_000} MIN, OR REVIVE FOR ${REVIVE_COST} TOKENS` : 'TAP A MOVE (?) TO READ WHAT IT DOES', tired ? PALETTE.ash : 0x8a90b0));
+      L.add(text(this, 8, GAME_H - 10, tired ? 'FAINTED: PRESS REVIVE TO GET IT BACK UP' : 'TAP A MOVE (?) TO READ WHAT IT DOES', tired ? PALETTE.ash : 0x8a90b0));
     }
   }
 
@@ -555,14 +555,12 @@ export class CreatureHub extends Phaser.Scene {
         this.shown.pop();
         // (a band across the picture, under its level and element tags)
         L.add(this.add.rectangle(x + 1, y + 16, w - 2, 21, 0x0a0c18, 0.82).setOrigin(0, 0));
-        const left = Math.ceil(rest / 1000);
-        const clock = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
         L.add(centerText(this, x + w / 2, y + 21, 'FAINTED', 0xff8a8a));
-        L.add(centerText(this, x + w / 2, y + 31, `RESTING ${clock}`, PALETTE.cream));
+        L.add(centerText(this, x + w / 2, y + 31, 'PRESS REVIVE', PALETTE.cream));
       }
       if (rest > 0) {
         // (what reviving costs is on the button's own line under the cards: RELEASE has the rest of the row)
-        L.add(button(this, x + 23, y + h + 10, 'REVIVE', () => (this.say(revive(o.uid)), this.draw()), { width: 44, height: 12, disabled: ledger.balance() < REVIVE_COST }));
+        L.add(button(this, x + 23, y + h + 10, 'REVIVE', () => (this.say(revive(o.uid)), this.draw()), { width: 44, height: 12, disabled: REVIVE_COST > 0 && ledger.balance() < REVIVE_COST }));
       } else if (on) {
         // the one that fights: a gold chip where USE would be
         L.add(this.add.rectangle(x + 2, y + h + 4, 42, 12, 0x3a2e10).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
@@ -581,7 +579,7 @@ export class CreatureHub extends Phaser.Scene {
     // STORY MODE, in place of the zone battles (user, 28 Oct)
     const sw = Math.min(c.story.cleared, WORLDS.length - 1);
     const storySub = c.story.cleared >= WORLDS.length ? 'ALL WORLDS DONE' : `WORLD ${sw + 1} OF ${WORLDS.length}`;
-    this.tile(mx, 34, mw, 24, 'STORY MODE', resting ? 'RESTING' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
+    this.tile(mx, 34, mw, 24, 'STORY MODE', resting ? 'FAINTED' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
     const ladderOpen = c.story.cleared >= WORLDS.length || !!run;
     this.tile(mx, 61, mw, 24, 'LADDER', !ladderOpen ? 'AFTER STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
@@ -913,7 +911,7 @@ export class CreatureHub extends Phaser.Scene {
     const act = activeOwned();
     const resting = !!act && restLeft(act) > 0;
     L.add(button(this, px + 58, 146, `FIGHT  ${price.cost} TOK`, () => this.storyFight(i), { width: 106, height: 14, disabled: !act || resting || ledger.balance() < price.cost }));
-    if (resting) L.add(smallText(this, px + 4, 157, 'YOUR CREATURE IS RESTING', 0xff9a9a));
+    if (resting) L.add(smallText(this, px + 4, 157, 'FAINTED - REVIVE IT FIRST', 0xff9a9a));
   }
 
   private storyFight(w: number): void {

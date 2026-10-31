@@ -14,7 +14,8 @@
  *                2N and pay 4N until its boss falls, then N and 2N as
  *                replays.  A loss FAINTS the fighter: it keeps its slot --
  *                a creature is never taken off your team for losing -- and
- *                rests five minutes, or is revived at once for 5 tokens.
+ *                REVIVE puts it back on its feet, free, no waiting (user,
+ *                31 Oct).  A loss still earns a little experience.
  *                (It replaced the zone battles: user, 28 Oct.)
  *
  *   LADDER        Opens once the story's last boss falls.  20 tokens, once,
@@ -36,7 +37,7 @@ import {
 import type { CreatureState, Owned } from './creatureState';
 import { record } from './life';
 import { badgeSet, earnBadge, setBadgeSet } from './badges';
-import { MAX_LEVEL, MAX_XP, XP_BOSS, XP_WIN, levelOf, withLevel } from './creatureLevel';
+import { MAX_LEVEL, MAX_XP, XP_BOSS, XP_LOSS, XP_WIN, levelOf, withLevel } from './creatureLevel';
 import { STAGES, WORLDS, lineupFoe, storyPrice } from './creatureStory';
 
 export interface Result {
@@ -74,22 +75,24 @@ export function needsRecovery(c = C()): boolean {
   return c.owned.length === 0;
 }
 
-/** How long a fainted creature rests before it can fight again, and what reviving it now costs. */
-export const REST_MS = 5 * 60_000;
-export const REVIVE_COST = 5;
+/**
+ * A fainted creature stays down until it is revived: one press of REVIVE,
+ * free, no timer (user, 31 Oct -- it used to rest five minutes or cost 5).
+ */
+export const REVIVE_COST = 0;
 
-/** Milliseconds of rest it still needs; 0 when it is fit to fight. */
-export function restLeft(o: Owned, now = Date.now()): number {
-  return o.faintedAt ? Math.max(0, o.faintedAt + REST_MS - now) : 0;
+/** Non-zero while it is down and needs REVIVE; 0 when it is fit to fight. */
+export function restLeft(o: Owned, _now = Date.now()): number {
+  return o.faintedAt ? 1 : 0;
 }
 
-/** Back on its feet now, for REVIVE_COST.  Refused before paying, never after. */
+/** Back on its feet now. */
 export function revive(uid: number): Result {
   const c = C();
   const o = c.owned.find((x) => x.uid === uid);
   if (!o) return no('NOT YOURS.');
   if (!restLeft(o)) return no('IT IS READY TO FIGHT.');
-  if (!ledger.debit(REVIVE_COST, 'creature')) return no(`REVIVING COSTS ${REVIVE_COST} TOKENS.`);
+  if (REVIVE_COST && !ledger.debit(REVIVE_COST, 'creature')) return no(`REVIVING COSTS ${REVIVE_COST} TOKENS.`);
   edit((s) => {
     const x = s.owned.find((y) => y.uid === uid);
     if (x) delete x.faintedAt;
@@ -102,11 +105,8 @@ export function revive(uid: number): Result {
 function unfit(c: CreatureState): string | null {
   const o = activeOwned(c);
   if (!o) return 'YOU NEED A CREATURE TO FIGHT.';
-  const left = restLeft(o);
-  if (!left) return null;
-  const m = Math.floor(left / 60_000);
-  const sec = Math.ceil((left % 60_000) / 1000);
-  return `${creatureById(o.id)!.name.toUpperCase()} IS RESTING (${m}:${String(sec).padStart(2, '0')}). REVIVE IT FOR ${REVIVE_COST}, OR USE THE OTHER.`;
+  if (!restLeft(o)) return null;
+  return `${creatureById(o.id)!.name.toUpperCase()} FAINTED. REVIVE IT, OR USE THE OTHER.`;
 }
 
 export function claimStarter(id: string): Result {
@@ -391,6 +391,17 @@ export function finishBattle(won: boolean): BattleEnd {
     const opened = opens ? (WORLDS[story!.w + 1] ? ` ${WORLDS[story!.w + 1].name} IS OPEN!` : ' THE STORY IS DONE - THE LADDER IS OPEN!') : '';
     return { ...ok(`${head}${up ? ` ${name} IS NOW LEVEL ${up}!` : ''}${opened}`), paid: prize, xp: gain, levelUp: up, cleared, runDone, worldOpened: opens };
   }
+  // A LOSS STILL TEACHES IT SOMETHING: a quarter of a win's experience
+  const lostBefore = fighter?.xp ?? 0;
+  const lostGain = fighter && levelOf(lostBefore) < MAX_LEVEL ? Math.min(MAX_XP - lostBefore, XP_LOSS) : 0;
+  const lostUp = levelOf(lostBefore + lostGain) > levelOf(lostBefore) ? levelOf(lostBefore + lostGain) : undefined;
+  if (lostGain) {
+    edit((s) => {
+      const f = s.owned.find((o) => o.uid === s.active);
+      if (f) f.xp = Math.min(MAX_XP, (f.xp ?? 0) + lostGain);
+    });
+  }
+  const lostXp = lostGain ? ` +${lostGain} XP.${lostUp ? ` ${name} IS NOW LEVEL ${lostUp}!` : ''}` : '';
   if (b.mode === 'ladder') {
     // THE RUN IS OVER: no refund, what it paid stays paid, and the creature
     // that fought comes home
@@ -401,7 +412,7 @@ export function finishBattle(won: boolean): BattleEnd {
       s.ladder = null;
     });
     store.flush();
-    return { ...ok(`DEFEATED. THE LADDER RUN IS OVER. ${name} LIMPS HOME.`), paid: 0, runOver: true };
+    return { ...ok(`DEFEATED. THE LADDER RUN IS OVER. ${name} LIMPS HOME.${lostXp}`), paid: 0, runOver: true, xp: lostGain, levelUp: lostUp };
   }
   edit((s) => {
     s.battle = null;
@@ -414,7 +425,7 @@ export function finishBattle(won: boolean): BattleEnd {
     if (fit) s.active = fit.uid;
   });
   store.flush();
-  return { ...ok(`${name} FAINTED. IT RESTS FOR ${REST_MS / 60_000} MINUTES, OR REVIVE IT FOR ${REVIVE_COST}.`), paid: 0, lost: fighter?.id };
+  return { ...ok(`${name} FAINTED. REVIVE IT ON THE TEAM SCREEN.${lostXp}`), paid: 0, lost: fighter?.id, xp: lostGain, levelUp: lostUp };
 }
 
 /**

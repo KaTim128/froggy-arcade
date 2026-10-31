@@ -22,7 +22,7 @@ export interface Owned {
   xp: number;
   /**
    * When it fainted (epoch ms), or absent: a fainted creature keeps its slot
-   * (log #3) and rests until it can fight again (game/creatureClash `REST_MS`).
+   * (log #3) and is down until REVIVE is pressed (game/creatureClash `revive`).
    */
   faintedAt?: number;
 }
