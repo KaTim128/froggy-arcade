@@ -837,6 +837,72 @@ export function drawFurniture(g: G, f: FurnitureDef, x: number, y: number, flip 
         paintMirrorShine(g, L, T, w, h);
         break;
       }
+      if (f.id === 'fur_mirror_round') {
+        // a porthole: a brass ring, a darker lip inside it, round glass
+        const cy = T + h / 2;
+        const r = Math.min(w, h) / 2;
+        g.fillStyle(0x000000, 0.2).fillCircle(x + 1.5, cy + 1.5, r);
+        g.fillStyle(OUT, 1).fillCircle(x, cy, r);
+        g.fillStyle(a, 1).fillCircle(x, cy, r - 1);
+        g.fillStyle(shade(a, 1.3), 1).fillCircle(x - 1, cy - 1, r - 2);
+        g.fillStyle(a, 1).fillCircle(x, cy, r - 2);
+        g.fillStyle(OUT, 1).fillCircle(x, cy, r - 3);
+        for (let k = 0; k < r * 2 - 8; k++) g.fillStyle(mix(0xeef2f4, 0xc8d8e0, k / (r * 2 - 8)), 1).fillRect(x - r + 4, cy - r + 4 + k, r * 2 - 8, 1);
+        g.fillStyle(OUT, 1);
+        // (the square of gradient cut back to a circle: the brass painted over its corners)
+        for (let yy = -r + 3; yy <= r - 3; yy++) {
+          const half = Math.sqrt(Math.max(0, (r - 3.5) * (r - 3.5) - yy * yy));
+          px(g, Math.round(x - r + 3), Math.round(cy + yy), Math.max(0, Math.round(r - 3 - half)), 1, a);
+          px(g, Math.round(x + half), Math.round(cy + yy), Math.max(0, Math.round(r - 3 - half)), 1, a);
+        }
+        for (const [bx, by] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) px(g, Math.round(x + bx * (r - 1.5)) - 1, Math.round(cy + by * (r - 1.5)) - 1, 2, 2, shade(a, 1.5));
+        break;
+      }
+      if (f.id === 'fur_mirror_tall') {
+        // a long dressing mirror: the walnut frame Threads' has, head to toe
+        g.fillStyle(0x000000, 0.22).fillRect(L + 2, T + h, w - 2, 2);
+        paintMirror(g, L, T, w, h, MIRROR_GLASS);
+        paintMirrorShine(g, L, T, w, h);
+        break;
+      }
+      if (f.id === 'fur_mirror_sunburst') {
+        // gold rays all round a round glass
+        const cy = T + h / 2;
+        const r = Math.min(w, h) / 2;
+        for (let k = 0; k < 16; k++) {
+          const ang = (k / 16) * Math.PI * 2;
+          const len = k % 2 ? r : r - 3;
+          g.lineStyle(2, OUT, 1).lineBetween(x, cy, x + Math.cos(ang) * len, cy + Math.sin(ang) * len);
+          g.lineStyle(1, k % 2 ? a : shade(a, 1.25), 1).lineBetween(x, cy, x + Math.cos(ang) * (len - 0.5), cy + Math.sin(ang) * (len - 0.5));
+        }
+        g.fillStyle(OUT, 1).fillCircle(x, cy, r * 0.58 + 1);
+        g.fillStyle(a, 1).fillCircle(x, cy, r * 0.58);
+        g.fillStyle(OUT, 1).fillCircle(x, cy, r * 0.58 - 2);
+        g.fillStyle(0xe4eef2, 1).fillCircle(x, cy, r * 0.58 - 3);
+        g.fillStyle(0xc8d8e0, 1).fillCircle(x + 1, cy + 1, r * 0.58 - 4);
+        g.fillStyle(0xeef2f4, 1).fillCircle(x - 0.5, cy - 0.5, r * 0.58 - 4.5);
+        break;
+      }
+      if (f.id === 'fur_mirror_vanity') {
+        // a theatre dressing-room mirror: a cream frame ringed with bulbs
+        g.fillStyle(0xfff0c0, 0.16).fillCircle(x, T + h / 2, w * 0.8);
+        g.fillStyle(0x000000, 0.2).fillRect(L + 2, T + h, w - 2, 2);
+        px(g, L - 1, T - 1, w + 2, h + 2, OUT);
+        px(g, L, T, w, h, a);
+        px(g, L, T, w, 1, 0xffffff);
+        px(g, L + 3, T + 3, w - 6, h - 6, OUT);
+        for (let k = 0; k < h - 8; k++) px(g, L + 4, T + 4 + k, w - 8, 1, mix(0xeef2f4, 0xc8d8e0, k / (h - 8)));
+        const bulb = (bx: number, by: number): void => {
+          g.fillStyle(0xfff6d8, 0.35).fillCircle(bx, by, 2.5);
+          px(g, Math.round(bx) - 1, Math.round(by) - 1, 2, 2, 0xfff6d8);
+        };
+        for (let k = 0; k < 5; k++) bulb(L + 2 + (k * (w - 4)) / 4, T + 1.5);
+        for (let k = 1; k < 4; k++) {
+          bulb(L + 1.5, T + 1.5 + (k * (h - 3)) / 4);
+          bulb(R - 1.5, T + 1.5 + (k * (h - 3)) / 4);
+        }
+        break;
+      }
       if (f.id === 'fur_trophy') {
         // a cup on a plinth: brass, two handles, an engraved plate
         // a cup on a plinth: two handles, a stem, an engraved plate
@@ -900,5 +966,41 @@ export function drawFurniture(g: G, f: FurnitureDef, x: number, y: number, flip 
         g.fillStyle(shade(a, 1.28), 1).fillEllipse(ex - 0.6, ey - 0.6, Math.max(1, w * 0.14), Math.max(1, (h - potH) * 0.12));
       }
     }
+  }
+}
+
+
+/**
+ * The glass of a mirror standing (hanging) with its foot at (x, y): where the
+ * reflection is drawn and clipped (rooms/piece, ui/mirrorTwin), worked out
+ * from the same numbers the art above is drawn with.  `feet` is how far under
+ * the glass's foot the reflection's feet are: a long mirror shows all of you,
+ * a small one your head and shoulders.  Null for anything that is not a mirror.
+ */
+export function mirrorGlass(f: FurnitureDef, x: number, y: number): { x: number; y: number; w: number; h: number; round: boolean; feet: number } | null {
+  const w = f.w;
+  const h = f.h;
+  const L = Math.round(x - w / 2);
+  const T = Math.round(y - h);
+  switch (f.id) {
+    case 'fur_mirror_wall':
+      return { x: L + 3, y: T + 3, w: w - 6, h: h - 6, round: false, feet: 9 };
+    case 'fur_mirror_tall':
+      return { x: L + 3, y: T + 3, w: w - 6, h: h - 6, round: false, feet: 2 };
+    case 'fur_bath_mirror':
+      // (the frame under the light bar, and the glass inside it: see above)
+      return { x: L + 5, y: T + 10, w: w - 10, h: h - 15, round: false, feet: 16 };
+    case 'fur_mirror_vanity':
+      return { x: L + 4, y: T + 4, w: w - 8, h: h - 8, round: false, feet: 13 };
+    case 'fur_mirror_round': {
+      const r = Math.min(w, h) / 2 - 3.5;
+      return { x: x - r, y: T + h / 2 - r, w: r * 2, h: r * 2, round: true, feet: 15 };
+    }
+    case 'fur_mirror_sunburst': {
+      const r = Math.min(w, h) / 2 * 0.58 - 3;
+      return { x: x - r, y: T + h / 2 - r, w: r * 2, h: r * 2, round: true, feet: 16 };
+    }
+    default:
+      return null;
   }
 }

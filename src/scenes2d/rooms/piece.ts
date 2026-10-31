@@ -7,7 +7,7 @@
 
 import Phaser from 'phaser';
 import { audio } from '../../core/audio';
-import { drawFurniture } from '../../art/furnitureArt';
+import { drawFurniture, mirrorGlass } from '../../art/furnitureArt';
 import { depthFor } from '../../art/player';
 import type { FurnitureDef } from '../../game/catalog';
 import { paintMirrorShine } from '../../art/shopFittings';
@@ -25,21 +25,16 @@ export class Piece {
     this.g.setDepth(def.wall ? 2 : def.cat === 'rug' ? 3 : depthFor(y));
     // A wall mirror is Threads' mirror: you are in it when you stand at it,
     // under its shine.
-    if (def.id === 'fur_mirror_wall') {
-      const L = Math.round(x - def.w / 2);
-      const T = Math.round(y - def.h);
-      this.twin = new MirrorTwin(scene, { x: L + 3, y: T + 3, w: def.w - 6, h: def.h - 6 }, 2, 9);
+    // Every mirror shows you, live, when you stand at it -- each with its
+    // own glass (art/furnitureArt `mirrorGlass`), under its shine.
+    const glass = mirrorGlass(def, x, y);
+    if (glass) {
+      this.twin = new MirrorTwin(scene, glass, 2, glass.feet);
       this.shine = scene.add.graphics().setDepth(2.2);
-      paintMirrorShine(this.shine, L, T, def.w, def.h);
-    } else if (def.id === 'fur_bath_mirror') {
-      // the bathroom mirror's glass is under its light bar (see furnitureArt):
-      // head and shoulders in it, over the basin
-      const L = Math.round(x - def.w / 2);
-      const T = Math.round(y - def.h);
-      const glass = { x: L + 4, y: T + 9, w: def.w - 8, h: def.h - 13 };
-      this.twin = new MirrorTwin(scene, glass, 2, 16);
-      this.shine = scene.add.graphics().setDepth(2.2);
-      paintMirrorShine(this.shine, glass.x - 2, glass.y - 2, glass.w + 4, glass.h + 4);
+      if (glass.round) {
+        // a soft highlight across the top-left of a round glass
+        this.shine.fillStyle(0xffffff, 0.28).fillEllipse(glass.x + glass.w * 0.36, glass.y + glass.h * 0.3, glass.w * 0.38, glass.h * 0.2);
+      } else paintMirrorShine(this.shine, glass.x - 3, glass.y - 3, glass.w + 6, glass.h + 6);
     }
   }
 

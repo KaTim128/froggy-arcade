@@ -37,7 +37,7 @@ import {
   unitNo,
   type Result,
 } from '../game/life';
-import { cosmeticById, furnitureById, lookFor, stockFor, type CosmeticDef, type CosmeticSlot, type FurnitureDef } from '../game/catalog';
+import { cosmeticById, cosmeticStockFor, furnitureById, lookFor, stockFor, type CosmeticDef, type CosmeticSlot, type FurnitureDef } from '../game/catalog';
 import { touchControls } from '../ui/touchControls';
 
 /**
@@ -382,7 +382,12 @@ export class Shop extends Phaser.Scene {
     const tab = (label: string, slots: CosmeticSlot[]): Tab => ({
       label,
       rows: () =>
-        COSMETICS.filter((c) => c.shop === shop && !c.reward && slots.includes(c.slot)).map((c) => ({
+        // today's stock (it changes every game day), and whatever you already
+        // own from this shop, so a day it is not out does not take it off you
+        COSMETICS.filter((c) => {
+          if (c.shop !== shop || c.reward || !slots.includes(c.slot)) return false;
+          return owns(c) || cosmeticStockFor(clock().day, shop).includes(c);
+        }).map((c) => ({
           id: c.id,
           name: c.name,
           right: on(c) ? 'ON' : owns(c) ? 'YOURS' : `$${c.price}`,
@@ -394,7 +399,7 @@ export class Shop extends Phaser.Scene {
         ? [tab('CUTS', ['hair']), tab('COLOUR', ['dye'])]
         : [tab('TOPS', ['top']), tab('LEGS', ['legs', 'shoes']), tab('EXTRAS', ['scarf', 'hat', 'glasses'])];
     return {
-      title: shop === 'barber' ? "CLIP JOINT - THE BOOK" : 'THREADS - THE RAILS',
+      title: shop === 'barber' ? `THE BOOK - DAY ${clock().day}` : `THE RAILS - DAY ${clock().day}`,
       tabs,
       detail: (id) => {
         const c = cosmeticById(id)!;

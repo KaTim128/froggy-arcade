@@ -27,6 +27,8 @@ export interface Glass {
   y: number;
   w: number;
   h: number;
+  /** A round glass (a porthole, a sunburst): the reflection clipped to the circle in the box. */
+  round?: boolean;
 }
 
 /** How far out from the wall's foot you can stand and still be in the glass. */
@@ -51,7 +53,8 @@ export class MirrorTwin {
     private feetBelow = 2,
   ) {
     this.shape = scene.make.graphics({}, false);
-    this.shape.fillStyle(0xffffff, 1).fillRect(glass.x, glass.y, glass.w, glass.h);
+    if (glass.round) this.shape.fillStyle(0xffffff, 1).fillEllipse(glass.x + glass.w / 2, glass.y + glass.h / 2, glass.w, glass.h);
+    else this.shape.fillStyle(0xffffff, 1).fillRect(glass.x, glass.y, glass.w, glass.h);
     this.mask = this.shape.createGeometryMask();
     scene.events.on('update', this.tick);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
