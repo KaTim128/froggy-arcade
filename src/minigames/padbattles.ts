@@ -1,5 +1,5 @@
 /**
- * PAD BATTLES (log #98).  10 tokens in, 20 for a win, nothing for a loss --
+ * PAD BATTLES (log #98).  5 tokens in, 20 for a win, nothing for a loss --
  * the shell takes the price once and pays once.
  *
  * Four frogs on a 7 x 5 grid of lily pads floating APART on deep water
