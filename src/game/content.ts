@@ -197,7 +197,7 @@ export const CABINETS: CabinetDef[] = [
   { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 160, y: 74, color: 0x5a8a3a, room: 'lounge', symbol: 'BB', motif: 'bog' },
   // CROAKED, beside it in the second marked spot: a cabinet of its own colours, pond-teal and gold
   // PAD BATTLES (log #98): the first of room 4's bottom spots (LOUNGE_FREE_SPOTS[0]), lily pink
-  { id: 'padbattles', title: 'PAD BATTLES', tier: 'hard', cost: 5, reward: 20, x: 66, y: 152, color: 0xd85a9a, room: 'lounge', symbol: 'PB', motif: 'pads' },
+  { id: 'padbattles', title: 'PAD BATTLES', tier: 'hard', cost: 5, reward: 10, x: 66, y: 152, color: 0xd85a9a, room: 'lounge', symbol: 'PB', motif: 'pads' },
   { id: 'croaked', title: 'CROAKED', tier: 'medium', cost: 5, reward: 10, x: 202, y: 74, color: 0x1f8a8a, room: 'lounge', symbol: 'CR', motif: 'maze' },
 
   // ---- and the room at the back, where none of it is a game
