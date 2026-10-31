@@ -97,6 +97,12 @@ export const WZ0 = -FLIGHT - LANDING;
 export const WZ1 = LANDING;
 /** The fire door in the well's +z wall. */
 export const SDOOR = { x0: 0.45, x1: 1.35, z: LANDING };
+/**
+ * How far the fire door's steel jambs stand in from the edges of its hole
+ * (each is 0.1 wide, centred 0.035 outside the edge): the walls either side,
+ * for collision, run in to the jambs' faces, not to the hole's edges.
+ */
+export const JAMB = 0.015;
 /** The corridor. */
 export const CH = 1.25;
 export const AH = 3;
@@ -865,7 +871,12 @@ export class PoliceBuilding {
       // left of the door, right of the door, over the door, the slab band below
       plane(SDOOR.x0 + WX, FH, back, S, (-WX + SDOOR.x0) / 2, y0 + FH / 2 - 0.3, WZ1, Math.PI);
       plane(WX - SDOOR.x1, FH, back, S, (SDOOR.x1 + WX) / 2, y0 + FH / 2 - 0.3, WZ1, Math.PI);
-      plane(dw, FH - 2.15, back, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.15 + (FH - 2.15) / 2 - 0.3, WZ1, Math.PI);
+      // (the side bands run 0.3 m low to cover the slab edge under them; the
+      // band over the door must not: it goes from the frame head, 2.15, up to
+      // where the next floor's bands start, 2.7 -- shifted down with them it
+      // hung 0.3 m into the doorway, a lintel standing out in front of the
+      // frame head)
+      plane(dw, FH - 0.3 - 2.15, back, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.15 + (FH - 0.3 - 2.15) / 2, WZ1, Math.PI);
       if (f === 0) plane(W, 0.3, back, S, 0, -0.15, WZ1, Math.PI);
     }
     const roof = plane(W, D, new THREE.MeshLambertMaterial({ color: 0xb8b2a4 }), S, 0, top, cz, 0, Math.PI / 2);
@@ -874,8 +885,8 @@ export class PoliceBuilding {
       { x0: -WX, z0: WZ0, x1: -WX, z1: WZ1 },
       { x0: WX, z0: WZ0, x1: WX, z1: WZ1 },
       { x0: -WX, z0: WZ0, x1: WX, z1: WZ0 },
-      { x0: -WX, z0: WZ1, x1: SDOOR.x0, z1: WZ1 },
-      { x0: SDOOR.x1, z0: WZ1, x1: WX, z1: WZ1 },
+      { x0: -WX, z0: WZ1, x1: SDOOR.x0 + JAMB, z1: WZ1 },
+      { x0: SDOOR.x1 - JAMB, z0: WZ1, x1: WX, z1: WZ1 },
     );
 
     const slab = new THREE.MeshLambertMaterial({ map: tex(texConcrete('#8a8680'), 2, 1) });
@@ -1172,8 +1183,8 @@ export class PoliceBuilding {
       // here only where the officers waiting in it can walk
       const L = LOBBY;
       fl.walls.push(
-        { x0: L.x0, z0: L.z0, x1: SDOOR.x0, z1: L.z0 },
-        { x0: SDOOR.x1, z0: L.z0, x1: L.x1, z1: L.z0 },
+        { x0: L.x0, z0: L.z0, x1: SDOOR.x0 + JAMB, z1: L.z0 },
+        { x0: SDOOR.x1 - JAMB, z0: L.z0, x1: L.x1, z1: L.z0 },
         { x0: L.x0, z0: L.z1, x1: L.x1, z1: L.z1 },
         { x0: L.x0, z0: L.z0, x1: L.x0, z1: L.z1 },
         { x0: L.x1, z0: L.z0, x1: L.x1, z1: L.z1 },
@@ -1216,6 +1227,9 @@ export class PoliceBuilding {
     // the alcove: the end wall with the fire door and the lift, the sides
     wall(-AH, WZ1, SDOOR.x0, WZ1, 0);
     wall(SDOOR.x1, WZ1, AH, WZ1, 0);
+    // (for collision, in to the steel jambs' faces: see JAMB)
+    fl.walls[fl.walls.length - 2].x1 = SDOOR.x0 + JAMB;
+    fl.walls[fl.walls.length - 1].x0 = SDOOR.x1 - JAMB;
     plane(SDOOR.x1 - SDOOR.x0, CEIL - 2.15, paper(1), group, (SDOOR.x0 + SDOOR.x1) / 2, 2.15 + (CEIL - 2.15) / 2, WZ1 + 0.001, 0);
     wall(-AH, WZ1, -AH, AZ, Math.PI / 2);
     wall(AH, WZ1, AH, AZ, -Math.PI / 2);
