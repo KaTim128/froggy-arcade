@@ -71,6 +71,9 @@ export const FURNITURE: FurnitureDef[] = [
   F('fur_toilet', 'TOILET', 'bath', 60, 12, 16, false, 0xf2f2ee, 0xc8d0d8, 'A FLAT NEEDS ONE'),
   F('fur_sink', 'WASH BASIN', 'bath', 45, 14, 18, false, 0xf2f2ee, 0x9aa8b4, 'HOT AND COLD'),
   F('fur_bathtub', 'BATHTUB', 'bath', 150, 40, 14, false, 0xf2f2ee, 0x8ac0e0, 'A LONG HOT SOAK'),
+  // and for its walls: the flat has bare tile where these go
+  F('fur_bath_mirror', 'BATHROOM MIRROR', 'bath', 35, 22, 24, true, 0xc8a040, 0xcfdde2, 'WITH A LIGHT OVER IT'),
+  F('fur_towel_rail', 'TOWEL RAIL', 'bath', 18, 18, 14, true, 0xc4c8cc, 0x3a7a80, 'TWO FRESH TOWELS'),
   // reward-only
   // ---- and the rest of the range.  Home and Hearth does not have all of
   // this out at once: what is on the floor changes with the day (see

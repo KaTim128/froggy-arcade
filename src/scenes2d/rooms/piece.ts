@@ -25,7 +25,7 @@ export class Piece {
     this.g.setDepth(def.wall ? 2 : def.cat === 'rug' ? 3 : depthFor(y));
     // A wall mirror is Threads' mirror: you are in it when you stand at it,
     // under its shine.
-    if (def.id === 'fur_mirror_wall') {
+    if (def.id === 'fur_mirror_wall' || def.id === 'fur_bath_mirror') {
       const L = Math.round(x - def.w / 2);
       const T = Math.round(y - def.h);
       this.twin = new MirrorTwin(scene, { x: L + 3, y: T + 3, w: def.w - 6, h: def.h - 6 }, 2, 9);
