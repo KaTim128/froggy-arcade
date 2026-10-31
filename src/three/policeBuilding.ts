@@ -987,13 +987,16 @@ export class PoliceBuilding {
       // -- no slit of the corridor's light down the sides, no gap over the
       // top, from the stairs or from the corridor
       const y0 = f * FH;
-      const fz = 0.2;
+      // (at G the leaf is gone and the doorway opens straight on the lobby, where
+      // a frame 0.2 m deep stood out of the wall like a stub of masonry: there it
+      // is a flat trim, flush with the wall's thickness, slim jambs)
+      const fz = f === 0 ? 0.06 : 0.2;
       for (const [x, w] of [
-        [SDOOR.x0 - 0.035, 0.1],
-        [SDOOR.x1 + 0.035, 0.1],
+        [SDOOR.x0 - (f === 0 ? 0.025 : 0.035), f === 0 ? 0.06 : 0.1],
+        [SDOOR.x1 + (f === 0 ? 0.025 : 0.035), f === 0 ? 0.06 : 0.1],
       ] as const)
         box(w, 2.24, fz, frameMat, S, x, y0 + 1.12, SDOOR.z);
-      box(SDOOR.x1 - SDOOR.x0 + 0.17, 0.12, fz, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.18, SDOOR.z);
+      box(SDOOR.x1 - SDOOR.x0 + (f === 0 ? 0.11 : 0.17), f === 0 ? 0.09 : 0.12, fz, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.18, SDOOR.z);
       // the stops the leaf shuts against, inside the jambs and under the head
       // (not at G: there is no leaf there now, and with nothing to shut
       // against them they read as a second, smaller frame inside the first)
