@@ -865,7 +865,11 @@ export class PoliceBuilding {
       // left of the door, right of the door, over the door, the slab band below
       plane(SDOOR.x0 + WX, FH, back, S, (-WX + SDOOR.x0) / 2, y0 + FH / 2 - 0.3, WZ1, Math.PI);
       plane(WX - SDOOR.x1, FH, back, S, (SDOOR.x1 + WX) / 2, y0 + FH / 2 - 0.3, WZ1, Math.PI);
-      plane(dw, FH - 2.15, back, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.15 + (FH - 2.15) / 2 - 0.3, WZ1, Math.PI);
+      // (the wall bands are all dropped 0.3 m for the slab, so this one's own foot was
+      // 0.3 m under the top of the doorway: a strip of wall showed across the
+      // top of the open door at G.  It starts at the door's head, 2.15 m, and
+      // runs to the same ceiling line as the rest)
+      plane(dw, FH - 0.3 - 2.15, back, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.15 + (FH - 0.3 - 2.15) / 2, WZ1, Math.PI);
       if (f === 0) plane(W, 0.3, back, S, 0, -0.15, WZ1, Math.PI);
     }
     const roof = plane(W, D, new THREE.MeshLambertMaterial({ color: 0xb8b2a4 }), S, 0, top, cz, 0, Math.PI / 2);
