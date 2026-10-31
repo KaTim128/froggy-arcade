@@ -19,7 +19,7 @@
  *   emulsion over a walnut dado, a patterned carpet, walnut doors with
  *   their numbers on brass plates, steel wall lights, ceiling fittings.
  *
- *   THE FLATS are 4.6 m by 6 m.  Which ones are open is decided at the
+ *   THE FLATS are 5.2 m by 6.6 m.  Which ones are open is decided at the
  *   start of every attempt (seeded, so an attempt keeps its building until it
  *   ends): about a third of them, never fewer than three a floor.  Each open
  *   one is furnished from one of three plans -- a bathroom beside the door
@@ -43,6 +43,7 @@
  */
 
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import * as HL from './hotelLobby';
 import { buildHotelLobby } from './hotelLobby';
 import {
@@ -102,9 +103,9 @@ export const CH = 1.25;
 export const AH = 3;
 export const AZ = 4.6;
 /** A flat's width along the corridor, and its depth into the building. */
-export const SLOT = 4.6;
+export const SLOT = 5.2;
 export const SLOTS = 6;
-export const RD = 6.0;
+export const RD = 6.6;
 export const END_Z = AZ + SLOT * SLOTS;
 export const OUTER = CH + RD;
 export const DOOR_W = 0.9;
@@ -1444,7 +1445,7 @@ export class PoliceBuilding {
     const plan = r();
     const kind = plan < 0.4 ? 'A' : plan < 0.72 ? 'B' : 'C';
     const ctx = new RoomCtx(this, fl, room, g, B, wx, flip, wallMat, r);
-    if (kind === 'A') ctx.planA(r() < 0.55);
+    if (kind === 'A') ctx.planA(r() < 0.7);
     else if (kind === 'B') ctx.planB();
     else ctx.planC();
   }
@@ -2151,6 +2152,11 @@ class RoomCtx {
       box(0.05, 0.12, w, frameMat, o, -len / 2 + 0.025, clear + 0.06, 0);
       // the slats under the mattress, seen from beneath; and the dust down there
       for (let k = 0; k < 12; k++) box(0.08, 0.02, w - 0.1, this.M.slat, o, -len / 2 + 0.12 + k * ((len - 0.24) / 11), clear + 0.01, 0);
+      // the mattress's underside between the slats, in shadow
+      const under = new THREE.Mesh(new THREE.PlaneGeometry(len - 0.08, w - 0.08), new THREE.MeshBasicMaterial({ color: 0x14100c }));
+      under.rotation.x = Math.PI / 2;
+      under.position.set(0, clear + 0.024, 0);
+      o.add(under);
       for (let k = 0; k < 5; k++) {
         const d = new THREE.Mesh(new THREE.CircleGeometry(0.03 + r() * 0.04, 6), this.M.dust);
         d.rotation.x = -Math.PI / 2;
@@ -2224,10 +2230,19 @@ class RoomCtx {
     rail.position.set(0, 1.7, -0.02);
     o.add(rail);
     const cols = [0x2a3a5a, 0x8a3a3a, 0xd8d0c0, 0x3a5a3a, 0x5a4a3a, 0x9a9aa0];
-    for (let k = 0; k < 5; k++) {
-      const shirt = box(0.06 + this.r() * 0.05, 0.75 + this.r() * 0.3, 0.42, new THREE.MeshLambertMaterial({ color: cols[Math.floor(this.r() * cols.length)] }), o, -0.4 + k * 0.17, 1.25, -0.02);
+    // (pushed along to both ends: the middle is where you stand)
+    for (let k = 0; k < 6; k++) {
+      const x = (k < 3 ? -1 : 1) * (0.5 - (k % 3) * 0.075);
+      const shirt = box(0.05 + this.r() * 0.03, 0.75 + this.r() * 0.3, 0.42, new THREE.MeshLambertMaterial({ color: cols[Math.floor(this.r() * cols.length)] }), o, x, 1.25, -0.02);
       shirt.rotation.y = (this.r() - 0.5) * 0.3;
+      // the hanger's hook over the rail
+      const hook = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.004, 4, 10, Math.PI * 1.3), this.M.chrome);
+      hook.rotation.y = Math.PI / 2;
+      hook.position.set(x, 1.69, -0.02);
+      o.add(hook);
     }
+    // the inside of the doors and the carcass, unlit by the room: dark wood
+    const inside = new THREE.MeshLambertMaterial({ color: 0x2a2018 });
     // the two doors, hinged at the outside edges
     const doors: THREE.Group[] = [];
     for (const s of [-1, 1]) {
@@ -2236,6 +2251,11 @@ class RoomCtx {
       o.add(p);
       const leaf = box(W / 2 - 0.01, H - 0.1, 0.025, mat, p, -s * (W / 4), H / 2, 0);
       void leaf;
+      // its inside face: dark, so a crack of room light down the middle is what you see
+      const inner = new THREE.Mesh(new THREE.PlaneGeometry(W / 2 - 0.02, H - 0.12), inside);
+      inner.position.set(-s * (W / 4), H / 2, -0.0135);
+      inner.rotation.y = Math.PI;
+      p.add(inner);
       // a knob near the middle, a mirror on one
       const knob = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), this.M.chrome);
       knob.position.set(-s * (W / 2 - 0.06), 1.0, 0.025);
@@ -2270,11 +2290,11 @@ class RoomCtx {
       floor: this.fl.f,
       approach: this.W(a + fa * 0.95, bb + fb * 0.95),
       exit: this.W(a + fa * 0.9, bb + fb * 0.9),
-      eye: at(-0.05, 1.55),
-      look: at(3, 1.4),
-      peekEye: at(0.2, 1.55),
+      eye: at(0.05, 1.55),
+      look: at(3, 1.45),
+      peekEye: at(0.15, 1.55),
       peekLook: at(3, 1.35),
-      peekFov: 52,
+      peekFov: 56,
       inspectFrom: this.W(a + fa * 1.0, bb + fb * 1.0),
       inspectAt: at(0, 1.3),
       crouch: false,
@@ -2291,31 +2311,103 @@ class RoomCtx {
     this.b.spots.push(sp);
   }
 
-  /** A bath against walls, its length along `along`; its curtain on the open side. */
+  /**
+   * A bath against walls, a0..a1 by b0..b1; its curtain on the open side.
+   *
+   * A real tub: a rolled rim round a tub that narrows to its floor, a panel
+   * down the open side, the taps and a shower on the wall at one end, and
+   * the curtain on rings along a rail across the open side, 2 m up.
+   */
   bath(a0: number, a1: number, b0: number, b1: number, openSide: 'a0' | 'a1' | 'b0' | 'b1', navKey: string): void {
     const ce = this.M.ceramic;
     const am = (a0 + a1) / 2;
     const bm = (b0 + b1) / 2;
-    const la = a1 - a0;
-    const lb = b1 - b0;
-    const o = this.grp(am, bm, 0);
-    o.rotation.y = 0;
-    // walls of the tub as boxes, local x = a, z = b (it is the same either way round)
-    const zb = (v: number): number => v;
-    box(la, 0.06, lb, ce, o, 0, 0.06, 0);
-    box(la, 0.55, 0.06, ce, o, 0, 0.3, zb(-lb / 2 + 0.03));
-    box(la, 0.55, 0.06, ce, o, 0, 0.3, zb(lb / 2 - 0.03));
-    box(0.06, 0.55, lb, ce, o, -la / 2 + 0.03, 0.3, 0);
-    box(0.06, 0.55, lb, ce, o, la / 2 - 0.03, 0.3, 0);
-    box(la - 0.12, 0.01, lb - 0.12, new THREE.MeshPhongMaterial({ color: 0xdfe8ea, shininess: 140, specular: 0xffffff }), o, 0, 0.1, 0);
-    // the taps at one end
-    const tap = box(0.04, 0.12, 0.04, this.M.chrome, o, -la / 2 + 0.08, 0.66, 0);
-    void tap;
-    this.solid(a0, a1, b0, b1, 0.6);
-    // ---- the curtain, on a rail across the open side, 2 m up
     const alongA = openSide === 'b0' || openSide === 'b1';
+    // (group-local: x along the bath's length, z across it, +z the open side)
+    const L = alongA ? a1 - a0 : b1 - b0;
+    const D = alongA ? b1 - b0 : a1 - a0;
+    const o = this.grp(am, bm, 0);
+    // turn the group so its +z is the open side's outward normal, in (a, flipped b)
+    const outA = openSide === 'a0' ? -1 : openSide === 'a1' ? 1 : 0;
+    const outB = openSide === 'b0' ? -1 : openSide === 'b1' ? 1 : 0;
+    o.rotation.y = Math.atan2(outA, this.flip ? -outB : outB);
+    // the taps and the shower at whichever end is against a wall
+    const headLow = alongA ? a0 < RD - a1 : b0 < SLOT - b1;
+    const hd = alongA ? { x: headLow ? -1 : 1, z: 0 } : { x: 0, z: (headLow ? -1 : 1) * (this.flip ? -1 : 1) };
+    // (local -x, in the room group's space, is (-cos, +sin) of the turn)
+    if (-Math.cos(o.rotation.y) * hd.x + Math.sin(o.rotation.y) * hd.z < 0) o.scale.x = -1;
+    const H = 0.56;
+    const rimW = 0.07;
+    // the tub: four rolled walls round a floor a hand up
+    for (const [w, d, x, z] of [
+      [L, rimW, 0, -D / 2 + rimW / 2],
+      [L, rimW, 0, D / 2 - rimW / 2],
+      [rimW, D - 0.02, -L / 2 + rimW / 2, 0],
+      [rimW, D - 0.02, L / 2 - rimW / 2, 0],
+    ] as const) {
+      const wl = new THREE.Mesh(new RoundedBoxGeometry(w, H, d, 3, 0.025), ce);
+      wl.position.set(x, H / 2, z);
+      o.add(wl);
+    }
+    const lining = new THREE.MeshPhongMaterial({ color: 0xe6ecec, specular: 0xffffff, shininess: 130 });
+    const floorT = new THREE.Mesh(new RoundedBoxGeometry(L - rimW * 2 + 0.02, 0.12, D - rimW * 2 + 0.02, 2, 0.03), lining);
+    floorT.position.set(0, 0.06, 0);
+    o.add(floorT);
+    // the sloped back at the foot end, to lie against
+    const rest = new THREE.Mesh(new THREE.PlaneGeometry(D - rimW * 2, 0.5), lining);
+    rest.position.set(L / 2 - rimW - 0.12, 0.33, 0);
+    rest.rotation.set(0, -Math.PI / 2, 0, 'YXZ');
+    rest.rotateX(-0.45);
+    o.add(rest);
+    // the plug, and the taps and the mixer on the wall at the head end
+    const plug = new THREE.Mesh(new THREE.CircleGeometry(0.025, 12), this.M.chrome);
+    plug.rotation.x = -Math.PI / 2;
+    plug.position.set(-L / 2 + 0.2, 0.125, 0);
+    o.add(plug);
+    const end = -L / 2 + 0.005;
+    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 10), this.M.chrome);
+    spout.rotation.z = Math.PI / 2;
+    spout.position.set(end + 0.08, H + 0.17, 0);
+    o.add(spout);
+    for (const sz of [-0.12, 0.12]) {
+      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.04, 12), this.M.chrome);
+      knob.rotation.z = Math.PI / 2;
+      knob.position.set(end + 0.02, H + 0.17, sz);
+      o.add(knob);
+    }
+    // the shower: a riser up the wall, the head angled down over the tub
+    const riser = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.25, 8), this.M.chrome);
+    riser.position.set(end + 0.03, H + 0.8, -0.06);
+    o.add(riser);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 8), this.M.chrome);
+    arm.rotation.z = Math.PI / 2;
+    arm.position.set(end + 0.13, H + 1.42, -0.06);
+    o.add(arm);
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.05, 0.04, 16), this.M.chrome);
+    head.position.set(end + 0.24, H + 1.4, -0.06);
+    head.rotation.z = -0.35;
+    o.add(head);
+    // a tiled splashback round the bath, up to the rail
+    const tileMat = new THREE.MeshPhongMaterial({ map: (() => { const t = new THREE.CanvasTexture(tileTex(0xe8eef0, this.room.id + 17)); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(L / 0.4, 1.4 / 0.4); return t; })(), shininess: 60, specular: 0x404040 });
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(L, 1.4), tileMat);
+    back.position.set(0, H + 0.7, -D / 2 + 0.006);
+    o.add(back);
+    const endT = new THREE.Mesh(new THREE.PlaneGeometry(D, 1.4), tileMat);
+    endT.position.set(-L / 2 + 0.006, H + 0.7, 0);
+    endT.rotation.y = Math.PI / 2;
+    o.add(endT);
+    // a bottle or two on the rim at the far end
+    if (this.r() < 0.8) {
+      for (let k = 0; k < 2; k++) {
+        const bt = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.03, 0.18, 10), new THREE.MeshLambertMaterial({ color: [0x3a8ac0, 0xe0a030, 0xd05070, 0x50a070][Math.floor(this.r() * 4)] }));
+        bt.position.set(L / 2 - 0.05, H + 0.1, -D / 2 + 0.06 + k * 0.08);
+        o.add(bt);
+      }
+    }
+    this.solid(a0, a1, b0, b1, 0.6);
+    // ---- the curtain, on rings along a rail across the open side, 2 m up
     const lineAt = openSide === 'a0' ? a0 : openSide === 'a1' ? a1 : openSide === 'b0' ? b0 : b1;
-    const len = alongA ? la : lb;
+    const len = L;
     const cur = new THREE.MeshLambertMaterial({
       map: (() => { const t = new THREE.CanvasTexture(curtainTex([0xc8d8e0, 0xe8d8c8, 0xd8e8d0, 0xf0f0f0, 0xc8c0d8][Math.floor(this.r() * 5)], this.room.id)); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; return t; })(),
       side: THREE.DoubleSide,
@@ -2325,41 +2417,65 @@ class RoomCtx {
     const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, len, 8), this.M.chrome);
     const railG = new THREE.Group();
     // railG local: x along the curtain line from its fixed end
-    const fixedA = alongA ? a1 : lineAt;
-    const fixedB = alongA ? lineAt : b1;
+    // (fixed at the shower end, where a curtain is pushed back to; and a
+    // hand inside the rim, so it hangs into the tub and the tub shows under it)
+    const IN = 0.07;
+    const fixedA = alongA ? (headLow ? a0 : a1) : lineAt - outA * IN;
+    const fixedB = alongA ? lineAt - outB * IN : headLow ? b0 : b1;
     railG.position.set(fixedA, 0, this.B(fixedB));
     // point local +x back along the line, toward the free end
-    const dirA = alongA ? -1 : 0;
-    const dirB = alongA ? 0 : -1;
+    const dirA = alongA ? (headLow ? 1 : -1) : 0;
+    const dirB = alongA ? 0 : headLow ? 1 : -1;
     railG.rotation.y = -Math.atan2(this.flip ? -dirB : dirB, dirA);
     this.g.add(railG);
     rail.rotation.z = Math.PI / 2;
     rail.position.set(len / 2, 2.0, 0);
     railG.add(rail);
-    const geo = new THREE.PlaneGeometry(1, 1.85, 24, 1);
-    const pos = geo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i) + 0.5;
-      pos.setXYZ(i, x, pos.getY(i), Math.sin(x * 60) * 0.035);
-    }
-    geo.computeVertexNormals();
+    // (pleated: folds in and out, deeper where it is bunched)
+    const geo = new THREE.PlaneGeometry(1, 1.58, 48, 1);
+    const fold = (bunch: number): void => {
+      const p2 = geo.attributes.position;
+      const amp = 0.03 + 0.05 * bunch;
+      const freq = 46 / (1 - 0.8 * bunch);
+      for (let i = 0; i < p2.count; i++) {
+        const x = i % 49 / 48;
+        p2.setXYZ(i, x, p2.getY(i), Math.sin(x * freq) * amp);
+      }
+      p2.needsUpdate = true;
+      geo.computeVertexNormals();
+    };
+    fold(0);
     const curtain = new THREE.Mesh(geo, cur);
-    curtain.position.set(0, 1.05, 0);
+    // (it hangs from just under the rail to below the rim, inside the tub)
+    curtain.position.set(0, 1.18, 0);
     curtain.userData.noShadow = true;
     railG.add(curtain);
+    const rings: THREE.Mesh[] = [];
+    const nRings = Math.max(8, Math.round(len / 0.15));
+    for (let i = 0; i < nRings; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.004, 6, 12), this.M.chrome);
+      ring.rotation.y = Math.PI / 2;
+      ring.position.set(0, 1.985, 0);
+      railG.add(ring);
+      rings.push(ring);
+    }
     let k = 0;
     let want = 0;
+    let lastK = -1;
     this.b.addTicker((dt) => {
       k += (want - k) * Math.min(1, dt * 6);
+      if (Math.abs(k - lastK) < 1e-4) return;
+      lastK = k;
       // shut: the full length; open: bunched up at the fixed end
-      curtain.scale.x = len * (1 - 0.82 * k);
+      const span = len * (1 - 0.82 * k);
+      curtain.scale.x = span;
+      rings.forEach((rg, i) => (rg.position.x = 0.02 + (i / (nRings - 1)) * (span - 0.04)));
+      fold(Math.min(1, k * 1.2));
     });
     // points across the line: out of the bath is the open side's outward normal
-    const outA = openSide === 'a0' ? -1 : openSide === 'a1' ? 1 : 0;
-    const outB = openSide === 'b0' ? -1 : openSide === 'b1' ? 1 : 0;
     const P = (along: number, out: number, y: number): P3 => {
-      const a = alongA ? a1 - along : lineAt + outA * out;
-      const b = alongA ? lineAt + outB * out : b1 - along;
+      const a = alongA ? (headLow ? a0 + along : a1 - along) : lineAt + outA * out;
+      const b = alongA ? lineAt + outB * out : headLow ? b0 + along : b1 - along;
       return this.W3(a, y, b);
     };
     const P2 = (along: number, out: number): { x: number; z: number } => {
@@ -2373,11 +2489,13 @@ class RoomCtx {
       floor: this.fl.f,
       approach: P2(len / 2, 0.6),
       exit: P2(len / 2, 0.6),
-      eye: P(len * 0.45, -0.35, 1.68),
-      look: P(len * 0.45, 3, 1.5),
-      peekEye: P(len - 0.14, 0.04, 1.66),
-      peekLook: P(len - 0.6, 2.5, 1.45),
-      peekFov: 56,
+      // standing in the tub, the curtain a forearm in front of you
+      eye: P(len * 0.5, -0.36, 1.66),
+      look: P(len * 0.62, 3, 1.5),
+      // the edge drawn back a hand at the open end, an eye to the gap
+      peekEye: P(len - 0.16, -0.1, 1.64),
+      peekLook: P(len - 0.9, 2.6, 1.42),
+      peekFov: 58,
       inspectFrom: P2(len / 2, 0.65),
       inspectAt: P(len / 2, -0.35, 1.3),
       crouch: false,
@@ -2399,7 +2517,7 @@ class RoomCtx {
    * local direction `shutDir` (radians in a/b), opening to `openDir`; with
    * `pocket` the space behind it when open is a place to hide.
    */
-  bathDoor(ha: number, hb: number, shutDir: number, openDir: number, pocket: { a: number; b: number; peekA: number; peekB: number; lookA: number; lookB: number; fromA: number; fromB: number } | null, navKey: string): Door {
+  bathDoor(ha: number, hb: number, shutDir: number, openDir: number, pocket: { a: number; b: number; from: { a: number; b: number } } | null, navKey: string): Door {
     const world = (dir: number): number => {
       const da = Math.cos(dir);
       const db = Math.sin(dir);
@@ -2448,19 +2566,49 @@ class RoomCtx {
     this.b.poseDoor(d);
     this.fl.doors.push(d);
     if (pocket) {
+      // ---- THE CRACK AT THE HINGE.  Flat open against the wall a real door
+      // stands a finger off its frame on the hinge side, and that is what
+      // you look through from behind it: the leaf sits that far off its
+      // hinge as it reaches fully open, so the gap is really there -- the
+      // edge of the door on one side, the end of the wall on the other, and
+      // a slice of the room between them.
+      const GAP = 0.12;
+      const parts = d.pivot.children.map((c) => ({ c, x: c.position.x }));
+      let was = -1;
+      this.b.addTicker(() => {
+        const t = Math.max(0, (d.k - 0.8) / 0.2);
+        const off = GAP * t * t * (3 - 2 * t);
+        if (Math.abs(off - was) < 1e-4) return;
+        was = off;
+        for (const p of parts) p.c.position.x = p.x + off;
+      });
+      const ca = Math.cos(openDir);
+      const cb = Math.sin(openDir);
+      // the middle of the crack, between the wall's face (4 cm) and the leaf's edge
+      const crack = { a: ha + ca * (0.04 + (GAP - 0.04) / 2), b: hb + cb * (0.04 + (GAP - 0.04) / 2) };
+      // hidden: the back of the door in front of you, the crack beside it
+      const onLeaf = { a: ha + ca * 0.3, b: hb + cb * 0.3 };
+      const tgt = { a: (crack.a + onLeaf.a) / 2, b: (crack.b + onLeaf.b) / 2 };
+      // peeking: an eye up to the crack
+      const ea = pocket.a - crack.a;
+      const eb = pocket.b - crack.b;
+      const el = Math.hypot(ea, eb) || 1;
+      // (on the line from where you stand through the crack, so it lines up with the doorway beyond)
+      const peek = { a: crack.a + (ea / el) * 0.15, b: crack.b + (eb / el) * 0.15 };
+      const out = { a: crack.a - (ea / el) * 3, b: crack.b - (eb / el) * 3 };
       const sp: HideSpot = {
         id: `${this.room.id}-door`,
         kind: 'door',
         room: this.room,
         floor: this.fl.f,
-        approach: this.W(pocket.fromA, pocket.fromB),
-        exit: this.W(pocket.fromA, pocket.fromB),
+        approach: this.W(pocket.from.a, pocket.from.b),
+        exit: this.W(pocket.from.a, pocket.from.b),
         eye: this.W3(pocket.a, 1.6, pocket.b),
-        look: this.W3(pocket.a + (ha - pocket.a) * 3, 1.5, pocket.b),
-        peekEye: this.W3(pocket.peekA, 1.58, pocket.peekB),
-        peekLook: this.W3(pocket.lookA, 1.4, pocket.lookB),
-        peekFov: 48,
-        inspectFrom: this.W(pocket.fromA, pocket.fromB),
+        look: this.W3(pocket.a + (tgt.a - pocket.a) * 4, 1.45, pocket.b + (tgt.b - pocket.b) * 4),
+        peekEye: this.W3(peek.a, 1.58, peek.b),
+        peekLook: this.W3(out.a, 1.4, out.b),
+        peekFov: 56,
+        inspectFrom: this.W(pocket.from.a, pocket.from.b),
         inspectAt: this.W3(pocket.a, 1.3, pocket.b),
         crouch: false,
         setOpen: () => undefined,
@@ -2475,40 +2623,173 @@ class RoomCtx {
     return d;
   }
 
+  /**
+   * A close-coupled toilet, its back to the wall: a pedestal that swells
+   * into the bowl, water in it, the seat down and the lid up against the
+   * cistern, the flush button on top.  (Group-local: +z is its front.)
+   */
   toilet(a: number, bb: number, theta: number): void {
     const o = this.grp(a, bb, theta);
     const ce = this.M.ceramic;
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.4, 16), ce);
-    base.position.set(0, 0.2, 0.05);
-    base.scale.z = 1.3;
-    o.add(base);
-    const seat = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.03, 8, 20), ce);
+    const BZ = 0.06;
+    // the pan: one turned profile, outside up to the rim and back down inside it
+    const pan = new THREE.LatheGeometry(
+      [
+        [0.0, 0.0], [0.1, 0.0], [0.105, 0.02], [0.095, 0.12], [0.11, 0.22], [0.15, 0.31], [0.18, 0.37], [0.19, 0.395],
+        [0.185, 0.41], [0.165, 0.41], [0.155, 0.39], [0.13, 0.34], [0.09, 0.29], [0.05, 0.26], [0.0, 0.25],
+      ].map(([x, y]) => new THREE.Vector2(x, y)),
+      28,
+    );
+    const panM = new THREE.Mesh(pan, ce);
+    panM.scale.set(1, 1, 1.28);
+    panM.position.set(0, 0, BZ);
+    o.add(panM);
+    const water = new THREE.Mesh(new THREE.CircleGeometry(0.1, 20), new THREE.MeshPhongMaterial({ color: 0xa8c8d0, specular: 0xffffff, shininess: 160, transparent: true, opacity: 0.85 }));
+    water.rotation.x = -Math.PI / 2;
+    water.scale.set(1, 1.15, 1);
+    water.position.set(0, 0.29, BZ - 0.01);
+    o.add(water);
+    // the back of the pan, run in to the cistern
+    const neck = new THREE.Mesh(new RoundedBoxGeometry(0.26, 0.36, 0.2, 3, 0.04), ce);
+    neck.position.set(0, 0.2, -0.14);
+    o.add(neck);
+    // the seat: a flat oval ring
+    const seat = new THREE.Mesh(new THREE.TorusGeometry(0.155, 0.032, 8, 28), ce);
     seat.rotation.x = Math.PI / 2;
-    seat.scale.y = 1.3;
-    seat.position.set(0, 0.42, 0.06);
+    seat.scale.set(1, 1.28, 0.45);
+    seat.position.set(0, 0.425, BZ);
     o.add(seat);
-    box(0.38, 0.38, 0.17, ce, o, 0, 0.6, -0.2);
-    box(0.06, 0.02, 0.03, this.M.chrome, o, 0.12, 0.8, -0.12);
+    // the lid, up, leaning back on the cistern
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.022, 28), ce);
+    lid.scale.set(1, 1, 1.25);
+    lid.rotation.x = -Math.PI / 2 + 0.16;
+    lid.position.set(0, 0.62, -0.1);
+    o.add(lid);
+    for (const sx of [-0.09, 0.09]) {
+      const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.04, 8), this.M.chrome);
+      hinge.rotation.z = Math.PI / 2;
+      hinge.position.set(sx, 0.43, -0.1);
+      o.add(hinge);
+    }
+    // the cistern, against the wall, its lid and the button
+    const cis = new THREE.Mesh(new RoundedBoxGeometry(0.4, 0.4, 0.17, 3, 0.03), ce);
+    cis.position.set(0, 0.64, -0.2);
+    o.add(cis);
+    const cap = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.04, 0.19, 2, 0.015), ce);
+    cap.position.set(0, 0.86, -0.2);
+    o.add(cap);
+    const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.012, 14), this.M.chrome);
+    btn.position.set(0, 0.885, -0.2);
+    o.add(btn);
+    // the pipe in from the wall, and a roll of paper beside it
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.12, 8), this.M.chrome);
+    pipe.position.set(0.15, 0.36, -0.26);
+    o.add(pipe);
+    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.1, 14), new THREE.MeshLambertMaterial({ color: 0xf6f4ee }));
+    roll.rotation.z = Math.PI / 2;
+    roll.position.set(-0.32, 0.68, -0.22);
+    o.add(roll);
+    const rh = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.16, 6), this.M.chrome);
+    rh.rotation.z = Math.PI / 2;
+    rh.position.set(-0.32, 0.68, -0.22);
+    o.add(rh);
     const fa = Math.sin(this.T(theta));
     const fb = this.flip ? -Math.cos(this.T(theta)) : Math.cos(this.T(theta));
-    const ha = Math.abs(fa) > 0.5 ? 0.3 : 0.22;
-    const hb = Math.abs(fb) > 0.5 ? 0.3 : 0.22;
-    this.solid(a - ha, a + ha, bb - hb, bb + hb, 0.8);
+    // (its footprint: 0.3 back from its centre to the wall, 0.35 forward to the front of the pan)
+    const ext = (f: number): [number, number] => (f > 0.5 ? [-0.3, 0.36] : f < -0.5 ? [-0.36, 0.3] : [-0.22, 0.22]);
+    const [a0, a1] = ext(fa);
+    const [b0, b1] = ext(fb);
+    this.solid(a + a0, a + a1, bb + b0, bb + b1, 0.8);
   }
 
+  /**
+   * A pedestal basin against the wall: a column that flares to the basin,
+   * the basin turned with a rim and a hollow, a mixer tap behind it, and a
+   * framed mirror on the wall above.  (Group-local: +z its front, the wall at -0.26.)
+   */
   sink(a: number, bb: number, theta: number, mirror = true): void {
     const o = this.grp(a, bb, theta);
     const ce = this.M.ceramic;
-    const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.75, 12), ce);
-    ped.position.set(0, 0.375, -0.05);
-    o.add(ped);
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.18, 0.14, 18, 1, true), ce);
-    bowl.position.set(0, 0.82, 0.02);
-    bowl.scale.z = 0.8;
-    o.add(bowl);
-    box(0.04, 0.1, 0.04, this.M.chrome, o, 0, 0.94, -0.14);
-    if (mirror) box(0.5, 0.6, 0.02, this.M.mirror, o, 0, 1.5, -0.2);
-    this.solid(a - 0.25, a + 0.25, bb - 0.25, bb + 0.25, 0.9);
+    const col = new THREE.LatheGeometry(
+      [[0, 0], [0.11, 0], [0.11, 0.02], [0.075, 0.06], [0.065, 0.4], [0.075, 0.62], [0.1, 0.7], [0, 0.7]].map(([x, y]) => new THREE.Vector2(x, y)),
+      20,
+    );
+    const colM = new THREE.Mesh(col, ce);
+    colM.scale.z = 0.8;
+    colM.position.set(0, 0, -0.08);
+    o.add(colM);
+    const basin = new THREE.LatheGeometry(
+      [
+        [0.0, 0.7], [0.12, 0.7], [0.2, 0.73], [0.25, 0.79], [0.27, 0.85], [0.265, 0.875],
+        [0.24, 0.88], [0.22, 0.865], [0.19, 0.83], [0.12, 0.79], [0.04, 0.775], [0.0, 0.775],
+      ].map(([x, y]) => new THREE.Vector2(x, y)),
+      28,
+    );
+    const bas = new THREE.Mesh(basin, ce);
+    bas.scale.z = 0.78;
+    bas.position.set(0, 0, 0.0);
+    o.add(bas);
+    // the back of it flat to the wall, with a deck for the tap
+    const deck = new THREE.Mesh(new RoundedBoxGeometry(0.46, 0.07, 0.1, 2, 0.02), ce);
+    deck.position.set(0, 0.85, -0.2);
+    o.add(deck);
+    const drain = new THREE.Mesh(new THREE.CircleGeometry(0.018, 10), this.M.chrome);
+    drain.rotation.x = -Math.PI / 2;
+    drain.position.set(0, 0.778, 0);
+    o.add(drain);
+    // the mixer: a body, a swan neck over the bowl, a lever
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.12, 12), this.M.chrome);
+    body.position.set(0, 0.945, -0.2);
+    o.add(body);
+    const neckT = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.011, 8, 16, Math.PI), this.M.chrome);
+    neckT.rotation.y = Math.PI / 2;
+    neckT.position.set(0, 1.0, -0.13);
+    o.add(neckT);
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.04, 8), this.M.chrome);
+    nozzle.position.set(0, 0.985, -0.06);
+    o.add(nozzle);
+    const lever = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.09), this.M.chrome);
+    lever.position.set(0, 1.02, -0.24);
+    lever.rotation.x = 0.4;
+    o.add(lever);
+    // a bar of soap on the deck
+    const soap = new THREE.Mesh(new RoundedBoxGeometry(0.08, 0.025, 0.05, 2, 0.01), new THREE.MeshLambertMaterial({ color: [0xf0e8c0, 0xc8e0f0, 0xf0c8d0][Math.floor(this.r() * 3)] }));
+    soap.position.set(0.15, 0.9, -0.2);
+    o.add(soap);
+    if (mirror) {
+      const fr = new THREE.Mesh(new RoundedBoxGeometry(0.56, 0.74, 0.03, 2, 0.01), this.M.chrome);
+      fr.position.set(0, 1.55, -0.245);
+      o.add(fr);
+      box(0.5, 0.68, 0.01, this.M.mirror, o, 0, 1.55, -0.228);
+      const shelf = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.02, 0.1, 2, 0.008), new THREE.MeshPhongMaterial({ color: 0xdfe8ea, transparent: true, opacity: 0.6, shininess: 120 }));
+      shelf.position.set(0, 1.13, -0.21);
+      o.add(shelf);
+    }
+    const fa = Math.sin(this.T(theta));
+    const fb = this.flip ? -Math.cos(this.T(theta)) : Math.cos(this.T(theta));
+    const ext = (f: number): [number, number] => (f > 0.5 ? [-0.27, 0.23] : f < -0.5 ? [-0.23, 0.27] : [-0.28, 0.28]);
+    const [a0, a1] = ext(fa);
+    const [b0, b1] = ext(fb);
+    this.solid(a + a0, a + a1, bb + b0, bb + b1, 0.9);
+  }
+
+  /** A heated towel rail on a wall, a towel folded over it. (Facing local theta.) */
+  towelRail(a: number, bb: number, theta: number): void {
+    const o = this.grp(a, bb, theta);
+    for (const sx of [-0.25, 0.25]) {
+      const up = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.8, 8), this.M.chrome);
+      up.position.set(sx, 0.95, 0.06);
+      o.add(up);
+    }
+    for (let k = 0; k < 5; k++) {
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.5, 8), this.M.chrome);
+      bar.rotation.z = Math.PI / 2;
+      bar.position.set(0, 0.62 + k * 0.16, 0.06);
+      o.add(bar);
+    }
+    const towel = new THREE.MeshLambertMaterial({ map: (() => { const t = new THREE.CanvasTexture(fabricTex([0xf0ece4, 0x8ab0c8, 0xd89a8a, 0x9ac0a0][Math.floor(this.r() * 4)], this.room.id + 23)); t.colorSpace = THREE.SRGBColorSpace; return t; })() });
+    box(0.36, 0.5, 0.02, towel, o, 0, 1.02, 0.08);
+    box(0.36, 0.5, 0.02, towel, o, 0, 1.02, 0.04);
   }
 
   nightstand(a: number, bb: number): void {
@@ -2609,111 +2890,118 @@ class RoomCtx {
 
   // ---------------------------------------------------- the three plans
   //
-  // (Laid out for a flat RD deep and SLOT wide -- 6 m by 4.6 m: the furniture
+  // (Laid out for a flat RD deep and SLOT wide -- 6.6 m by 5.2 m: the furniture
   // its real size and against its walls, so there is floor between it, and
-  // room to get round the bed, into the wardrobe, behind the bathroom door.)
+  // room to get round the bed, into the wardrobe, behind the bathroom door.
+  // Every bathroom is big enough to stand in with the door shut: the bath,
+  // the toilet and the basin each against a wall, clear of the door's swing.)
 
   /**
-   * A: the bathroom beside the door (a 0..2.4, b 1.75..SLOT), the bedroom
+   * A: the bathroom beside the door (a 0..2.6, b 2.0..SLOT), the bedroom
    * beyond.  With a bath: the curtain is the place to hide.  Without: a
    * toilet and basin, and the space behind the opened door.
    */
   planA(withBath: boolean): void {
     const r = this.r;
-    this.tiles(0, 2.4, 1.75, SLOT);
-    // the partition: along b = 1.75 with the bath door at a 0.87..1.65, and along a = 2.4
-    this.wall(0, 1.75, 0.86, 1.75);
-    this.wall(1.65, 1.75, 2.4, 1.75);
-    this.wall(2.4, 1.75, 2.4, SLOT);
+    const BA = 2.6;
+    const BB = 2.0;
+    this.tiles(0, BA, BB, SLOT);
+    // the partition: along b = BB with the bath door at a 0.92..1.7, and along a = BA
+    this.wall(0, BB, 0.91, BB);
+    this.wall(1.7, BB, BA, BB);
+    this.wall(BA, BB, BA, SLOT);
     const above = new THREE.Mesh(new THREE.BoxGeometry(0.8, CEIL - 2.1, 0.08), this.wallMat);
-    above.position.set(1.26, 2.1 + (CEIL - 2.1) / 2, this.B(1.75));
+    above.position.set(1.31, 2.1 + (CEIL - 2.1) / 2, this.B(BB));
     this.g.add(above);
-    this.pt('p1', 2.6, 1.0);
-    this.pt('c', 4.2, 1.6);
-    this.pt('bo', 1.25, 1.25);
-    this.pt('bi', 1.25, 2.45);
+    this.pt('p1', 2.9, 1.1);
+    this.pt('c', 4.4, 1.7);
+    this.pt('bo', 1.3, 1.4);
+    this.pt('bi', 1.3, 2.85);
     this.link('in', 'p1');
     this.link('p1', 'c');
     this.link('p1', 'bo');
     this.link('in', 'bo');
     let door: Door;
     if (withBath) {
-      door = this.bathDoor(1.65, 1.75, Math.PI, Math.PI / 2, null, 'bi');
-      this.bath(0.05, 1.75, SLOT - 0.75, SLOT - 0.02, 'b0', 'bi');
-      this.toilet(2.1, 2.35, -Math.PI / 2);
-      this.sink(0.3, 2.05, Math.PI / 2);
+      door = this.bathDoor(1.7, BB, Math.PI, Math.PI / 2, null, 'bi');
+      this.bath(0.04, 1.76, SLOT - 0.76, SLOT - 0.04, 'b0', 'bi');
+      // the bath's alcove: a short wall across its foot, so the curtain closes it in
+      this.wall(1.81, SLOT - 0.8, 1.81, SLOT);
+      this.toilet(BA - 0.34, 3.55, -Math.PI / 2);
+      this.sink(0.27, 2.75, Math.PI / 2);
     } else {
-      // the pocket behind the door: between the opened leaf (a 1.65) and the wall (a 2.4)
-      door = this.bathDoor(1.65, 1.75, Math.PI, Math.PI / 2, { a: 2.0, b: 2.18, peekA: 1.74, peekB: 1.82, lookA: 1.1, lookB: -1.4, fromA: 1.25, fromB: 2.4 }, 'bi');
-      this.toilet(0.35, SLOT - 0.35, Math.PI / 2);
-      this.sink(0.3, 2.08, Math.PI / 2);
-      if (r() < 0.6) this.plant(2.05, SLOT - 0.3);
+      // the pocket behind the door: between the opened leaf (a 1.7) and the wall (a BA)
+      door = this.bathDoor(1.7, BB, Math.PI, Math.PI / 2, { a: 2.15, b: 2.4, from: { a: 2.15, b: 3.25 } }, 'bi');
+      this.toilet(0.34, SLOT - 0.5, Math.PI / 2);
+      this.sink(0.27, 2.85, Math.PI / 2);
+      if (r() < 0.5) this.towelRail(BA - 0.03, SLOT - 0.8, -Math.PI / 2);
+      if (r() < 0.6) this.plant(BA - 0.3, SLOT - 0.3);
     }
     this.link('bo', 'bi', door);
     const under = r() < 0.85;
-    this.bed(RD - 1.95, 2.3, 3.85, false, under, 'c');
-    this.nightstand(RD - 0.25, 4.1);
-    if (r() < 0.75) this.wardrobe(3.9, 0.31, 0, 'c');
-    else this.desk(3.9, 0.3, 0);
-    if (r() < 0.6) this.desk(2.6, 0.27, 0);
-    if (r() < 0.6) this.armchair(3.0, 3.9, Math.PI);
+    this.bed(RD - 2.05, 2.55, 4.15, false, under, 'c');
+    this.nightstand(RD - 0.25, 4.45);
+    if (r() < 0.75) this.wardrobe(3.5, 0.31, 0, 'c');
+    else this.desk(3.5, 0.3, 0);
+    if (r() < 0.6) this.desk(4.85, 0.27, 0);
+    if (r() < 0.6) this.armchair(3.2, 4.6, Math.PI);
     if (r() < 0.6) this.plant(RD - 0.3, 0.3);
-    this.window(0.6, 1.9);
-    this.rug(4.2, 1.5, 1.6, 0.9);
-    this.picture(4.4, 0, 'b1');
+    this.window(0.75, 2.05);
+    this.rug(4.6, 1.6, 1.6, 0.9);
+    this.picture(4.6, 0, 'b1');
   }
 
   /**
    * B: a separate WC off the entry (a 0..WC_A, b SLOT-WC_B..SLOT) and a
    * bedroom.  Big enough to walk into and shut the door behind you: the door
-   * opens in, and in a WC 1.5 m deep you were standing where it swings, so it
-   * stopped against you and would not shut.
+   * opens in, clear of where you stand.
    */
   planB(): void {
     const r = this.r;
-    const WC_A = 2.3;
-    const WC_B = 2.2;
+    const WC_A = 2.4;
+    const WC_B = 2.4;
     const wb = SLOT - WC_B;
     this.tiles(0, WC_A, wb, SLOT);
-    this.wall(0, wb, 0.55, wb);
-    this.wall(1.33, wb, WC_A, wb);
+    this.wall(0, wb, 0.62, wb);
+    this.wall(1.4, wb, WC_A, wb);
     this.wall(WC_A, wb, WC_A, SLOT);
     const above = new THREE.Mesh(new THREE.BoxGeometry(0.78, CEIL - 2.1, 0.08), this.wallMat);
-    above.position.set(0.94, 2.1 + (CEIL - 2.1) / 2, this.B(wb));
+    above.position.set(1.01, 2.1 + (CEIL - 2.1) / 2, this.B(wb));
     this.g.add(above);
-    this.pt('p1', 2.6, 2.3);
-    this.pt('c', 4.0, 2.8);
-    this.pt('wo', 0.95, wb - 0.45);
-    this.pt('wi', 0.95, wb + 0.48);
+    this.pt('p1', 2.8, 2.4);
+    this.pt('c', 4.3, 3.0);
+    this.pt('wo', 1.0, wb - 0.5);
+    this.pt('wi', 1.1, wb + 0.75);
     this.link('in', 'p1');
     this.link('p1', 'c');
     this.link('in', 'wo');
     this.link('wo', 'p1');
     // the WC door hinged at its wall end: open, it leaves a pocket against the corridor wall
-    const door = this.bathDoor(0.55, wb, 0, Math.PI / 2, { a: 0.29, b: wb + 0.38, peekA: 0.47, peekB: wb + 0.06, lookA: 1.45, lookB: wb - 2.1, fromA: 1.0, fromB: wb + 0.48 }, 'wi');
+    const door = this.bathDoor(0.62, wb, 0, Math.PI / 2, { a: 0.3, b: wb + 0.42, from: { a: 0.32, b: wb + 1.15 } }, 'wi');
     this.link('wo', 'wi', door);
-    this.toilet(WC_A - 0.4, SLOT - 0.3, Math.PI);
-    this.sink(0.85, SLOT - 0.22, Math.PI, false);
+    this.toilet(WC_A - 0.45, SLOT - 0.34, Math.PI);
+    this.sink(0.95, SLOT - 0.27, Math.PI, true);
+    if (r() < 0.6) this.towelRail(WC_A - 0.03, wb + 0.8, -Math.PI / 2);
     const under = r() < 0.85;
-    this.bed(RD - 2.0, 0.18, 1.78, true, under, 'c');
-    this.nightstand(RD - 0.25, 1.98);
-    this.wardrobe(3.6, SLOT - 0.31, Math.PI, 'c');
-    if (r() < 0.7) this.armchair(RD - 0.4, 3.0, -Math.PI / 2);
-    this.desk(2.2, 0.27, 0);
+    this.bed(RD - 2.05, 0.2, 1.8, true, under, 'c');
+    this.nightstand(RD - 0.25, 2.05);
+    this.wardrobe(3.8, SLOT - 0.31, Math.PI, 'c');
+    if (r() < 0.7) this.armchair(RD - 0.4, 3.3, -Math.PI / 2);
+    this.desk(2.3, 0.27, 0);
     if (r() < 0.6) this.plant(RD - 0.3, SLOT - 0.3);
-    this.rug(3.6, 1.0, 1.6, 0.9);
-    this.window(2.4, 3.6);
-    this.picture(3.0, 0, 'b0');
+    this.rug(3.8, 1.1, 1.6, 0.9);
+    this.window(2.6, 4.0);
+    this.picture(3.1, 0, 'b0');
   }
 
   /**
-   * C: a studio, its bathroom in the far corner (a RD-2..RD, b SLOT-2..SLOT)
+   * C: a studio, its bathroom in the far corner (a RD-2.5..RD, b SLOT-2.4..SLOT)
    * with a bath -- room enough inside, past the door's swing, to shut it.
    */
   planC(): void {
     const r = this.r;
-    const ba = RD - 2.0;
-    const bb = SLOT - 2.0;
+    const ba = RD - 2.5;
+    const bb = SLOT - 2.4;
     this.tiles(ba, RD, bb, SLOT);
     this.wall(ba, bb, ba + 0.1, bb);
     this.wall(ba + 0.88, bb, RD, bb);
@@ -2721,24 +3009,28 @@ class RoomCtx {
     const above = new THREE.Mesh(new THREE.BoxGeometry(0.78, CEIL - 2.1, 0.08), this.wallMat);
     above.position.set(ba + 0.49, 2.1 + (CEIL - 2.1) / 2, this.B(bb));
     this.g.add(above);
-    this.pt('c', 3.0, 1.5);
-    this.pt('bo', ba + 0.47, bb - 0.5);
-    this.pt('bi', ba + 0.47, bb + 0.5);
+    this.pt('c', 3.0, 1.6);
+    this.pt('bo', ba + 0.47, bb - 0.55);
+    this.pt('bi', ba + 0.6, bb + 0.75);
     this.link('in', 'c');
     this.link('c', 'bo');
     const door = this.bathDoor(ba + 0.1, bb, 0, Math.PI / 2, null, 'bi');
     this.link('bo', 'bi', door);
-    this.bath(RD - 0.7, RD - 0.02, bb + 0.05, SLOT - 0.02, 'a0', 'bi');
-    this.toilet(ba + 0.35, SLOT - 0.3, Math.PI);
+    // the bath along the outside wall, at the far end
+    this.bath(RD - 0.76, RD - 0.04, SLOT - 1.74, SLOT - 0.04, 'a0', 'bi');
+    this.wall(RD - 0.8, SLOT - 1.79, RD, SLOT - 1.79);
+    this.toilet(ba + 0.36, SLOT - 0.34, Math.PI);
+    this.sink(ba + 1.15, SLOT - 0.27, Math.PI);
+    if (r() < 0.6) this.towelRail(RD - 0.03, bb + 0.3, -Math.PI / 2);
     const under = r() < 0.8;
-    this.bedAlong(1.2, 3.15, SLOT - 1.55, under, 'c');
-    this.wardrobe(RD - 0.31, 0.9, -Math.PI / 2, 'c');
-    this.desk(0.27, 2.0, Math.PI / 2);
-    if (r() < 0.7) this.plant(3.4, 0.25);
-    if (r() < 0.6) this.armchair(2.0, 0.5, 0);
-    this.rug(2.6, 1.6, 1.8, 1.0);
-    this.window(1.4, 2.4);
-    this.picture(2.2, 0, 'b1');
+    this.bedAlong(1.2, 3.25, SLOT - 1.6, under, 'c');
+    this.wardrobe(RD - 0.31, 0.95, -Math.PI / 2, 'c');
+    this.desk(0.27, 2.1, Math.PI / 2);
+    if (r() < 0.7) this.plant(3.6, 0.25);
+    if (r() < 0.6) this.armchair(2.1, 0.5, 0);
+    this.rug(2.8, 1.7, 1.8, 1.0);
+    this.window(1.7, 2.5);
+    this.picture(2.3, 0, 'b1');
   }
 
   /** A bed against the b = SLOT wall, head at the outside end, a0..a1 along it, open toward -b. */
@@ -2760,6 +3052,10 @@ class RoomCtx {
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(0.07, clear, 0.07, frameMat, o, sx * (len / 2 - 0.05), clear / 2, sz * (w / 2 - 0.05));
       for (const sz of [-1, 1]) box(len, 0.12, 0.05, frameMat, o, 0, clear + 0.06, sz * (w / 2 - 0.025));
       for (let k = 0; k < 12; k++) box(0.08, 0.02, w - 0.1, this.M.slat, o, -len / 2 + 0.12 + k * ((len - 0.24) / 11), clear + 0.01, 0);
+      const dark = new THREE.Mesh(new THREE.PlaneGeometry(len - 0.08, w - 0.08), new THREE.MeshBasicMaterial({ color: 0x14100c }));
+      dark.rotation.x = Math.PI / 2;
+      dark.position.set(0, clear + 0.024, 0);
+      o.add(dark);
     } else box(len, 0.36, w, frameMat, o, 0, 0.18, 0);
     box(len - 0.04, 0.22, w - 0.04, this.M.mattress, o, 0, 0.47, 0);
     box(len * 0.78, 0.08, w + 0.06, duvet, o, -len * 0.11, 0.62, 0);

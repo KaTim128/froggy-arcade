@@ -16,12 +16,7 @@ for (x,y) in [(3,4),(28,3),(26,14),(4,17),(29,22),(2,27)]: px[y][x]='#6a4aa0'
 for x in range(3,29):
     for y in (29,30):
         px[y][x]='#1d5a5a' if y==29 else '#123a3e'
-# neon frame
-for i in range(N):
-    for (x,y) in [(i,0),(i,N-1),(0,i),(N-1,i)]: px[y][x]='#ff4fa8'
-    for (x,y) in [(i,1),(i,N-2),(1,i),(N-2,i)]:
-        if 1<=i<=N-2: px[y][x]='#3a1430'
-for (x,y) in [(0,0),(N-1,0),(0,N-1),(N-1,N-1)]: px[y][x]='#0b0d12'
+# (no frame: the background runs to the edges, so the launcher's own mask is the only outline)
 # frog
 def body(x,y): return ell(x,y,16,17,11.5,8) or ell(x,y,10,9.5,4.8,4.8) or ell(x,y,22,9.5,4.8,4.8)
 B='#3fe39b'; S='#25b06f'; D='#167a4a'; H='#a8f7cf'; O='#0a3a26'
