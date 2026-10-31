@@ -167,15 +167,17 @@ export class ExteriorDay extends Phaser.Scene {
 
     // He stands where he stands.  Nothing in this scene ever moves him, so he
     // does not need keeping hold of -- and at midnight he is not there.
+    // (at midnight the doors are chained and the sign is dark: that says shut
+    // well enough, without a CLOSED plate hung over them)
     if (time !== 'midnight') new MysteryMan(this, MAN_X, WALK_Y + 4);
-    else this.paintClosed(refs.doorRect);
     // THE FOLLOWING DAY: your face, pasted over the arcade's own posters by the doors
     if (st0.arc !== 'none') {
       // (one either side of the doors, each over one of the arcade's own --
       // the face you had when they went up, whatever you look like now)
       const face = st0.wantedOutfit ? lookFor(st0.wantedOutfit) : undefined;
-      paintWantedPoster(this, 97, 95, 41, face);
-      paintWantedPoster(this, 199, 95, 41, face);
+      // (at midnight in the night's colours, like the wall they are pasted on)
+      paintWantedPoster(this, 97, 95, 41, face, time === 'midnight');
+      paintWantedPoster(this, 199, 95, 41, face, time === 'midnight');
     }
     // You come out of the doors standing at them, so going back in is one key
     // press away — the loop is meant to be walked dozens of times.
@@ -296,16 +298,6 @@ export class ExteriorDay extends Phaser.Scene {
         if (on) this.errand = null;
       },
     });
-  }
-
-  /**
-   * The arcade shut: the glass doors chained through their handles (see
-   * paintExterior), the sign dark, and CLOSED over the door.
-   */
-  private paintClosed(door: { x: number; y: number; w: number; h: number }): void {
-    // (hung above the doors, where the door's prompt does not cover it)
-    this.add.rectangle(door.x + door.w / 2, door.y - 7, 42, 10, 0x14100c).setDepth(46).setStrokeStyle(1, 0xc31f2e);
-    centerText(this, door.x + door.w / 2, door.y - 7, 'CLOSED', 0xc31f2e).setDepth(47);
   }
 
   /**

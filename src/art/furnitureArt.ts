@@ -747,6 +747,35 @@ export function drawFurniture(g: G, f: FurnitureDef, x: number, y: number, flip 
         slab(g, L, y - 3, w, 3, a);
         break;
       }
+      if (f.id === 'fur_bath_mirror') {
+        // the mirror that used to come painted on the wall: a gold frame,
+        // a steel light bar over it with its three bulbs, plain glass
+        const bar = 3;
+        const fT = T + bar + 2;
+        const fh = h - bar - 2;
+        g.fillStyle(0xfff0c0, 0.18).fillCircle(x, T + 1, w * 0.7);
+        metal(g, L, T, w, bar, 0x9aa4ac);
+        for (let k = 0; k < 3; k++) px(g, L + 3 + k * Math.round((w - 6) / 3), T + 1, 3, 1, 0xfff6d8);
+        px(g, L, fT, w, fh, 0x8a6a28);
+        px(g, L + 1, fT + 1, w - 2, fh - 2, a);
+        paintMirror(g, L + 2, fT + 2, w - 4, fh - 4, MIRROR_GLASS);
+        paintMirrorShine(g, L + 2, fT + 2, w - 4, fh - 4);
+        g.fillStyle(0x000000, 0.2).fillRect(L + 2, y, w - 2, 2);
+        break;
+      }
+      if (f.id === 'fur_towel_rail') {
+        // a chrome rail on two brackets, a towel folded over each half
+        metal(g, L, T, w, 1, 0xd8dce0);
+        for (const bx of [L, R - 1]) px(g, bx, T - 1, 1, 3, 0x9aa4ac);
+        const tw = Math.max(4, Math.round((w - 6) / 2));
+        for (const [tx, th] of [[L + 2, h - 1], [R - 2 - tw, h - 3]] as const) {
+          px(g, tx, T + 1, tw, th, 0xf8f6f0);
+          px(g, tx, T + 1, tw, 1, 0xffffff);
+          px(g, tx + tw - 1, T + 1, 1, th, 0xe0ddd4);
+          px(g, tx, T + th - 2, tw, 1, b);
+        }
+        break;
+      }
       if (f.id === 'fur_bath_mat') {
         px(g, L - 1, T - 1, w + 2, h + 2, OUT);
         px(g, L, T, w, h, a);

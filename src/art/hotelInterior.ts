@@ -1044,9 +1044,11 @@ export const MIRROR = { x: 149, y: 115, w: 22, h: 21 };
  * The bathroom.  `fitted` is the hotel's: a vanity and basin under the
  * mirror, a toilet and a bath.  Without it it is the flat's -- the same tile,
  * floor, mirror, towel rail and window, and the plumbing waiting in the wall
- * for whatever the tenant buys and puts in.
+ * for whatever the tenant buys and puts in.  `bare` is the tenant's own
+ * flat (Condo) as the agent hands it over: not even the mirror or the towel
+ * rail -- those are bought at Home and Hearth and hung on the wall.
  */
-export function paintBathroom(g: Ctx, fitted = true): void {
+export function paintBathroom(g: Ctx, fitted = true, bare = false): void {
   const W = 320;
   // white subway tile to the ceiling, a burgundy band at the dado
   rect(g, 0, CEIL_Y, W, FLOOR_Y - CEIL_Y, '#f2f0ea');
@@ -1064,24 +1066,30 @@ export function paintBathroom(g: Ctx, fitted = true): void {
   // the door back to the room
   roomDoor(g, 22, '', { w: 15, white: true });
   // a towel rail with towels, at hand height
+  if (!bare) {
   rect(g, 70, 128, 18, 1, HP.steelHi);
   rect(g, 72, 129, 6, 12, '#f8f6f0');
   rect(g, 72, 138, 6, 1, '#3a7a80');
   rect(g, 80, 129, 6, 10, '#f8f6f0');
   rect(g, 80, 136, 6, 1, '#3a7a80');
+  }
   // the vanity: mirror in gold, a light bar, a marble top, a basin
   const m = MIRROR;
+  if (!bare) {
   rect(g, m.x - 2, m.y - 2, m.w + 4, m.h + 4, HP.goldDark);
   rect(g, m.x - 1, m.y - 1, m.w + 2, m.h + 2, HP.gold);
   g.clearRect(m.x, m.y, m.w, m.h);
   rect(g, m.x - 2, m.y - 7, m.w + 4, 3, HP.steel);
   for (let k = 0; k < 3; k++) rect(g, m.x + 2 + k * 8, m.y - 6, 3, 1, '#fff6d8');
   glow(g, m.x + m.w / 2, m.y - 5, 24, 0.38);
+  }
   if (!fitted) {
+    if (!bare) {
     // the glass, with nothing in front of it: a cool sheen
     rect(g, m.x, m.y, m.w, m.h, '#cfdde2');
     for (let d = 0; d < 6; d++) rect(g, m.x + 2 + d, m.y + 2 + d * 2, 1, 2, '#ffffff', 0.35);
     rect(g, m.x, m.y + m.h - 3, m.w, 3, '#b8c8ce');
+    }
     // the capped pipes where a basin goes, a soil pipe stub, a floor drain
     rect(g, m.x + 6, 143, 2, 5, HP.steelHi);
     rect(g, m.x + 14, 143, 2, 5, HP.steelHi);
