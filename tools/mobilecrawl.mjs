@@ -84,7 +84,7 @@ try {
         if (r.status() >= 400 && !/favicon/.test(r.url())) errs.push(`${r.status()}: ${r.url().replace(URL, '')}`);
       });
       await page.emulate({ viewport: { width: phone.w, height: phone.h, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }, userAgent: phone.ua });
-      await page.goto(`${URL}/?intro=1&charity=1&key=1&tokens=200&touch=1&scene=${key === 'ExteriorDay' ? 'StreetWest' : 'ExteriorDay'}`, { waitUntil: 'load' });
+      await page.goto(`${URL}/?intro=1&charity=1&key=1&tokens=200&touch=1&portrait=1&scene=${key === 'ExteriorDay' ? 'StreetWest' : 'ExteriorDay'}`, { waitUntil: 'load' });
       await sleep(2200);
       await page.evaluate((key, data) => {
         const f = window.__froggy;

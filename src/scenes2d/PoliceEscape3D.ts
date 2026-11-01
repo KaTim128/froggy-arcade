@@ -2680,7 +2680,14 @@ export class PoliceEscape3D extends Phaser.Scene {
     });
   }
 
-  /** What you can see from where you are hiding: each place its own. */
+  /**
+   * What you can see from where you are hiding.  The hiding place itself
+   * does the hiding now -- the real back of the door with the real crack at
+   * its hinge, the wardrobe's doors with daylight down the join, the
+   * curtain's fabric, the slats of the bed overhead -- so all that is laid
+   * over it is the dark of being shut in somewhere: a soft fall-off toward
+   * the edges, a little deeper while you are not looking out.
+   */
   private paintHideMask(ctx: CanvasRenderingContext2D): void {
     const h = this.hide;
     if (!h) return;
@@ -2688,59 +2695,13 @@ export class PoliceEscape3D extends Phaser.Scene {
     const p = h.peekK;
     const W = GAME_W;
     const H = GAME_H;
-    const soft = (x0: number, x1: number, dir: 1 | -1, a: number): void => {
-      const g = ctx.createLinearGradient(x0, 0, x1, 0);
-      g.addColorStop(0, `rgba(0,0,0,${dir > 0 ? a : 0})`);
-      g.addColorStop(1, `rgba(0,0,0,${dir > 0 ? 0 : a})`);
-      ctx.fillStyle = g;
-      ctx.fillRect(Math.min(x0, x1), 0, Math.abs(x1 - x0), H);
-    };
-    switch (h.spot.kind) {
-      case 'bed': {
-        // the frame overhead: a dark band down from the top, the gap under it
-        const band = H * (0.62 - 0.2 * p);
-        ctx.fillStyle = `rgba(0,0,0,${0.92 * k})`;
-        ctx.fillRect(0, 0, W, band);
-        const g = ctx.createLinearGradient(0, band, 0, band + 16);
-        g.addColorStop(0, `rgba(0,0,0,${0.92 * k})`);
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, band, W, 16);
-        ctx.fillStyle = `rgba(0,0,0,${0.35 * k})`;
-        ctx.fillRect(0, H - 10, W, 10);
-        break;
-      }
-      case 'wardrobe': {
-        // inside: dark, but for the crack between the doors
-        const slit = W * (0.05 + 0.2 * p);
-        ctx.fillStyle = `rgba(0,0,0,${0.9 * k})`;
-        ctx.fillRect(0, 0, W / 2 - slit / 2 - 10, H);
-        ctx.fillRect(W / 2 + slit / 2 + 10, 0, W / 2 - slit / 2 - 10, H);
-        soft(W / 2 - slit / 2 - 10, W / 2 - slit / 2, 1, 0.9 * k);
-        soft(W / 2 + slit / 2, W / 2 + slit / 2 + 10, -1, 0.9 * k);
-        break;
-      }
-      case 'curtain': {
-        // the fabric: the light through it; at the edge, when you pull it, the room
-        ctx.fillStyle = `rgba(190,200,210,${0.28 * k * (1 - p * 0.6)})`;
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = `rgba(0,0,0,${0.55 * k})`;
-        ctx.fillRect(0, 0, W * (1 - 0.35 * p), H);
-        soft(W * (1 - 0.35 * p), W * (1 - 0.35 * p) + 14, 1, 0.55 * k);
-        break;
-      }
-      case 'door': {
-        // the crack at the hinge: a sliver of the room
-        const slit = W * (0.02 + 0.1 * p);
-        const cx = W / 2;
-        ctx.fillStyle = `rgba(0,0,0,${0.94 * k})`;
-        ctx.fillRect(0, 0, cx - slit / 2 - 6, H);
-        ctx.fillRect(cx + slit / 2 + 6, 0, W, H);
-        soft(cx - slit / 2 - 6, cx - slit / 2, 1, 0.94 * k);
-        soft(cx + slit / 2, cx + slit / 2 + 6, -1, 0.94 * k);
-        break;
-      }
-    }
+    const depth = (h.spot.kind === 'curtain' ? 0.35 : 0.55) * k * (1 - 0.35 * p);
+    if (depth <= 0.01) return;
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.hypot(W, H) * 0.55);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(0,0,0,${depth.toFixed(3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
   }
 
   // ===================================================================== misc

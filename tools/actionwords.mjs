@@ -32,7 +32,7 @@ const phone = async (query) => {
     viewport: { width: 844, height: 390, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
   });
-  await page.goto(`${URL}/${query}&touch=1`, { waitUntil: 'load' });
+  await page.goto(`${URL}/${query}&touch=1&portrait=1`, { waitUntil: 'load' });
   await sleep(3000);
   return page;
 };

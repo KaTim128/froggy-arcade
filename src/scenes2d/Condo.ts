@@ -209,7 +209,7 @@ export class Condo extends WalkRoom {
     this.outline = this.add.graphics().setDepth(700);
     this.dim = this.add.graphics().setDepth(690);
     if (this.area === 'bath') {
-      this.add.image(0, 0, this.painted('condo_bath_v1', GAME_W, GAME_H, (g) => paintBathroom(g, false))).setOrigin(0, 0).setDepth(-2);
+      this.add.image(0, 0, this.painted('condo_bath_bare_v2', GAME_W, GAME_H, (g) => paintBathroom(g, false, true))).setOrigin(0, 0).setDepth(-2);
     } else {
       const { x, y, w, h } = ROOM_WINDOW;
       // the sky through the window, behind the room; the glazing over it
@@ -466,7 +466,7 @@ export class Condo extends WalkRoom {
         if (over(W.x - 14, W.x + W.w + 14)) return 'NOT OVER THE WINDOW.';
         // (the hook is only there until you have a wardrobe: then the wall is yours)
         if (!this.hasWardrobe() && over(HOOK.x - 9, HOOK.x + 9)) return 'THE COAT HOOK IS THERE.';
-      } else if (over(140, 180) || over(212, 234)) return 'THE MIRROR AND THE WINDOW ARE THERE.';
+      } else if (over(212, 234)) return 'NOT OVER THE WINDOW.';
     } else {
       if (y < PLACE_TOP || y > PLACE_BOTTOM) return 'IT HAS TO STAND ON THE FLOOR.';
       if (f.cat !== 'rug') {

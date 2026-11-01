@@ -3,7 +3,9 @@
  *
  * Two ways round, chosen after PLAY:
  *
- *   BIG FROG   you are the frog.  Catch the tadpole before the clock runs out.
+ *   BIG FROG   you are the frog.  Catch the tadpole before the clock runs out
+ *              -- or before it eats every fly: it has the same job you have
+ *              as the survivor, and goes after them (see `runnerChoice`).
  *              It is QUICKER than you, and it runs: every turn it takes keeps
  *              it farthest from you with the most room behind it.  What the
  *              frog has is TRAPS -- drop one where you stand (SPACE), and a
@@ -254,17 +256,61 @@ function playerChoice(m: Mover): Dir | null {
 }
 
 /**
- * THE TADPOLE RUNS.  Of the ways out of this cell it takes the one that ends
- * up farthest from where the frog is heading, weighted by how much maze lies
- * behind it (cells it could still reach before the frog could) -- so it runs
- * round the loops rather than into a corner.  It turns back only when every
- * other way is worse.
+ * Steps from every cell to the nearest fly (-1: none left, or none reachable),
+ * going only through cells `ok` allows -- the safe water, away from the frog.
+ */
+function flyField(ok: (x: number, y: number) => boolean): number[][] {
+  const d = Array.from({ length: ROWS }, () => Array<number>(COLS).fill(-1));
+  const q: Array<[number, number]> = [];
+  for (const k of flies) {
+    const [x, y] = k.split(',').map(Number);
+    if (!ok(x, y)) continue;
+    d[y][x] = 0;
+    q.push([x, y]);
+  }
+  for (let h = 0; h < q.length; h++) {
+    const [x, y] = q[h];
+    for (let k = 0; k < 4; k++) {
+      const nx = x + DX[k];
+      const ny = y + DY[k];
+      if (!open(nx, ny) || d[ny][nx] >= 0 || !ok(nx, ny)) continue;
+      d[ny][nx] = d[y][x] + 1;
+      q.push([nx, ny]);
+    }
+  }
+  return d;
+}
+
+/** How near the frog may be before the tadpole stops eating and runs; and how wide a berth its path keeps. */
+const FLEE_AT = 3;
+const BERTH = 2;
+
+/**
+ * THE TADPOLE RUNS -- AND EATS.  The computer's tadpole has the same job you
+ * have when you are it: eat every fly in the maze before it is caught.  Two
+ * minds, and at every junction it is in one of them:
+ *
+ *   FEEDING  the frog is more than FLEE_AT steps off.  It takes the shortest
+ *            way to the nearest fly it can reach WITHOUT coming within BERTH
+ *            steps of the frog (the field is run out from every fly at once,
+ *            through safe water only) -- so it sweeps a corridor clean, then
+ *            the next, and goes round the frog rather than past it.
+ *   RUNNING  the frog is close, or no fly is left that it can reach safely.
+ *            Of the ways out it takes the one that ends up farthest from
+ *            where the frog is heading, weighted by how much maze lies behind
+ *            it (cells it reaches before the frog could) -- so it runs round
+ *            the loops rather than into a corner, and goes back to feeding
+ *            once it has the room.
+ *
+ * It turns back only when every other way is worse, and it still swims into
+ * a trap it has not spotted.
  */
 function runnerChoice(m: Mover): Dir | null {
   if (!you) return null;
   const hunter = distances(grid, you.tx, you.ty);
-  let best: Dir | null = null;
-  let score = -Infinity;
+  const hd = (x: number, y: number): number => (hunter[y][x] < 0 ? 99 : hunter[y][x]);
+  // the ways out it will take: open, and not a trap it has seen
+  const ways: Dir[] = [];
   for (const d of [0, 1, 2, 3] as Dir[]) {
     const nx = m.cx + DX[d];
     const ny = m.cy + DY[d];
@@ -275,6 +321,31 @@ function runnerChoice(m: Mover): Dir | null {
       if (!spotted.has(tk)) spotted.set(tk, Math.random() < (role === 'frog' ? PLAYER_SPOT_TRAP : SPOT_TRAP));
       if (spotted.get(tk)) continue;
     }
+    ways.push(d);
+  }
+  // ---- FEEDING
+  if (flies.size && hd(m.cx, m.cy) > FLEE_AT) {
+    const food = flyField((x, y) => hd(x, y) > BERTH);
+    let best: Dir | null = null;
+    let near = Infinity;
+    for (const d of ways) {
+      const v = food[m.cy + DY[d]][m.cx + DX[d]];
+      if (v < 0) continue;
+      // (a hair against turning back, and a hair of chance between equals)
+      const s = v + (d === ((m.dir + 2) % 4) ? 0.4 : 0) + Math.random() * 0.3;
+      if (s < near) {
+        near = s;
+        best = d;
+      }
+    }
+    if (best !== null) return best;
+  }
+  // ---- RUNNING
+  let best: Dir | null = null;
+  let score = -Infinity;
+  for (const d of ways) {
+    const nx = m.cx + DX[d];
+    const ny = m.cy + DY[d];
     // room to run: the cells it reaches first, from there, not passing back through here
     const mine = distances(grid, nx, ny, keyOf(m.cx, m.cy));
     let room = 0;
@@ -358,14 +429,22 @@ function aiTraps(): void {
   if (exits >= 3 && far >= 3 && Math.random() < 0.5) dropTrap();
 }
 
+/**
+ * The tadpole swimming into a cell eats the fly there -- yours or the
+ * computer's, the same rule both ways round.  The hunt quickens as the flies
+ * run out (the frog, whoever is it, a little faster each time), and the last
+ * fly eaten is the tadpole's win.
+ */
 function arrived(m: Mover): void {
-  if (role !== 'survivor' || m !== you) return;
+  const tad = role === 'frog' ? them : you;
+  const frog = role === 'frog' ? you : them;
+  if (m !== tad) return;
   const k = keyOf(m.tx, m.ty);
   if (flies.delete(k)) {
-    audio.sfx('water_plip', 0.25);
-    // the hunt quickens as the flies run out
-    if (them) them.speed = HUNTER_SPEED * (1 + 0.12 * (1 - flies.size / Math.max(1, fliesAtStart)));
-    if (!flies.size) end(true, 'EVERY FLY EATEN!');
+    audio.sfx('water_plip', role === 'frog' ? 0.12 : 0.25);
+    const base = role === 'frog' ? PLAYER_FROG_SPEED : HUNTER_SPEED;
+    if (frog) frog.speed = base * (1 + 0.12 * (1 - flies.size / Math.max(1, fliesAtStart)));
+    if (!flies.size) end(role !== 'frog', role === 'frog' ? 'IT ATE EVERY FLY!' : 'EVERY FLY EATEN!');
   }
 }
 
@@ -386,7 +465,8 @@ function newRound(): void {
   spotted = new Map();
   trapCd = 1.5;
   flies = new Set();
-  if (role === 'survivor') for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (grid[y][x] && keyOf(x, y) !== keyOf(...mine) && keyOf(x, y) !== keyOf(...theirs)) flies.add(keyOf(x, y));
+  // the flies, in every open cell, whichever side you are on: the tadpole eats them either way
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (grid[y][x] && keyOf(x, y) !== keyOf(...mine) && keyOf(x, y) !== keyOf(...theirs)) flies.add(keyOf(x, y));
   fliesAtStart = flies.size;
   clock = 0;
   drawWalls();
@@ -654,7 +734,7 @@ function refreshHud(): void {
   if (phase === 'pick') hud.setText('');
   else if (role === 'frog') {
     const trap = traps.size >= maxTraps() ? 'ALL DOWN' : trapCd > 0 ? `${Math.ceil(trapCd)}S` : 'READY';
-    hud.setText(`BIG FROG   CATCH IT: ${Math.max(0, Math.ceil(HUNT_S - clock))}S   TRAP ${trap}  ${traps.size}/${maxTraps()}`);
+    hud.setText(`BIG FROG  ${Math.max(0, Math.ceil(HUNT_S - clock))}S  FLIES ${flies.size}  TRAP ${trap} ${traps.size}/${maxTraps()}`);
   }
   else hud.setText(`SURVIVOR    FLIES LEFT ${flies.size}    ${Math.floor(clock)}S`);
 }
@@ -669,12 +749,12 @@ export const croaked: MinigameModule = {
     pitch: 'A MAZE, A BIG FROG, AND SOMETHING SMALL. PICK A SIDE.',
     steps: [
       { say: 'AFTER PLAY, PICK A SIDE: BIG FROG HUNTS, THE SURVIVOR RUNS.', demo: 'croak.pick' },
-      { say: `BIG FROG: CATCH THE TADPOLE IN ${HUNT_S} SECONDS. YOU ARE THE QUICKER, SO RUN IT DOWN OR TRAP IT.`, demo: 'croak.hunt' },
+      { say: `BIG FROG: CATCH THE TADPOLE IN ${HUNT_S} SECONDS, BEFORE IT EATS EVERY FLY. YOU ARE THE QUICKER, SO RUN IT DOWN OR TRAP IT.`, demo: 'croak.hunt' },
       { say: `SPACE DROPS A TRAP WHERE YOU STAND (${PLAYER_MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, phone: `TAP TRAP TO DROP ONE WHERE YOU STAND (${PLAYER_MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, demo: 'croak.trap' },
       { say: 'SURVIVOR: YOU ARE THE SMALL ONE. EAT EVERY FLY, AND MIND THE FAINT RINGS - THE FROG\'S TRAPS.', demo: 'croak.survive' },
       { say: 'W A S D OR THE ARROWS STEER. PRESS A WAY EARLY AND YOU TURN AT THE NEXT GAP.', phone: 'THE STICK STEERS. PUSH A WAY EARLY AND YOU TURN AT THE NEXT GAP.', demo: 'croak.steer' },
     ],
-    objective: ['PICK A SIDE. BIG FROG: RUN DOWN OR TRAP THE TADPOLE IN TIME.', 'SURVIVOR: EAT EVERY FLY, DODGE THE FROG AND ITS TRAPS.', 'A NEW MAZE EVERY ROUND.'],
+    objective: ['PICK A SIDE. BIG FROG: RUN DOWN OR TRAP THE TADPOLE BEFORE IT EATS EVERY FLY.', 'SURVIVOR: EAT EVERY FLY, DODGE THE FROG AND ITS TRAPS.', 'A NEW MAZE EVERY ROUND.'],
     controls: [
       ['W A S D', 'STEER'],
       ['ARROWS', 'STEER'],

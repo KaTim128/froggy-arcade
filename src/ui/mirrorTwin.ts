@@ -8,6 +8,13 @@
  * this was made for; the wall mirror you can buy at Home and Hearth uses the
  * same twin, so hanging one at home is the same mirror.
  *
+ * LIVE.  Every frame it takes the player's own pose -- the same point in the
+ * same stride -- so it walks step for step with you, and it is not switched
+ * on and off at the frame's edge: it follows you along the wall the whole
+ * time you are near it and the glass cuts it off, so you slide into the
+ * mirror past one side of the frame and out past the other.  Stepping away
+ * from the wall fades it out rather than snapping it off.
+ *
  * It reads the room's player and floor line off the scene (every WalkRoom has
  * both) and runs itself off the scene's update.
  */
@@ -20,6 +27,8 @@ export interface Glass {
   y: number;
   w: number;
   h: number;
+  /** A round glass (a porthole, a sunburst): the reflection clipped to the circle in the box. */
+  round?: boolean;
 }
 
 /** How far out from the wall's foot you can stand and still be in the glass. */
@@ -44,7 +53,8 @@ export class MirrorTwin {
     private feetBelow = 2,
   ) {
     this.shape = scene.make.graphics({}, false);
-    this.shape.fillStyle(0xffffff, 1).fillRect(glass.x, glass.y, glass.w, glass.h);
+    if (glass.round) this.shape.fillStyle(0xffffff, 1).fillEllipse(glass.x + glass.w / 2, glass.y + glass.h / 2, glass.w, glass.h);
+    else this.shape.fillStyle(0xffffff, 1).fillRect(glass.x, glass.y, glass.w, glass.h);
     this.mask = this.shape.createGeometryMask();
     scene.events.on('update', this.tick);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
@@ -64,14 +74,19 @@ export class MirrorTwin {
     const tw = this.twin!;
     const cx = this.glass.x + this.glass.w / 2;
     const wall = host.floorTop ?? this.glass.y + this.glass.h;
-    const near = Math.abs(p.x - cx) < this.glass.w / 2 + 6 && p.y - wall < NEAR;
+    // (within a body's width of the glass either side: the mask does the edges)
+    const along = Math.abs(p.x - cx) < this.glass.w / 2 + 14;
+    const out = p.y - wall;
+    const near = along && out < NEAR;
     tw.sprite.setVisible(near && p.sprite.visible);
     if (!near) return;
     tw.setPosition(p.x, this.glass.y + this.glass.h + this.feetBelow);
     tw.sprite.setDepth(this.depth + 0.1);
-    // the other way round, and walking when you walk
+    // fainter as you step back from the wall, a little silvered at its best
+    tw.sprite.setAlpha(0.88 * Phaser.Math.Clamp(1 - (out - NEAR * 0.45) / (NEAR * 0.55), 0, 1));
+    // the other way round, and walking when you walk, stride for stride
+    tw.copyPose(p);
     tw.sprite.setScale(-p.sprite.scaleX || -1, 1);
-    tw.face(p.facing);
   }
 
   destroy(): void {

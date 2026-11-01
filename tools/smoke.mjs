@@ -192,7 +192,7 @@ try {
   await shot('02-start-screen');
 
   console.log('3. settings modal (audio + controls)');
-  await click(640, 360 + (148 - 90) * 4); // SETTINGS button
+  await click(640 + (191 - 160) * 4, 360 + (128 - 90) * 4); // SETTINGS button
   await sleep(600);
   await shot('03-settings-audio');
   await click(640 + (176 - 160) * 4, 360 + (34 - 90) * 4); // CONTROLS tab
@@ -202,7 +202,7 @@ try {
   await sleep(500);
 
   console.log('4. START -> intro cutscene');
-  await click(640, 360 + (112 - 90) * 4); // START
+  await click(640, 360 + (110 - 90) * 4); // START
   await sleep(2600);
   await shot('05-intro-walk');
   await page.keyboard.press('Escape'); // skip

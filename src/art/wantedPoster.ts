@@ -5,6 +5,7 @@
  * over it in red, and the line the police put under it.
  */
 
+import { nightify } from '../render/palette';
 import Phaser from 'phaser';
 import { paintFigure, playerLook, type Look } from './player';
 
@@ -12,8 +13,8 @@ export const POSTER_W = 30;
 export const POSTER_H = 35;
 
 /** The poster, its top-left at (x, y), on the wall. */
-export function paintWantedPoster(scene: Phaser.Scene, x: number, y: number, depth = 40, look: Look = playerLook()): Phaser.GameObjects.Container {
-  const key = `wanted_poster_${hash(JSON.stringify(look))}`;
+export function paintWantedPoster(scene: Phaser.Scene, x: number, y: number, depth = 40, look: Look = playerLook(), night = false): Phaser.GameObjects.Container {
+  const key = `wanted_poster_${hash(JSON.stringify(look))}${night ? '_night' : ''}`;
   if (!scene.textures.exists(key)) {
     const t = scene.textures.createCanvas(key, POSTER_W, POSTER_H);
     if (t) {
@@ -67,6 +68,18 @@ export function paintWantedPoster(scene: Phaser.Scene, x: number, y: number, dep
       // the words, in small print that fits the sheet: WANTED in red, REWARD under
       tiny(g, 'WANTED', POSTER_W / 2, 2, '#b02020');
       tiny(g, 'REWARD', POSTER_W / 2, POSTER_H - 7, '#3a2a18');
+      // at night: every pixel through the same nightify the street is painted with
+      if (night) {
+        const im = g.getImageData(0, 0, POSTER_W, POSTER_H);
+        const d = im.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const c = nightify((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+          d[i] = (c >> 16) & 0xff;
+          d[i + 1] = (c >> 8) & 0xff;
+          d[i + 2] = c & 0xff;
+        }
+        g.putImageData(im, 0, 0);
+      }
       t.refresh();
     }
   }

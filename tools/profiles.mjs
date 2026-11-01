@@ -119,7 +119,7 @@ try {
   await page.evaluate(() => window.__froggy.state());
   await sleep(500);
 
-  await click(160, 130); // PROFILES
+  await click(129, 128); // PROFILES
   await sleep(700);
   await newProfile(1, 'SAM');
 
@@ -127,7 +127,7 @@ try {
   check('a new profile starts from zero', samTokens === 0, `${samTokens} tokens`);
 
   // Switch back to KAI; the 42 has to still be there.
-  await click(160, 130);
+  await click(129, 128); // PROFILES
   await sleep(700);
   await click(216, 66); // PLAY on row 1 (KAI)
   await sleep(900);
@@ -136,7 +136,7 @@ try {
 
   // ------------------------------------------------------------ deleting one
   console.log('\nprofiles  deleting asks first, and takes only its own data');
-  await click(160, 130);
+  await click(129, 128); // PROFILES
   await sleep(700);
   await click(258, 96); // DEL on SAM
   const armed = await page.evaluate(() => {

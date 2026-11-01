@@ -686,6 +686,21 @@ export class Player {
     this.pose(Math.sin(ph) * 1.4, Math.abs(Math.cos(ph)) > 0.7 ? 1 : 0);
   }
 
+  /**
+   * Strike exactly the pose `o` is in this frame -- the same way round, the
+   * same point in the same stride -- for a reflection that walks when you do.
+   */
+  copyPose(o: Player): void {
+    this.dir = o.dir;
+    this.bobT = o.bobT;
+    if (o.bobT === 0) {
+      this.pose(0, 0);
+      return;
+    }
+    const ph = (this.bobT / (STEP_INTERVAL_MS * 2)) * Math.PI * 2;
+    this.pose(Math.sin(ph) * 1.4, Math.abs(Math.cos(ph)) > 0.7 ? 1 : 0);
+  }
+
   /** Stood still. */
   stand(): void {
     this.bobT = 0;

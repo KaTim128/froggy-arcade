@@ -8,19 +8,9 @@
  *   2. The post-break-in arcade is totally silent  (src/core/audio.ts, AU-2)
  */
 
-import { bootGame } from './core/sceneManager';
-import { store } from './core/state';
-import { installKeyWords } from './core/keyWords';
-import { installKeymap } from './core/keymap';
+import { claimInstance } from './core/singleInstance';
 
-// (on a phone, every [E] on screen says INTERACT or PLAY instead)
-installKeyWords();
-// (keys the player has rebound, turned back into the ones the game reads)
-installKeymap();
-bootGame();
-
-// Time played, for the profile cards: counted while the game is open and in
-// front of the player, and written out when the page goes away.
-window.setInterval(() => {
-  if (document.visibilityState === 'visible') store.addPlayTime(1);
-}, 1000);
+// ONE COPY PER DEVICE: the game (and with it the save) is only loaded once
+// this tab is the one playing -- see core/singleInstance.  A second tab or
+// window waits behind an ALREADY OPEN card instead.
+void claimInstance().then(() => import('./boot'));

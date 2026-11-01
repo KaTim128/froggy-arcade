@@ -18,8 +18,8 @@ import { audio } from '../../core/audio';
 import { centerText, text } from '../../core/ui';
 import { GAME_H, GAME_W } from '../../render/pixelScaler';
 import { depthFor } from '../../art/player';
-import { COSMETICS, type CosmeticDef } from '../../game/catalog';
-import { attireProgress, record } from '../../game/life';
+import { cosmeticStockFor, type CosmeticDef } from '../../game/catalog';
+import { attireProgress, clock, record } from '../../game/life';
 import { FLOOR_TOP, WalkRoom, type Fixture } from '../rooms/WalkRoom';
 import { BARBER_LOOK } from '../../ui/portraits';
 import { BRASS, INK, WALNUT, paintMirror, paintMirrorShine, paintStuds, paintWalnut } from '../../art/shopFittings';
@@ -96,7 +96,8 @@ export class BarberShop extends WalkRoom {
     // every colour on it -- so nothing is reached by walking.
     this.worldW = GAME_W;
     this.bounds.width = this.worldW - 20;
-    this.styles = COSMETICS.filter((c) => c.shop === 'barber' && !c.reward && c.price > 0);
+    // today's four cuts (they change every game day) and every colour
+    this.styles = cosmeticStockFor(clock().day, 'barber');
     const W = this.worldW;
     const g = this.add.graphics().setDepth(0);
     // ---- THE WALL: mint plaster in panels, a walnut dado rail, and white
@@ -163,12 +164,12 @@ export class BarberShop extends WalkRoom {
     }
     pole.fillStyle(BRASS.base, 1).fillCircle(PX + 4, PT - 5, 2);
 
-    // ---- the style posters: three heads from the book, between the pole and
+    // ---- the style posters: three of today's cuts, between the pole and
     // the mirror, none of them behind it
-    ['hair_pomp', 'hair_afro', 'hair_slick'].forEach((id, i) => {
-      const c = this.styles.find((s) => s.id === id);
-      if (c) this.poster(76 + i * 20, EYE_TOP, c);
-    });
+    this.styles
+      .filter((s) => s.slot === 'hair')
+      .slice(0, 3)
+      .forEach((c, i) => this.poster(76 + i * 20, EYE_TOP, c));
 
     // ---- the mirror over the chair, and the shelf under it with the bottles
     const m = this.add.graphics().setDepth(1);
