@@ -361,6 +361,7 @@ export class ThreeStage {
     };
     this.onFrame(0);
     this.capTextures();
+    this.capLights();
     if (r) {
       try {
         // (one step at no time first: the world as the first frame will
@@ -410,6 +411,7 @@ export class ThreeStage {
     const loop = (now: number) => {
       this.raf = requestAnimationFrame(loop);
       if (++capTick % 90 === 0) this.capTextures();
+      if (capTick % 6 === 0) this.capLights();
       // (the first frame's timestamp can be from before `start` was called,
       // which made the first step negative)
       const dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
@@ -469,6 +471,41 @@ export class ThreeStage {
         }
       }
     });
+  }
+
+  /**
+   * ON A PHONE, ONLY THE NEAREST LIGHTS SHADE (user, 1 Nov: the 3D scenes
+   * still not working on mobile).  Every light in a scene is a loop in every
+   * pixel's shader: twenty of them (the hide rooms, the police building) is a
+   * shader too big for many phone GPUs to build at all, and a slow one where
+   * it does build.  On a touch device only the MAX_POINT nearest point lights
+   * and MAX_SPOT nearest spot lights the scene has switched on light the
+   * picture; the rest are moved to a layer the camera does not see, which
+   * takes them out of the shader without touching their `visible` (the
+   * scenes' own on/off).  The number kept stays the same as you move, so the
+   * shaders are not rebuilt as lights swap in and out.
+   */
+  private capLights(): void {
+    if (!isTouch()) return;
+    const MAX_POINT = 6;
+    const MAX_SPOT = 3;
+    const cam = this.camera.getWorldPosition(new THREE.Vector3());
+    const points: Array<[THREE.Light, number]> = [];
+    const spots: Array<[THREE.Light, number]> = [];
+    const p = new THREE.Vector3();
+    this.scene.traverseVisible((o) => {
+      const l = o as THREE.PointLight | THREE.SpotLight;
+      if (!(l as THREE.Light).isLight) return;
+      if (!(l as THREE.PointLight).isPointLight && !(l as THREE.SpotLight).isSpotLight) return;
+      l.getWorldPosition(p);
+      // nearest first, a brighter one counting as nearer; a dark one last
+      const d = l.intensity > 0 ? p.distanceTo(cam) / Math.sqrt(Math.max(0.05, l.intensity)) : 1e9;
+      ((l as THREE.SpotLight).isSpotLight ? spots : points).push([l, d]);
+    });
+    for (const [list, max] of [[points, MAX_POINT], [spots, MAX_SPOT]] as const) {
+      list.sort((a, b) => a[1] - b[1]);
+      list.forEach(([l], i) => l.layers.set(i < max ? 0 : 31));
+    }
   }
 
   /**
