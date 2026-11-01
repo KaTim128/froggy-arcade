@@ -1162,7 +1162,7 @@ try {
 
   // ------------------------------------------------- the way in, for testing it
   // Forty minutes of play stand in front of this room, so it has a password.
-  console.log('\nhorror  a run named TESTT128 opens in the arcade');
+  console.log('\nhorror  the old secret names are ordinary runs');
   {
     const page = await newPage('');
     await sleep(2500);
@@ -1191,29 +1191,18 @@ try {
       };
     };
 
-    const test = await name('testt128');
-    check('TESTT128 goes straight into the arcade',
-      test.scenes.includes('HideRoom3D') && test.hide?.room === 3,
-      `${test.scenes.join(',')}, room ${test.hide?.room}`);
-    check('with everything the room reads already set',
-      test.state.route === 'hide' && test.state.hasKey && test.state.seenIntro,
-      `route ${test.state.route}, key ${test.state.hasKey}, intro ${test.state.seenIntro}`);
-    check('and it lands behind the counter like the handover does',
-      test.hide && test.hide.pz < 0 && test.hide.prompt === '',
-      test.hide ? `${test.hide.px.toFixed(2)}, ${test.hide.pz.toFixed(2)}` : 'not in the room');
-    await page.screenshot({ path: `${SHOTS}/arcade-testt128.png` });
-
-    // HNS128: the first round of hide and seek, at his briefing.
-    await page.evaluate(() => localStorage.clear());
-    await page.reload({ waitUntil: 'networkidle2' });
-    await sleep(2800);
-    const dark = await name('hns128');
-    check('HNS128 goes straight to the first round of hide and seek',
-      dark.scenes.includes('HideRoom3D') && dark.hide?.room === 0,
-      `${dark.scenes.join(',')}, room ${dark.hide?.room}`);
-    check('opening on his briefing, with the night behind you',
-      dark.hide?.mode === 'briefing' && dark.state.route === 'hide' && dark.state.hasKey && dark.state.seenIntro,
-      `mode ${dark.hide?.mode}, route ${dark.state.route}, key ${dark.state.hasKey}`);
+    // (user, 1 Nov: the secret names are gone -- only ADDMIN128 is special, and
+    // the 3D arcade is a button among its test buttons -- so these two are
+    // ordinary runs now)
+    for (const typed of ['testt128', 'hns128']) {
+      const r = await name(typed);
+      check(`${typed.toUpperCase()} is an ordinary run now`,
+        !r.scenes.includes('HideRoom3D') && r.state.route === 'normal' && !r.state.hasKey,
+        `${r.scenes.join(',')}, route ${r.state.route}`);
+      await page.evaluate(() => localStorage.clear());
+      await page.reload({ waitUntil: 'networkidle2' });
+      await sleep(2800);
+    }
 
     // And the name is the whole of it: an ordinary run is still an ordinary run.
     await page.evaluate(() => localStorage.clear());

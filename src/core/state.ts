@@ -372,40 +372,6 @@ export const LEDGER_KEY: unique symbol = Symbol('ledger');
 export const ADMIN_NAME = 'ADDMIN128';
 /** What the HUD shows for such a run.  It never moves. */
 export const ADMIN_TOKENS = 9999;
-/**
- * Name a run this and it opens in the arcade, in three dimensions.
- *
- * The 3D arcade is the last room of the night and everything in front of it is
- * about forty minutes of play: the intro, the floor, going broke, the bust, the
- * alley, the basement and three rooms of hide and seek.  Nobody can look at a
- * counter they moved by two metres if the only way back to it is all of that
- * again, so this is the door into it.
- *
- * It is the same kind of password as ADMIN_NAME and follows the same rules:
- * stored as an ordinary profile name, compared CASE-INSENSITIVELY so "testt128"
- * and "TESTT128" both work, and matched WHOLE — "TESTT 128" and "TESTT1280" are
- * ordinary runs, because a cheat with fuzzy edges is one people trip over by
- * accident.  ProfileModal is what honours it; this is only the password.
- */
-export const TEST_NAME = 'TESTT128';
-
-/**
- * Name a run this and it opens on the first round of hide and seek: the
- * briefing in the first room, with everything before it (the floor, the
- * alley, the basement and the key) already behind you.  Same rules as
- * TEST_NAME: case-insensitive, whole name only.
- */
-export const HORROR_NAME = 'HNS128';
-
-/**
- * Name a run this and it opens on the dark street at midnight, the road to the
- * hotel, with tokens AND cash that never run out.  Same rules as the others:
- * case-insensitive, whole name only.
- */
-export const DARK_NAME = 'DARKSTREET128';
-/** What the purse shows for the dark-street run.  It never moves. */
-export const DARK_CASH = 9999;
-
 function defaultState(): GameState {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -613,7 +579,6 @@ class Store {
     this.state = fresh;
     // A saved unlimited run comes back unlimited, whatever the file says.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;
-    if (this.isRich()) this.state.cash = DARK_CASH;
   }
 
   // ------------------------------------------------------------------ profiles
@@ -633,17 +598,12 @@ class Store {
   /** True when the run in play is the one that never pays for anything. */
   isAdmin(): boolean {
     const n = (this.activeSlotName() ?? '').toUpperCase();
-    return n === ADMIN_NAME || n === DARK_NAME;
+    return n === ADMIN_NAME;
   }
 
   /** The admin run proper, which also gets the test buttons in the pause menu. */
   isTester(): boolean {
     return (this.activeSlotName() ?? '').toUpperCase() === ADMIN_NAME;
-  }
-
-  /** The dark-street run, whose cash never runs out either. */
-  isRich(): boolean {
-    return (this.activeSlotName() ?? '').toUpperCase() === DARK_NAME;
   }
 
   /** Progress for the picker, read straight from storage — never made active. */
@@ -680,7 +640,6 @@ class Store {
     // the balance to top it up.  Written here rather than through the ledger
     // because this is the store loading its own state, not a transaction.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;
-    if (this.isRich()) this.state.cash = DARK_CASH;
     this.flush();
     this.emit();
     return meta.id;
@@ -802,7 +761,7 @@ class Store {
     const amount = Math.floor(n);
     if (!Number.isFinite(amount) || amount <= 0 || this.state.cash < amount) return false;
     // the dark-street run pays and the purse never moves
-    if (!this.isRich()) this.state.cash -= amount;
+    this.state.cash -= amount;
     this.touch();
     return true;
   }
