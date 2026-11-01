@@ -810,7 +810,7 @@ export const ROOMS: RoomDef[] = [LIVING_ROOM, WAREHOUSE, WARD, ARCADE];
  *
  * The three hide and seek rooms are 0, 1 and 2 and the arcade is whatever comes
  * after them.  Anything that wants to put the player in the arcade -- the jump
- * TEST_NAME takes, the harness, the transition out of the third room -- asks
+ * the admin run's 3D ARCADE button takes, the harness, the transition out of the third room -- asks
  * here rather than writing 3 down, so adding a room in the middle of the
  * sequence cannot quietly send them somewhere else.
  */

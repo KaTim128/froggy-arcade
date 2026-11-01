@@ -20,10 +20,9 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { store, cleanName, MAX_SLOTS, MAX_NAME_LEN, TEST_NAME, HORROR_NAME, DARK_NAME, type SlotMeta } from '../core/state';
+import { store, MAX_SLOTS, MAX_NAME_LEN, type SlotMeta } from '../core/state';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { ARCADE_ROOM } from '../three/hideRooms';
 
 const ROW_Y = [56, 86, 116];
 
@@ -303,10 +302,8 @@ export class ProfileModal extends Phaser.Scene {
   }
 
   private commitName(): void {
-    // Kept before the draft is cleared: the shortcut below is decided on the
-    // name that was actually typed, and cleaned the same way the stored one is
-    // so that stray spaces cannot make the two disagree.
-    const typed = cleanName(this.draft);
+    // (the secret names that jumped into the story are gone: user, 1 Nov.
+    // Only ADDMIN128 is special, and its test buttons are in the pause menu.)
     const id = store.createSlot(this.draft);
     this.naming = false;
     this.draft = '';
@@ -315,100 +312,7 @@ export class ProfileModal extends Phaser.Scene {
       return;
     }
     audio.sfx('coin_spin');
-    if (typed.toUpperCase() === TEST_NAME) {
-      this.jumpToArcade();
-      return;
-    }
-    if (typed.toUpperCase() === HORROR_NAME) {
-      this.jumpToHideAndSeek();
-      return;
-    }
-    if (typed.toUpperCase() === DARK_NAME) {
-      this.jumpToDarkStreet();
-      return;
-    }
     this.close();
-  }
-
-  /**
-   * TESTT128, AND STRAIGHT UP INTO THE ARCADE.  See TEST_NAME.
-   *
-   * The run is real — it was created a moment ago like any other and it saves
-   * like any other — it simply starts at the end of the night instead of the
-   * beginning.  Everything the last room reads is set here in one go, because
-   * the room is the end of a chain of latches and arriving with half of them
-   * unset is a room that looks right and behaves like somewhere else: the
-   * route has to be `hide` or nothing else in the building agrees the night is
-   * happening, `hideRoom` has to be the arcade, and the key has to be in the
-   * pocket or the prize case has nothing to say and the front doors cannot be
-   * worked.  `seenIntro` and `charityUsed` are spent rather than skipped, so
-   * neither fires later over the top of something.
-   *
-   * Every active scene is stopped before the jump rather than this one closing
-   * onto the start screen: closing would hand control back to the menu, and the
-   * whole point is not to go through the menu.
-   */
-  private jumpToArcade(): void {
-    store.patch({
-      seenIntro: true,
-      charityUsed: true,
-      hasKey: true,
-      route: 'hide',
-      hideRoom: ARCADE_ROOM,
-    });
-    store.flush();
-    const mgr = this.scene.manager;
-    // Snapshotted: stopping a scene mutates the list this is walking.
-    for (const key of mgr.getScenes(true).map((sc) => sc.scene.key)) mgr.stop(key);
-    mgr.start('HideRoom3D');
-  }
-
-  /**
-   * HNS128, AND STRAIGHT DOWN TO HIDE AND SEEK.  See HORROR_NAME.
-   *
-   * The same kind of jump as TESTT128's, into the first room of the round
-   * rather than the arcade, with the same latches set for the same reason:
-   * the route is `hide`, the room is the first one, the key from the basement
-   * is in the pocket, and the intro and the charity are spent.  It opens on
-   * his briefing, as the round does, not on the waking-up that the basement
-   * leads into.
-   */
-  private jumpToHideAndSeek(): void {
-    store.patch({
-      seenIntro: true,
-      charityUsed: true,
-      hasKey: true,
-      route: 'hide',
-      hideRoom: 0,
-    });
-    store.flush();
-    const mgr = this.scene.manager;
-    for (const key of mgr.getScenes(true).map((sc) => sc.scene.key)) mgr.stop(key);
-    mgr.start('HideRoom3D');
-  }
-
-  /**
-   * DARKSTREET128, AND OUT ONTO THE DARK STREET.  See DARK_NAME.
-   *
-   * The night after the night: Hide and Seek survived, the man's money in
-   * the pocket, the arcade shut, midnight -- and the road to the hotel.  The
-   * road is NightRoad3D, and reaching the hotel's doors takes the run on into
-   * the lobby exactly as it does for anybody who walked there.
-   */
-  private jumpToDarkStreet(): void {
-    store.patch({
-      seenIntro: true,
-      charityUsed: true,
-      hasKey: true,
-      froggyGone: true,
-      route: 'normal',
-      hideRoom: 0,
-      timeOfDay: 'midnight',
-    });
-    store.flush();
-    const mgr = this.scene.manager;
-    for (const key of mgr.getScenes(true).map((sc) => sc.scene.key)) mgr.stop(key);
-    mgr.start('NightRoad3D');
   }
 
   private play(id: string): void {

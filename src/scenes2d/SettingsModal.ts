@@ -27,6 +27,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { isTouch } from '../core/device';
 import { jumpToScene, leaveToMenu, pausedScene, resumePause, resumeToLeave } from '../core/pause';
 import { ROOM_MONEY } from './PrizeExchange';
+import { ARCADE_ROOM } from '../three/hideRooms';
 import { STARTING_TOKENS } from './IntroCutscene';
 import { ledger } from '../core/ledger';
 import { tinyText } from '../ui/tinyText';
@@ -396,6 +397,17 @@ export class SettingsModal extends Phaser.Scene {
           if (ledger.balance() === 0) ledger.credit(STARTING_TOKENS, 'seed');
           store.flush();
           jumpToScene('ExteriorDay', {});
+        },
+      ],
+      [
+        '3D ARCADE',
+        'THE LAST ROOM OF THE NIGHT',
+        () => {
+          // (what the TESTT128 name used to do: the run straight into the 3D
+          // arcade, the last room of hide and seek, the key in the pocket)
+          store.patch({ seenIntro: true, charityUsed: true, hasKey: true, froggyGone: false, route: 'hide', hideRoom: ARCADE_ROOM, timeOfDay: 'day' });
+          store.flush();
+          jumpToScene('HideRoom3D', {});
         },
       ],
       [

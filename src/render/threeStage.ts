@@ -12,7 +12,8 @@
 
 import * as THREE from 'three';
 import { GAME_W, GAME_H } from './pixelScaler';
-import { applyDisplay, onGraphicsChange, qualityProfile, shadowsOn } from '../core/graphics';
+import { applyDisplay, graphicsChanged, onGraphicsChange, qualityProfile, shadowsOn } from '../core/graphics';
+import { store } from '../core/state';
 import { isTouch } from '../core/device';
 
 /** Rendered low and scaled up, so the 3D matches the pixel aesthetic. */
@@ -217,6 +218,13 @@ export class ThreeStage {
   contextRestored(): void {
     if (!this.lost) return;
     this.lost = false;
+    // the GPU ran out once already: come back on the lightest settings, so it
+    // does not go straight out again (the player can raise them in Settings)
+    const st = store.get().settings;
+    if (st.quality > 0 || st.shadows) {
+      store.setSettings({ quality: 0, shadows: false });
+      graphicsChanged();
+    }
     window.clearTimeout(this.lostTimer);
     this.lostCover?.remove();
     this.lostCover = null;
@@ -351,6 +359,8 @@ export class ThreeStage {
       this.warming = false;
       this.last = performance.now();
     };
+    this.onFrame(0);
+    this.capTextures();
     if (r) {
       try {
         // (one step at no time first: the world as the first frame will
@@ -394,8 +404,12 @@ export class ThreeStage {
       }
       window.setTimeout(ready, 8000);
     }
+    // ON A PHONE, TEXTURES NO BIGGER THAN THE PICTURE NEEDS: see capTextures
+    let capTick = 0;
+    this.capTextures();
     const loop = (now: number) => {
       this.raf = requestAnimationFrame(loop);
+      if (++capTick % 90 === 0) this.capTextures();
       // (the first frame's timestamp can be from before `start` was called,
       // which made the first step negative)
       const dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
@@ -415,6 +429,46 @@ export class ThreeStage {
       this.renderer?.render(this.scene, this.camera);
     };
     this.raf = requestAnimationFrame(loop);
+  }
+
+  /**
+   * ON A PHONE, NO TEXTURE BIGGER THAN IT NEEDS TO BE (user, 1 Nov: "the 3D
+   * view stopped" on the midnight road).  The 3D is drawn at a few hundred
+   * pixels across, so a 1024 or 2048 wall or sign texture is mostly memory the
+   * picture never shows -- and a building's worth of them is what runs a
+   * phone's GPU out of memory and takes the context away.  On a touch device
+   * every texture's picture is scaled down to TEX_CAP on its longer side
+   * (once; textures added later are caught on the next pass).
+   */
+  private capTextures(): void {
+    if (!isTouch()) return;
+    const CAP = 256;
+    this.scene.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      for (const m of Array.isArray(mat) ? mat : mat ? [mat] : []) {
+        for (const v of Object.values(m)) {
+          if (!(v instanceof THREE.Texture) || v.userData.capped) continue;
+          v.userData.capped = true;
+          const img = v.image as { width?: number; height?: number } | undefined;
+          const w = img?.width ?? 0;
+          const h = img?.height ?? 0;
+          if (!w || !h || Math.max(w, h) <= CAP || (v as THREE.DataTexture).isDataTexture || (v as THREE.CompressedTexture).isCompressedTexture) continue;
+          const k = CAP / Math.max(w, h);
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(w * k));
+          c.height = Math.max(1, Math.round(h * k));
+          const ctx = c.getContext('2d');
+          if (!ctx) continue;
+          try {
+            ctx.drawImage(img as CanvasImageSource, 0, 0, c.width, c.height);
+          } catch {
+            continue;
+          }
+          v.image = c;
+          v.needsUpdate = true;
+        }
+      }
+    });
   }
 
   /**
