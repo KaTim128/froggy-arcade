@@ -24,15 +24,24 @@
 
 import type Phaser from 'phaser';
 import { isTouch } from '../core/device';
+import { ThreeStage } from './threeStage';
 
 const landscape = (): boolean => window.innerWidth > window.innerHeight;
 
 const allowUpright = (): boolean => new URLSearchParams(window.location.search).get('portrait') === '1';
 
+/** Locked sideways already this time in full screen: never asked again. */
+let locked = false;
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) locked = false;
+});
+
 /** Turn the screen sideways and keep it there, where the browser allows it. */
 function lockSideways(): void {
+  if (locked) return;
   const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
   try {
+    locked = true;
     void o?.lock?.('landscape')?.catch(() => undefined);
   } catch {
     // (no lock here: the TURN YOUR PHONE card does the job instead)
@@ -40,6 +49,15 @@ function lockSideways(): void {
 }
 
 function wantFullscreen(): void {
+  // NOT UNDER A 3D VIEW (user, 1 Nov: "the 3D view stopped" on phones).  This
+  // ran on every tap -- asking for the orientation lock again and again, and
+  // asking for full screen again whenever it had been left -- and on a phone
+  // the screen being re-sized or re-locked under a live 3D view is what
+  // takes the GPU's picture (the WebGL context) away.  A reload made it no
+  // better: the run comes back straight into the 3D scene, and the first tap
+  // there asked again.  So the screen is only changed from the 2D rooms and
+  // menus; a 3D scene is left exactly as it is.
+  if (ThreeStage.current) return;
   const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
   const doc = document as Document & { webkitFullscreenElement?: Element | null };
   if (document.fullscreenElement || doc.webkitFullscreenElement) {
