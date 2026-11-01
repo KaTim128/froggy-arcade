@@ -14,3 +14,12 @@ import { claimInstance } from './core/singleInstance';
 // this tab is the one playing -- see core/singleInstance.  A second tab or
 // window waits behind an ALREADY OPEN card instead.
 void claimInstance().then(() => import('./boot'));
+
+// PLAYS WITH NO INTERNET: the built game registers its service worker (see
+// vite.config.ts), which keeps a copy of every file on the device after the
+// first visit.  Not in development, where it would serve stale code.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
+  });
+}
