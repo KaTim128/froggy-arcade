@@ -36,6 +36,7 @@ import { CAMERA_PRIZE, shelfStock } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { backWayOpen } from '../game/closingPull';
+import { isTouch } from '../core/device';
 import { attachPockets } from '../ui/pockets';
 import { ensureKeyInPocket, heldItems } from '../game/inventory';
 import { Pedestrians } from '../art/pedestrians';
@@ -53,8 +54,12 @@ import { BEG_SPOT_X, BEG_SPOT_Y, paintBegCup, paintBegSpot } from '../art/begSpo
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
 const ALLEY_X = GAME_W - 24;
-/** The alley is open to you once you have come through the night in the arcade. */
-const alleyOpen = (): boolean => store.get().froggyGone || backWayOpen();
+/**
+ * The alley is open to you once you have come through the night in the arcade.
+ * On a phone the after-the-story visit stays shut (the alley is too heavy to load
+ * there); the closing-time way in that the story needs is left alone.
+ */
+const alleyOpen = (): boolean => backWayOpen() || (store.get().froggyGone && !isTouch());
 type Spot = 'door' | 'man' | 'alley' | 'beg' | null;
 /**
  * THE PITCH: the patch of pavement against the arcade's wall, just left of

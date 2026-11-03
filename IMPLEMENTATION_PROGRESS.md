@@ -561,3 +561,8 @@ B2 (police overhaul, log #52, #53, #74, #79 §4, #89 §3, #100). Then B3.
 
 <!-- previous: -->
 Wait for the user's answers on C1–C8 and M1–M9, and for "DO IT". Then start Batch 0, then Batch 1.
+
+## Hidden alley: desktop only after the story
+- ExteriorDay: on touch devices the alley mouth only opens on the closing-time way in (`backWayOpen`); the after-the-story visit (`froggyGone`) is desktop only.
+- resume.ts: a phone save left in BackAlley outside that window resumes on ExteriorDay.
+- The story route through ExteriorNight (ejected) is unchanged.

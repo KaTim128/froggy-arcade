@@ -10,6 +10,8 @@
 
 import { store } from './state';
 import { RESUMABLE } from '../game/place';
+import { isTouch } from './device';
+import { backWayOpen } from '../game/closingPull';
 
 export interface ResumePoint {
   key: string;
@@ -48,5 +50,7 @@ function lastPlace(): ResumePoint | null {
   const resume = { x: p.x, y: p.y, facing: p.facing };
   // the flat is only yours while it is rented: down in the lobby otherwise
   if (p.key === 'Condo' && !s.life.rented) return { key: 'Hotel', data: { area: 'lobby' } };
+  // the alley is shut to phones after the story: back out on the pavement
+  if (p.key === 'BackAlley' && isTouch() && !backWayOpen(s)) return { key: 'ExteriorDay', data: {} };
   return { key: p.key, data: { ...(p.data ?? {}), resume } };
 }
