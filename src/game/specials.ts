@@ -209,7 +209,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('hover_hop', 'HOVER HOP', 'blink', 0, 3.6, 55, 'escape', 'A 55PX DART THROUGH THE AIR; THE FIRST HIT ON IT WITHIN 1.5S IS BLOCKED.', 'guard'),
   D('blood_latch', 'LATCH', 'beam', 13, 3.5, 44, 'close', 'AN INSTANT 44PX BITE; IT HEALS 40% OF THE DAMAGE IT DEALS.', 'drain'),
   D('mire_spit', 'MIRE SPIT', 'bolt', 9, 3, 180, 'poke', 'A GLOB OF BLACK MUD THAT HOLDS THEM IN PLACE FOR 0.8S.', 'root'),
-  D('play_dead', 'PLAY DEAD', 'mend', 0, 9, 0, 'heal', 'FLOPS OVER FOR 1.5S: NOTHING CAN HIT IT AND THEY LOSE TRACK OF IT. IT GETS BACK 22% OF ITS HEALTH, AND ITS NEXT HIT WITHIN 3S DEALS DOUBLE.'),
+  D('play_dead', 'PLAY DEAD', 'mend', 0, 11, 0, 'heal', 'FLOPS OVER FOR 1.2S: NOTHING CAN HIT IT AND THEY LOSE TRACK OF IT. IT GETS BACK 15% OF ITS HEALTH, AND ITS NEXT HIT WITHIN 2S DEALS +50%.'),
   D('shadow_mark', 'DUSK MARK', 'bolt', 8, 3, 200, 'poke', 'A SHADOW DART THAT MARKS THEM: ITS NEXT HIT DEALS +50%.', 'mark'),
   D('light_needle', 'LIGHTNEEDLE', 'bolt', 13, 3.6, 220, 'poke', 'A NEEDLE OF LIGHT THAT BORES STRAIGHT THROUGH COVER.', 'drill'),
   D('glow_mine', 'GLOW TRAP', 'mine', 16, 6, 0, 'hidden', 'LEAVES A GLOWING BULB THAT BURSTS WHEN THEY TOUCH IT; IT WAITS UP TO 8S.'),
@@ -222,7 +222,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
 
   // ------------------------------------------------ twenty more (28 Oct, user: "40 creatures and 80 abilities")
   // (audit: an endurance plodder is not made faster -- the haze is about not being hit)
-  D('heat_haze', 'HEAT HAZE', 'aura', 0, 8, 5, 'defend', 'A SHIMMER OF HEAT: FOR 4S 30% OF HITS ON IT MISS, AND THEIR NEXT 2 SHOTS BEND 30 DEGREES OFF COURSE.', 'evade'),
+  D('heat_haze', 'HEAT HAZE', 'aura', 0, 10, 5, 'defend', 'A SHIMMER OF HEAT: FOR 4S 30% OF HITS ON IT MISS, AND THEIR NEXT 2 SHOTS BEND 30 DEGREES OFF COURSE.', 'evade'),
   D('sand_spit', 'SAND SPIT', 'spread', 5, 3.2, 170, 'poke', 'A FAN OF 3 SPITS OF HOT SAND; ONE THAT HITS MARKS THEM: THE NEXT HIT ON THEM DEALS +50%.', 'mark'),
   D('flame_kick', 'FLAME KICK', 'beam', 13, 3.6, 38, 'close', 'AN INSTANT 38PX KICK OF A BURNING LEG; ONE TIME IN FOUR IT DEALS DOUBLE.', 'crit'),
   D('pink_blaze', 'PINK BLAZE', 'nova', 12, 6, 44, 'close', 'A 44PX RING OF PINK FIRE THAT LEAVES THE GROUND BURNING FOR 3S.', 'linger'),

@@ -1883,12 +1883,12 @@ export class CreatureArena extends Phaser.Scene {
       }
       case 'play_dead': {
         // flops over: untouchable, lost to them, mending -- and the next hit is a mean one
-        const back = Math.round(f.max * MEND_FRAC);
+        const back = Math.round(f.max * 0.15);
         this.heal(f, back);
-        f.invuln = Math.max(f.invuln, 1.5);
-        f.st.invis = 1.5;
-        f.root = Math.max(f.root, 1.5);
-        f.st.crit2 = 3;
+        f.invuln = Math.max(f.invuln, 1.2);
+        f.st.invis = 1.2;
+        f.root = Math.max(f.root, 1.2);
+        f.st.ambush = 2;
         this.floatNum(f, 0, 0x8ae88a, `+${back} `);
         ring(12, 0x8ae88a);
         audio.sfx('item_thud', 0.4);
@@ -2744,6 +2744,11 @@ export class CreatureArena extends Phaser.Scene {
       to.aura = to.shield = to.guard = 0;
       for (const k of ['b_fury', 'b_focus', 'b_evade', 'b_quicken', 'armour']) delete to.st[k];
       this.floatNum(to, 0, 0xc090e0, 'STOLEN ');
+    }
+    // up from playing dead: the next hit is a mean one
+    if (from.st.ambush && a) {
+      from.st.ambush = 0;
+      d *= 1.5;
     }
     // out of the water: the lurker's first bite
     if ((from.st.n_lurk ?? 0) > 0 && a) {
