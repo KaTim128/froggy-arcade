@@ -61,7 +61,7 @@ export interface GameSchema {
 /** The cabinets' own prices, as the game shipped them (read before anything changes them). */
 const CAB_DEFAULTS = new Map(CABINETS.map((c) => [c.id, { cost: c.cost, reward: c.reward }]));
 
-const GRUDGE_FOES = ['lizard', 'croc', 'gecko', 'tortoise', 'snake', 'rhino', 'monkey', 'penguin', 'wolf', 'hyena', 'lion', 'gorilla', 'chameleon', 'komodo', 'gator'];
+const GRUDGE_FOES = ['lizard', 'croc', 'gecko', 'tortoise', 'snake', 'rhino', 'monkey', 'penguin', 'wolf', 'hyena', 'lion', 'gorilla', 'chameleon', 'komodo', 'gator', 'zebra'];
 
 let schemaCache: GameSchema[] | null = null;
 

@@ -196,6 +196,16 @@ const FOES: FoeDef[] = [
     skin: 0x6c737e, skinLight: 0xc9cdd3, glove: 0x2f5fa8, gloveLit: 0x5b8fd6, bodyW: 15, bodyH: 18, headW: 11, look: 'wolf',
     speed: 1.15, power: 1.0, windup: 0.9, reach: 1.05, guard: 1, blockRate: 0.85, tempo: 0.9, dodge: 0.06, style: 'balanced', chaos: 0.12, counter: 0.3,
     note: 'CIRCLES, THEN BITES' },
+  // ---- THE ZEBRA (user, 3 Nov): a kickboxer, not a puncher.  All legs and
+  // momentum: the fastest feet on the card, kicks low and often, slips a
+  // blow more than anyone but the snake, and answers a block with a kick
+  // straight back.  Its special is a STAMPEDE KICK -- it lunges in and
+  // lands both hind hooves, one after the other.  It pays in the head and
+  // the hands: its punches are light and it hardly ever blocks.
+  { key: 'zebra', name: 'ZEBRA', rare: false, weight: 10,
+    skin: 0xf2f0ea, skinLight: 0xffffff, glove: 0x2a7ad8, gloveLit: 0x6aaaff, bodyW: 14, bodyH: 19, headW: 11, look: 'zebra',
+    speed: 1.32, power: 0.86, windup: 0.85, reach: 1.12, guard: 1.15, blockRate: 0.55, tempo: 0.72, dodge: 0.12, style: 'lows', chaos: 0.15, counter: 0.5,
+    note: 'QUICK HOOVES, DOUBLE KICK' },
   { key: 'hyena', name: 'HYENA', rare: false, weight: 10,
     skin: 0xb49660, skinLight: 0xd8c18e, glove: 0x7a2a6a, gloveLit: 0xb05a9a, bodyW: 14, bodyH: 17, headW: 11, look: 'hyena',
     speed: 1.1, power: 0.95, windup: 0.9, reach: 0.95, guard: 1.1, blockRate: 0.8, tempo: 0.85, dodge: 0.08, style: 'lows', chaos: 0.35, counter: 0.2,
@@ -270,6 +280,7 @@ const FACE: Record<string, FaceDef> = {
   chameleon: { headH: 11, eyes: [[3, -2]], r: 2.4, col: 0xf0f0c0, pupil: 'dot', pr: 1, snout: 'lizard' },
   wolf: { headW: 11, headH: 10, eyes: [[1.6, -2.4]], r: 1.4, col: 0xe8c04a, pupil: 'dot', pr: 0.7, snout: 'none' },
   hyena: { headW: 11, headH: 10, eyes: [[1, -2.4]], r: 1.4, col: 0xf2e6c0, pupil: 'dot', pr: 0.7, snout: 'none' },
+  zebra: { headW: 10, headH: 11, eyes: [[1.2, -3]], r: 1.4, col: 0x2a1a10, pupil: 'none', pr: 0, snout: 'none' },
   lion: { headW: 12, headH: 11, eyes: [[2.2, -2.6]], r: 1.6, col: 0xe8a630, pupil: 'slit', pr: 1, snout: 'none' },
 };
 
@@ -298,6 +309,7 @@ const JUMP: Record<string, { v: number; squat: number; land: number; drift: numb
   chameleon: { v: -170, squat: 100, land: 110, drift: 40 },
   wolf: { v: -195, squat: 90, land: 100, drift: 50 },
   hyena: { v: -180, squat: 100, land: 110, drift: 46 },
+  zebra: { v: -215, squat: 70, land: 90, drift: 58 },
   lion: { v: -190, squat: 130, land: 140, drift: 48 },
 };
 
@@ -1087,6 +1099,37 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       }
       break;
     }
+    case 'zebra': {
+      // ---- A LONG HORSE'S HEAD, STRIPED.  A tapering muzzle with a dark
+      // nose and flared nostril, tall ears, a short stiff mane that stands
+      // up in black and white bands down the neck, black stripes curving
+      // round the body and the head, and a tufted tail.
+      const ink = 0x1a1a1e;
+      // the muzzle, long and tapering, and the dark soft nose
+      head.push(E(6.4, 2, 11, 6.4, d.skin), E(10.2, 3, 5.4, 4.6, 0x3a3a40), E(11.4, 2.2, 1.4, 1, 0x101014));
+      head.push(R(9, 5.4, 4.4, 0.8, ink).setAlpha(0.8));
+      // stripes across the face and down the muzzle
+      for (const [x, y, a] of [[-2.4, -3.4, 20], [0.2, -4, 10], [3, -0.6, 70], [5, -0.4, 75], [7, 0, 80]] as const) head.push(R(x, y, 1.1, 4.6, ink, a));
+      // tall ears, black-tipped
+      headBack.push(TA(-2.6, -3.4, 0.4, -4, -1.4, -11, d.skin), TA(-1.8, -9, -0.6, -9.2, -1.4, -11, ink));
+      headBack.push(TA(0.6, -3.6, 3.2, -4, 2, -10.4, shade(d.skin, 0.1)));
+      // the mane: a stiff brush standing up the back of the neck, banded
+      for (let i = 0; i < 7; i++) headBack.push(R(-4 - i * 0.6, -6 + i * 2.2, 2.4, 3, i % 2 ? ink : 0xf8f8f4, -20));
+      // the body's stripes, curving round it, and a pale belly
+      for (let i = 0; i < 6; i++) {
+        const y = -bh + 3 + i * (bh * 2 - 6) / 5;
+        body.push(R(-1.5, y, bw * 1.5, 1.4, ink, i % 2 ? 14 : -14).setAlpha(0.9));
+      }
+      body.push(E(3, 2, bw * 0.6, bh * 0.7, 0xffffff).setAlpha(0.5));
+      // a tufted tail
+      tailRoot0 = [-bw + 3, bh - 5];
+      {
+        const root: Pt = [-bw + 3, bh - 5];
+        const path = bez(root, [root[0] - 4, root[1] + 3], [root[0] - 7, root[1] + 7], [root[0] - 8, root[1] + 12], 10);
+        tailParts.push(tube(path, 1.8, 1.2, d.skin), E(path[path.length - 1][0], path[path.length - 1][1] + 1, 3, 5, ink));
+      }
+      break;
+    }
     case 'hyena': {
       // ---- A BLUNT DARK MUZZLE AND TWO HUGE ROUND EARS, a bristling ridge
       // down a sloping back, spots, and a short dark bush of a tail.
@@ -1441,6 +1484,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
 function startRound(): void {
   if (!p1 || !p2) return;
   MAX_HP = cfgNum('grudge.hp');
+  zebraKick = 0;
   p1.hp = MAX_HP;
   p2.hp = MAX_HP;
   p1.x = 90;
@@ -1558,6 +1602,7 @@ function handleInput(dt: number): void {
 /** PRD §9.8: approach -> low -> high-high, with a 0.6s window after a whiff. */
 function runAi(delta: number, dt: number): void {
   if (!p1 || !p2 || aiFrozen) return;
+  stepZebraKick(delta);
   const ai = p2;
   const dist = Math.abs(ai.x - p1.x);
   const me = ai.foe ?? FOES[0];
@@ -1723,7 +1768,11 @@ function startMove(f: Fighter, move: keyof typeof MOVES): void {
   // table -- the fighter's own pace on top of it.
   f.timer = MOVES[move].startup * (f.foe?.windup ?? 1);
   f.hitLanded = false;
-  if (move === 'special') f.specialCd = SPECIAL_COOLDOWN;
+  if (move === 'special') {
+    f.specialCd = SPECIAL_COOLDOWN;
+    // THE STAMPEDE KICK: the zebra lunges in on its special
+    if (f.foe?.key === 'zebra') f.x = Phaser.Math.Clamp(f.x + f.facing * 16, 20, GAME_W - 20);
+  }
 }
 
 /**
@@ -1896,6 +1945,24 @@ function tryHit(f: Fighter): void {
   const hx = f.x + f.facing * (def.range * 0.6);
   const hy = f.y - (f.move === 'low' ? 12 : f.move === 'special' ? 20 : 28);
   impact(hx, hy, f.move, blocked);
+  // ...and the second hind hoof, a beat after the first
+  if (f.foe?.key === 'zebra' && f.move === 'special') zebraKick = 160;
+}
+
+/** The STAMPEDE KICK's second hoof: ms until it lands (0: none coming). */
+let zebraKick = 0;
+function stepZebraKick(delta: number): void {
+  if (zebraKick <= 0 || !p1 || !p2) return;
+  zebraKick -= delta;
+  if (zebraKick > 0) return;
+  zebraKick = 0;
+  if (Math.abs(p2.x - p1.x) > MOVES.special.range * 1.3 || p1.hp <= 0) return;
+  const dmg = (p1.blocking ? 3 : 9) * cfgPct('grudge.foePower');
+  p1.hp -= dmg;
+  if (!p1.blocking) p1.stun = Math.max(p1.stun, HITSTUN.low);
+  p1.x = Phaser.Math.Clamp(p1.x + (p1.x > p2.x ? 5 : -5), 20, GAME_W - 20);
+  audio.sfx(p1.blocking ? 'ui_blip' : 'whack');
+  impact(p1.x + (p1.x > p2.x ? -6 : 6), p1.y - 18, 'special', p1.blocking);
 }
 
 /**
