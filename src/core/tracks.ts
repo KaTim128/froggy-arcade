@@ -442,6 +442,92 @@ export const TRACKS: Record<string, TrackPreset> = {
     drums: 'four',
     cutoff: 3400,
   }),
+  // Croaked: a sneaking chase through the reeds -- a creeping minor bass
+  // that never settles and a lead that darts ahead and doubles back.
+  game_croaked: preset({
+    bpm: 136,
+    chords: [min(C.b4 - 24), min(C.b4 - 24), maj(C.g4 - 12), [C.f4 - 12 + 1, C.a4 - 12 + 1, C.c4 + 1]],
+    bass: [0, _, 0, _, 3, _, 1, 0],
+    lead: [C.b4, C.d5, _, C.f5 + 1, _, C.d5, C.b4, _, C.a4, _, C.c5 + 1, C.e5, _, C.c5 + 1, _, _],
+    leadWave: 'triangle',
+    bassWave: 'square',
+    arpWave: undefined,
+    drums: 'shuffle',
+    swing: 0.1,
+    cutoff: 2200,
+    vol: { lead: 0.032, bass: 0.05, arp: 0, drums: 0.9 },
+  }),
+  // Pad Battles: four frogs on sinking pads -- a bouncy, plinky hop in 6ths
+  // with a splash of an off-beat, cheerful and a little frantic.
+  game_padbattles: preset({
+    bpm: 146,
+    chords: [maj(C.g4 - 12), maj(C.c4), maj(C.d4), maj(C.g4 - 12), min(C.e4 - 12), maj(C.c4), maj(C.d4), maj(C.d4)],
+    bass: [0, _, 2, _, 1, _, 2, _],
+    lead: [C.b4, C.d5, C.g5, _, C.e5, _, C.g5, C.b5, _, C.a5, C.g5, _, C.f5 + 1, _, C.a5, _],
+    leadWave: 'triangle',
+    bassWave: 'triangle',
+    arpWave: 'square',
+    drums: 'four',
+    cutoff: 3800,
+    ring: 0.9,
+  }),
+  // The plush crane: a toy-box waltz-ish skip, all music box and glockenspiel.
+  game_crane_plush: preset({
+    bpm: 112,
+    chords: [maj7(C.f4 - 12), maj(C.c4), min7(C.d4), maj(C.c4)],
+    bass: [0, _, _, 1, _, _, 2, _],
+    lead: [C.a5, _, C.c6, C.a5, C.f5, _, C.g5, _, C.e5, _, C.g5, C.c6, _, _, C.g5, _],
+    leadWave: 'sine',
+    bassWave: 'triangle',
+    arpWave: 'triangle',
+    drums: 'sparse',
+    cutoff: 4400,
+    vol: { lead: 0.04, bass: 0.04, arp: 0.014, drums: 0.7 },
+    ring: 2.2,
+  }),
+  // The oddity crane: a music box left running in a dark room -- slow,
+  // sparse, a tritone where the happy note should be.
+  game_crane_oddity: preset({
+    bpm: 76,
+    chords: [min(C.c4), [C.c4, C.f4 + 1, C.a4], min(C.g4 - 12), [C.b4 - 13, C.d4, C.f4]],
+    bass: [0, _, _, _, 1, _, _, _],
+    lead: [C.c6, _, C.g5, _, C.e5 - 1, _, C.f5 + 1, _, _, _, C.g5, _, _, C.d5, _, _],
+    leadWave: 'sine',
+    bassWave: 'sine',
+    arpWave: 'triangle',
+    drums: 'none',
+    swing: 0.08,
+    cutoff: 3000,
+    vol: { lead: 0.04, bass: 0.04, arp: 0.012, drums: 0 },
+    ring: 3,
+  }),
+  // Creature Clash, the trainer's camp: an adventurous march, map-screen
+  // bright, in no hurry.
+  game_clash_hub: preset({
+    bpm: 112,
+    chords: [maj(C.d4), maj(C.a4 - 12), min(C.b4 - 12), maj(C.g4 - 12)],
+    bass: [0, _, 1, _, 0, 2, 1, _],
+    lead: [C.d5, _, C.f5 + 1, C.a5, _, C.a5, C.b5, C.a5, C.f5 + 1, _, C.e5, _, C.d5, _, _, _],
+    leadWave: 'square',
+    bassWave: 'triangle',
+    arpWave: 'triangle',
+    drums: 'half',
+    cutoff: 3000,
+  }),
+  // Creature Clash, in the arena: a driving battle theme -- fast minor,
+  // the bass pumping eighths, the lead in stabs.
+  game_clash_battle: preset({
+    bpm: 164,
+    chords: [min(C.a4 - 12), maj(C.f4 - 12), maj(C.g4 - 12), [C.e4 - 12, C.g4 - 12 + 1, C.b4 - 12]],
+    bass: [0, 0, 2, 0, 0, 0, 2, 1],
+    lead: [C.a5, _, C.e5, C.a5, _, C.c6, C.b5, _, C.a5, _, C.g5, _, C.e5, C.f5, C.g5, _, C.a5, _, C.e5, C.a5, _, C.c6, C.d5 + 12, _, C.e5 + 12, _, C.d5 + 12, C.c6, C.b5, _, C.g5 + 1, _],
+    leadWave: 'sawtooth',
+    bassWave: 'square',
+    arpWave: 'square',
+    drums: 'four',
+    cutoff: 2800,
+    vol: { lead: 0.026, bass: 0.045, arp: 0.012, drums: 1.15 },
+  }),
 };
 
 /** Play a preset into `out` until the returned function is called. */

@@ -387,7 +387,7 @@ export class CraneGame extends Phaser.Scene {
   create(): void {
     fadeIn(this);
     const eerie = this.kind === 'oddity';
-    audio.setScene({ music: eerie ? 'lab_calm' : 'room_lounge', ambience: ['cabinet_bleeps'] });
+    audio.setScene({ music: eerie ? 'game_crane_oddity' : 'game_crane_plush', ambience: ['cabinet_bleeps'] });
     this.phase = 'aim';
     this.clawX = HOME.x;
     this.clawZ = HOME.z;

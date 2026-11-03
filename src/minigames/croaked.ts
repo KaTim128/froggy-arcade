@@ -743,6 +743,7 @@ function refreshHud(): void {
 
 export const croaked: MinigameModule = {
   id: 'croaked',
+  music: 'game_croaked',
   title: 'CROAKED',
   rules: 'catch it, or eat everything and live',
   tutorial: {

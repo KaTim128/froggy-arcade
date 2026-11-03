@@ -117,6 +117,8 @@ export class CreatureHub extends Phaser.Scene {
   }
 
   create(): void {
+    // its own music (user, 1 Nov: every arcade game has its own)
+    audio.setScene({ music: 'game_clash_hub', ambience: ['cabinet_bleeps'] });
     // a page that went away mid-fight comes back as a retreat
     if (store.get().creatures.battle) {
       const r = retreat();

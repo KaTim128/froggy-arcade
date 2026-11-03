@@ -534,6 +534,8 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   create(): void {
+    // its own music (user, 1 Nov: every arcade game has its own)
+    audio.setScene({ music: 'game_clash_battle', ambience: ['cabinet_bleeps'] });
     // (a fresh fight: the last one's strip mask and labels went with it)
     this.infoMask = null;
     this.effLabel = null;

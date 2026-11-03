@@ -1237,6 +1237,7 @@ function settle(): void {
 
 export const padBattles: MinigameModule = {
   id: 'padbattles',
+  music: 'game_padbattles',
   title: 'PAD BATTLES',
   rules: 'last frog standing on the lily pads',
   tutorial: {
