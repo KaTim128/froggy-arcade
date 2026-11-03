@@ -37,9 +37,9 @@ import { battleXp, levelOf, xpProgress } from '../game/creatureLevel';
 import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, BOSSES, bossById, creatureById, type Attack, type Creature,
+  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { REVIVE_COST, abandonLadder, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
+import { REVIVE_COST, abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
 type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls';
 const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls'];
@@ -647,7 +647,7 @@ export class CreatureHub extends Phaser.Scene {
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 3, 3).fillRect(x - 3, y - 3, 7, 5).fillRect(x, y + 2, 1, 5).fillRect(x - 5, y - 2, 11, 1);
     }, () => this.train(this.biome), !act);
     const full = c.owned.length >= MAX_OWNED && !busy;
-    this.tile(mx, 115, mw, 24, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : `${PACK_COST} TOKENS`, 0x8a6aff, (g, x, y, col) => {
+    this.tile(mx, 115, mw, 24, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : packPrice() ? `${packPrice()} TOKENS` : 'FIRST ONE FREE', 0x8a6aff, (g, x, y, col) => {
       g.fillStyle(0x14100c, 1).fillRect(x - 6, y - 5, 9, 12).fillRect(x - 2, y - 7, 9, 12);
       g.fillStyle(col, 0.6).fillRect(x - 5, y - 4, 7, 10);
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
@@ -701,7 +701,7 @@ export class CreatureHub extends Phaser.Scene {
     L.add(g);
     L.add(centerText(this, x + 41, 70, '?', PALETTE.gold));
     L.add(text(this, x + 70, 42, 'CREATURE PACK', PALETTE.cream));
-    L.add(text(this, x + 70, 52, `${PACK_COST} TOKENS`, PALETTE.gold));
+    L.add(text(this, x + 70, 52, packPrice() ? `${packPrice()} TOKENS` : 'FREE', PALETTE.gold));
     L.add(text(this, x + 70, 66, 'NINE DIFFERENT', PALETTE.fog));
     L.add(text(this, x + 70, 75, 'CREATURES, FACE', PALETTE.fog));
     L.add(text(this, x + 70, 84, 'DOWN. KEEP ONE.', PALETTE.fog));
@@ -712,8 +712,8 @@ export class CreatureHub extends Phaser.Scene {
       L.add(button(this, GAME_W / 2, 132, 'YOUR PACK', () => this.go('pack'), { width: 96, height: 13 }));
       return;
     }
-    const can = ledger.balance() >= PACK_COST && c.owned.length < MAX_OWNED;
-    L.add(button(this, GAME_W / 2, 132, `OPEN  ${PACK_COST} TOK`, () => {
+    const can = ledger.balance() >= packPrice() && c.owned.length < MAX_OWNED;
+    L.add(button(this, GAME_W / 2, 132, packPrice() ? `OPEN  ${packPrice()} TOK` : 'OPEN - FREE', () => {
       const r = openPack();
       this.say(r);
       if (r.ok) {
@@ -723,7 +723,7 @@ export class CreatureHub extends Phaser.Scene {
       this.draw();
     }, { width: 96, height: 13, disabled: !can }));
     if (c.owned.length >= MAX_OWNED) L.add(centerText(this, GAME_W / 2, 154, 'YOU HAVE TWO. RELEASE ONE BEFORE YOU RECRUIT.', PALETTE.gold));
-    else if (ledger.balance() < PACK_COST) L.add(centerText(this, GAME_W / 2, 154, `YOU HAVE ${ledger.balance()} TOKENS.`, PALETTE.ash));
+    else if (ledger.balance() < packPrice()) L.add(centerText(this, GAME_W / 2, 154, `YOU HAVE ${ledger.balance()} TOKENS.`, PALETTE.ash));
   }
 
   /** The nine cards.  Face down until one is chosen; then that one, then the rest. */

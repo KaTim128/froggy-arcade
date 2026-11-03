@@ -39,6 +39,7 @@
  * pockets (the room checks before you get here, and AGAIN checks again).
  */
 
+import { cfgNum, cfgPct } from '../core/gameConfig';
 import Phaser from 'phaser';
 import { earnBadge } from '../game/badges';
 import { PALETTE } from '../render/palette';
@@ -110,7 +111,15 @@ const HOW_TO_KEYS: ControlRow[] = [
 
 export type CraneKind = 'plush' | 'oddity';
 
-export const CRANE_COST: Record<CraneKind, number> = { plush: 5, oddity: 5 };
+/** What a go costs (admin-set: core/gameConfig `crane.plushCost` / `crane.oddityCost`, 5 and 5 as shipped). */
+export const CRANE_COST: Record<CraneKind, number> = {
+  get plush(): number {
+    return cfgNum('crane.plushCost');
+  },
+  get oddity(): number {
+    return cfgNum('crane.oddityCost');
+  },
+};
 
 /** What a capsule from the dark crane holds: tokens, always. */
 export const CAPSULE_MIN = 1;
@@ -179,7 +188,8 @@ const CHUTE = { x: 46, z: 0.05, l: 20, r: 72 };
  * front, look again from the side and still think about it: the clock is
  * there so nobody stands at the glass all afternoon, not to hurry the shot.
  */
-const CLOCK_S = 14;
+/** Seconds a go has (admin-set: `crane.clock`, 14 as shipped). */
+const clockS = (): number => cfgNum('crane.clock');
 /** How far the claw can be let down, in pixels below the gantry. */
 const MAX_DROP = 118;
 /** The claw is drawn this much bigger than its design, to match the toys. */
@@ -193,7 +203,14 @@ const RAISE = 70;
  * whole of its odds: come down on a capsule and it is yours 80% of the
  * time, wherever on it the fingers landed, and nothing slips on the way.
  */
-export const GRIP: Record<CraneKind, number> = { plush: 0.34, oddity: 0.8 };
+export const GRIP: Record<CraneKind, number> = {
+  get plush(): number {
+    return cfgPct('crane.plushGrip');
+  },
+  get oddity(): number {
+    return cfgPct('crane.oddityGrip');
+  },
+};
 /**
  * THE ODDS, ALL TOLD, ARE ABOUT ONE GO IN FIVE -- and they come out of how a
  * claw machine actually loses.  The claw lifts what it closed on GRIP of the
@@ -203,7 +220,12 @@ export const GRIP: Record<CraneKind, number> = { plush: 0.34, oddity: 0.8 };
  * Aimed fairly well, that is 0.34 x ~0.75 x 0.8: about 20%.  (The plush
  * crane's: the capsule crane's odds are GRIP alone.)
  */
-export const SLIP: Record<CraneKind, number> = { plush: 0.2, oddity: 0 };
+export const SLIP: Record<CraneKind, number> = {
+  get plush(): number {
+    return cfgPct('crane.plushSlip');
+  },
+  oddity: 0,
+};
 /** Only the plush crane's grip weakens off centre. */
 const OFF_CENTRE: Record<CraneKind, number> = { plush: 0.45, oddity: 0 };
 /** How close the fingers must come down to a toy to close on it at all. */
@@ -331,7 +353,7 @@ export class CraneGame extends Phaser.Scene {
   private sway = 0;
   /** Gliding back to HOME after a go. */
   private homing = false;
-  private clock = CLOCK_S;
+  private clock = 14;
   /** The clock ran out this go: the claw drops and grabs by itself. */
   private timedOut = false;
   private toys: Toy[] = [];
@@ -963,7 +985,7 @@ export class CraneGame extends Phaser.Scene {
 
   private askToPay(): void {
     this.phase = 'pay';
-    this.clockText.setText(`TIME ${CLOCK_S}`);
+    this.clockText.setText(`TIME ${clockS()}`);
     if (pocketsFull()) {
       this.showResult(FULL_LINE, PALETTE.ember, false);
       return;
@@ -1014,7 +1036,7 @@ export class CraneGame extends Phaser.Scene {
     this.fumbleAt = -1;
     // every go starts at the first step: line it up from the front
     if (this.sideOn) this.toggleSide();
-    this.clock = CLOCK_S;
+    this.clock = clockS();
     this.timedOut = false;
     this.drop = 0;
     this.syncButtons();

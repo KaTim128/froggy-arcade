@@ -388,6 +388,15 @@ export class SettingsModal extends Phaser.Scene {
   private renderTest(): void {
     const rows: Array<[string, string, () => void]> = [
       [
+        'GAME SETTINGS',
+        'COSTS, PRIZES, STATS, TEST ZONE',
+        () => {
+          // over this menu, which stays where it is underneath
+          this.scene.launch('AdminConfig');
+          this.scene.bringToTop('AdminConfig');
+        },
+      ],
+      [
         'NEW GAME',
         'AFTER THE INTRO, NOTHING DONE',
         () => {

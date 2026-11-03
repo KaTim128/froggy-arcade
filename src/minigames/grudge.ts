@@ -34,6 +34,7 @@
  * pattern wins; a masher loses.  That is the whole design.
  */
 
+import { cfgNum, cfgPct, cfgStr } from '../core/gameConfig';
 import Phaser from 'phaser';
 import { PALETTE, css } from '../render/palette';
 import { audio } from '../core/audio';
@@ -48,8 +49,9 @@ const FLOOR_Y = 156;
 const WALK_SPEED = 52;
 const JUMP_V = -190;
 const GRAVITY = 620;
-const MAX_HP = 100;
-const ROUND_MS = 99_000;
+/** Each fighter's health, and a round's length (admin-set: core/gameConfig `grudge.hp` / `grudge.round`; 100 and 99 s as shipped). */
+let MAX_HP = 100;
+const roundLen = (): number => cfgNum('grudge.round') * 1000;
 const ROUNDS_TO_WIN = 2;
 
 interface MoveDef {
@@ -425,7 +427,7 @@ let cd2: Phaser.GameObjects.Rectangle | null = null;
 let cd1Label: Phaser.GameObjects.BitmapText | null = null;
 let wins1 = 0;
 let wins2 = 0;
-let roundMs = ROUND_MS;
+let roundMs = 99_000;
 let roundOver = true;
 let over = false;
 /** Fighting time across the rounds of this match: a win's is the best to beat (core/records). */
@@ -1270,6 +1272,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
  * mirrored for whichever way they are actually looking.
  */
 function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facing: 1 | -1): Fighter {
+  MAX_HP = cfgNum('grudge.hp');
   const foe = who === 'frog' ? null : who;
   // The lizard's old art switches: every `kind === 'lizard'` below meant
   // "the opponent", and still does -- the species-specific pieces are added
@@ -1406,6 +1409,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
 
 function startRound(): void {
   if (!p1 || !p2) return;
+  MAX_HP = cfgNum('grudge.hp');
   p1.hp = MAX_HP;
   p2.hp = MAX_HP;
   p1.x = 90;
@@ -1424,7 +1428,7 @@ function startRound(): void {
   }
   p1.facing = 1;
   p2.facing = -1;
-  roundMs = ROUND_MS;
+  roundMs = roundLen();
   aiBeat = 0;
   aiTimer = 600;
   aiWhiffOpening = 0;
@@ -1601,7 +1605,7 @@ function runAi(delta: number, dt: number): void {
     const toward = Math.sign(p1.x - ai.x) || 1;
     const drift = dist > ideal + 3 ? 1 : dist < ideal - 3 ? -1 : 0;
     if (drift !== 0) {
-      ai.x += toward * drift * WALK_SPEED * 0.8 * me.speed * dt;
+      ai.x += toward * drift * WALK_SPEED * 0.8 * me.speed * cfgPct('grudge.foeSpeed') * dt;
       ai.x = Phaser.Math.Clamp(ai.x, 20, GAME_W - 20);
     }
     return;
@@ -1674,7 +1678,10 @@ function chooseFoe(): FoeDef {
     const def = want && FOES.find((f) => f.key === want);
     if (def) return def;
   }
-  return pickFoe();
+  // the admin's test zone: the opponent asked for
+  const forced = cfgStr('grudge.foe');
+  const pick = forced !== 'none' ? FOES.find((f) => f.key === forced) : undefined;
+  return pick ?? pickFoe();
 }
 
 function startMove(f: Fighter, move: keyof typeof MOVES): void {
@@ -1837,7 +1844,8 @@ function tryHit(f: Fighter): void {
   f.hitLanded = true;
   // A tortoise's guard is its shell, and the shell lets NOTHING through.
   const guard = BLOCK_MULT * (target.foe?.guard ?? 1);
-  const dmg = (blocked ? def.dmg * guard : def.dmg) * (f.foe?.power ?? 1);
+  // (and the admin's power settings, yours and theirs: 100% as designed)
+  const dmg = (blocked ? def.dmg * guard : def.dmg) * (f.foe ? f.foe.power * cfgPct('grudge.foePower') : cfgPct('grudge.myPower'));
   // And after a block, the counterpunchers answer straight back.
   if (blocked && target === p2 && target.foe && !aiFrozen && Math.random() < target.foe.counter) aiCounter = 140;
   target.hp -= dmg;

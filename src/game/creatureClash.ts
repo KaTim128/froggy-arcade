@@ -28,10 +28,11 @@
  *                 your creatures.
  */
 
+import { cfgNum, cfgPct, cfgStr } from '../core/gameConfig';
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, STARTERS,
+  BATTLE_COST, BATTLE_WIN, BIOMES, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, STARTERS,
   BOSSES, bossById, creatureById, rollLadder, rollPack, zoneFoe, type Biome, type Creature,
 } from './creatures';
 import type { CreatureState, Owned } from './creatureState';
@@ -123,20 +124,34 @@ export function claimStarter(id: string): Result {
 }
 
 /** Pay for the pack and lay its nine cards face down.  Refused before paying, never after. */
+/**
+ * WHAT A PACK COSTS NOW (user, 2 Nov): the first one of a run is free, every
+ * one after it 50 -- both admin-set (core/gameConfig `clash.firstFree`,
+ * `clash.packCost`).
+ */
+export function packPrice(c = C()): number {
+  if (c.pulls === 0 && cfgStr('clash.firstFree') === 'yes') return 0;
+  return Math.max(0, Math.round(cfgNum('clash.packCost')));
+}
+
 export function openPack(rng: () => number = Math.random): Result {
   const c = C();
   if (c.battle) return no('FINISH THE BATTLE FIRST.');
   if (c.pending) return no('PICK A CARD FROM THE PACK YOU OPENED FIRST.');
   if (c.owned.length >= MAX_OWNED) return no('YOU CAN ONLY KEEP TWO. RELEASE ONE FIRST.');
-  if (ledger.balance() < PACK_COST) return no(`A PACK COSTS ${PACK_COST} TOKENS.`);
+  const price = packPrice(c);
+  if (ledger.balance() < price) return no(`A PACK COSTS ${price} TOKENS.`);
   const cards = rollPack(rng);
-  if (!ledger.debit(PACK_COST, 'creature')) return no(`A PACK COSTS ${PACK_COST} TOKENS.`);
+  // (the admin's test zone: the creature asked for is in every pack)
+  const want = cfgStr('clash.recruit');
+  if (want !== 'none' && creatureById(want) && !cards.includes(want)) cards[0] = want;
+  if (price > 0 && !ledger.debit(price, 'creature')) return no(`A PACK COSTS ${price} TOKENS.`);
   edit((s) => {
     s.pending = { cards };
     s.pulls += 1;
   });
   store.flush();
-  return ok('PICK ONE CARD.');
+  return ok(price ? 'PICK ONE CARD.' : 'YOUR FIRST ONE IS FREE. PICK ONE CARD.');
 }
 
 /** Turn over one of the nine: it is yours, and the pack is spent. */
@@ -370,7 +385,7 @@ export function finishBattle(won: boolean, foeLevel?: number): BattleEnd {
   const foeLv = storyAt ? stageLevel(storyAt.w, storyAt.stage) : b.mode === 'zone' ? Math.max(1, Math.min(myLv + 1, Math.round(foeLevel ?? myLv))) : myLv;
   if (won) {
     const before = fighter?.xp ?? 0;
-    const gain = fighter && levelOf(before) < MAX_LEVEL ? Math.min(MAX_XP - before, battleXp(myLv, foeLv, { boss, won: true })) : 0;
+    const gain = fighter && levelOf(before) < MAX_LEVEL ? Math.min(MAX_XP - before, Math.round(battleXp(myLv, foeLv, { boss, won: true }) * cfgPct('clash.xp'))) : 0;
     const lvBefore = levelOf(before);
     const lvAfter = levelOf(before + gain);
     const prize = b.mode === 'zone' ? BATTLE_WIN : ladder ? (boss ? LADDER_BOSS_WIN : LADDER_WIN) : story ? storyPrice(story.w, replayed).win : 0;
@@ -426,7 +441,7 @@ export function finishBattle(won: boolean, foeLevel?: number): BattleEnd {
   }
   // A LOSS STILL TEACHES IT SOMETHING: a quarter of a win's experience
   const lostBefore = fighter?.xp ?? 0;
-  const lostGain = fighter && levelOf(lostBefore) < MAX_LEVEL ? Math.min(MAX_XP - lostBefore, battleXp(myLv, foeLv, { boss, won: false })) : 0;
+  const lostGain = fighter && levelOf(lostBefore) < MAX_LEVEL ? Math.min(MAX_XP - lostBefore, Math.max(1, Math.round(battleXp(myLv, foeLv, { boss, won: false }) * cfgPct('clash.xp')))) : 0;
   const lostUp = levelOf(lostBefore + lostGain) > levelOf(lostBefore) ? levelOf(lostBefore + lostGain) : undefined;
   if (lostGain) {
     edit((s) => {

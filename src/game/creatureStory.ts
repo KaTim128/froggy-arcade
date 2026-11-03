@@ -30,6 +30,7 @@
 
 import { bossById, creatureById, type Creature } from './creatures';
 import { withLevel } from './creatureLevel';
+import { cfgPct } from '../core/gameConfig';
 
 export interface World {
   id: string;
@@ -66,7 +67,10 @@ export const STAGES = 4;
 /** What a battle of world `w` (0-based) costs and pays: first time through, or as a replay. */
 export function storyPrice(w: number, replay: boolean): { cost: number; win: number } {
   const n = w + 1;
-  return replay ? { cost: n, win: 2 * n } : { cost: 2 * n, win: 4 * n };
+  // (scaled by the admin's STORY PRICES %, core/gameConfig)
+  const k = cfgPct('clash.storyPay');
+  const at = (v: number): number => Math.max(0, Math.round(v * k));
+  return replay ? { cost: at(n), win: at(2 * n) } : { cost: at(2 * n), win: at(4 * n) };
 }
 
 /** The level of stage `s` (0..3 the battles, 4 the boss) of world `w`. */

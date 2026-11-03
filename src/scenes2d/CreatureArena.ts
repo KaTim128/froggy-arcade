@@ -18,6 +18,7 @@
  * order the timers, taps and tab switches arrive in.
  */
 
+import { cfgPct, cfgStr } from '../core/gameConfig';
 import { countBack } from '../core/pause';
 import { STAGES, WORLDS, lineupFoe, storyFoe, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
@@ -31,7 +32,7 @@ import { drawCreature } from '../art/creatureArt';
 import { plainWords } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
-import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
+import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, bossById, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel, xpProgress } from '../game/creatureLevel';
 import {
@@ -603,9 +604,32 @@ export class CreatureArena extends Phaser.Scene {
       wild = withLevel(nextZoneFoe(this.biome), lv);
       this.foeLevel = lv;
     }
+    // THE ADMIN'S TEST ZONE (core/gameConfig): the opponent or boss asked
+    // for, at the level the fight would have had (never in a ladder run,
+    // whose steps were drawn and paid for)
+    if (!sim && this.mode !== 'ladder') {
+      const lv = this.foeLevel || this.myLevel;
+      const wantBoss = cfgStr('clash.boss');
+      const wantFoe = cfgStr('clash.foe');
+      if (this.boss && wantBoss !== 'none' && bossById(wantBoss)) wild = { ...withLevel(bossById(wantBoss)!, lv), name: wild.name };
+      else if (!this.boss && wantFoe !== 'none' && creatureById(wantFoe)) wild = withLevel(creatureById(wantFoe)!, lv);
+    }
+    // the admin's stat settings: yours and theirs, as percentages (100 = as designed)
+    const scaled = (c: Creature, side: 'my' | 'foe'): Creature => {
+      const hp = cfgPct(`clash.${side}Hp`);
+      const dmg = cfgPct(`clash.${side}Dmg`);
+      const spd = cfgPct(`clash.${side}Speed`);
+      if (hp === 1 && dmg === 1 && spd === 1) return c;
+      return {
+        ...c,
+        hp: Math.max(1, Math.round(c.hp * hp)),
+        speed: Math.max(1, Math.round(c.speed * spd)),
+        attacks: c.attacks.map((a) => ({ ...a, dmg: a.dmg > 0 ? Math.max(1, Math.round(a.dmg * dmg)) : 0 })) as Creature['attacks'],
+      };
+    };
     // (a copy: the roster's own entry is never renamed)
-    const foeC = this.training ? { ...wild, name: 'TRAINING DUMMY' } : wild;
-    this.me = this.fighter(mine, ARENA.x + 40, ARENA.y + ARENA.h / 2, 1, 1);
+    const foeC = scaled(this.training ? { ...wild, name: 'TRAINING DUMMY' } : wild, 'foe');
+    this.me = this.fighter(scaled(mine, 'my'), ARENA.x + 40, ARENA.y + ARENA.h / 2, 1, 1);
     // (a boss is bigger, not huge: it has to fit the arena and be fair to hit)
     this.foe = this.fighter(foeC, ARENA.x + ARENA.w - 40, ARENA.y + ARENA.h / 2, -1, this.boss ? 1.35 : 1);
     this.lastFoePos = { x: this.foe.x, y: this.foe.y, stuck: 0 };

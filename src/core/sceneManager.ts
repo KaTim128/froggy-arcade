@@ -8,6 +8,7 @@
 
 import { Shop } from '../scenes2d/Shop';
 import { Goals } from '../scenes2d/Goals';
+import { AdminConfig } from '../scenes2d/AdminConfig';
 import { Condo } from '../scenes2d/Condo';
 import { Stairwell } from '../scenes2d/Stairwell';
 import { JailEnding } from '../scenes2d/JailEnding';
@@ -122,6 +123,7 @@ export function bootGame(): void {
       BarberShop,
       Shop,
       Goals,
+      AdminConfig,
       CreatureHub,
       CreatureArena,
       Hotel,
