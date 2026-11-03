@@ -1,5 +1,5 @@
 /**
- * ---- THE ADMIN'S GAME SETTINGS (user, 2 Nov).  ADDMIN128 only: opened from
+ * ---- THE ADMIN'S GAME SETTINGS (user, 2 Nov).  the admin profile only: opened from
  * the settings' TEST tab, refused to anyone else (and core/gameConfig
  * refuses their writes as well, whatever opens it).
  *
@@ -23,6 +23,7 @@ import { button, centerText, confirmDialog, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
+import { adminPassword, rememberPassword } from '../core/adminAuth';
 import {
   cfg,
   inTestZone,
@@ -33,6 +34,7 @@ import {
   restoreDefaults,
   saveTest,
   schemas,
+  serverReachable,
   setTestZone,
   testDirty,
   validate,
@@ -108,6 +110,7 @@ export class AdminConfig extends Phaser.Scene {
     L.add(button(this, 170, 7, zone ? 'TEST ZONE: ON' : 'TEST ZONE: OFF', () => this.done(setTestZone(!zone)), { width: 92, height: 11, fill: zone ? 0x5a4a10 : 0x1c2142 }));
     L.add(button(this, GAME_W - 24, 7, 'CLOSE', () => this.close(), { width: 40, height: 11 }));
     L.add(smallText(this, 6, 18, `LIVE V${liveVersion()}  -  ${testDirty() ? 'TEST HAS UNPUBLISHED CHANGES' : 'TEST MATCHES LIVE'}`, testDirty() ? PALETTE.gold : PALETTE.ash));
+    L.add(smallText(this, GAME_W - 6, 18, serverReachable() ? 'SERVER: ALL PLAYERS' : 'NO SERVER: THIS DEVICE', serverReachable() ? PALETTE.mossLight : PALETTE.ember).setOrigin(1, 0));
 
     // ---- the games
     const games = this.games;
@@ -247,7 +250,21 @@ export class AdminConfig extends Phaser.Scene {
     this.dialog.setDepth(3000);
   }
 
-  private done(r: ConfigResult): void {
+  private done(r: ConfigResult | Promise<ConfigResult>): void {
+    if (r instanceof Promise) {
+      // (to the settings server and back: it asks for the password once a session)
+      if (!adminPassword()) {
+        const pw = typeof window !== 'undefined' ? window.prompt('ADMIN PASSWORD') : null;
+        if (!pw || !rememberPassword(pw)) {
+          this.done({ ok: false, msg: 'WRONG ADMIN PASSWORD.' });
+          return;
+        }
+      }
+      this.msg = 'SENDING...';
+      this.draw();
+      void r.then((res) => this.scene.isActive() && this.done(res));
+      return;
+    }
     this.msg = r.msg;
     audio.sfx(r.ok ? 'cha_ching' : 'buzzer', 0.5);
     this.draw();

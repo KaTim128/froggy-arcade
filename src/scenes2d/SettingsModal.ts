@@ -380,7 +380,7 @@ export class SettingsModal extends Phaser.Scene {
   }
 
   /**
-   * ---- THE ADMIN RUN'S TEST BUTTONS.  Only for ADDMIN128 (store.isTester).
+   * ---- THE ADMIN RUN'S TEST BUTTONS.  Only for the admin profile (store.isTester).
    *
    * Each sets the latches the real story would have set by then and starts
    * the real scene: no copies of anything.

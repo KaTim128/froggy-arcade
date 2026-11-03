@@ -1191,7 +1191,7 @@ try {
       };
     };
 
-    // (user, 1 Nov: the secret names are gone -- only ADDMIN128 is special, and
+    // (user, 1 Nov: the secret names are gone -- only the admin profile is special, and
     // the 3D arcade is a button among its test buttons -- so these two are
     // ordinary runs now)
     for (const typed of ['testt128', 'hns128']) {

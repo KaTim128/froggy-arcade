@@ -18,6 +18,14 @@ const arg = (n, d) => {
 };
 const URL = arg('--url', 'http://localhost:5173');
 const CHROME = [process.env.CHROME_PATH ?? '', '/usr/bin/google-chrome', '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].find((p) => existsSync(p));
+// The admin profile's name and password are not written in the code (user,
+// 3 Nov): give them to the test as FROGGY_ADMIN_NAME / FROGGY_ADMIN_PASS.
+const ADMIN = process.env.FROGGY_ADMIN_NAME ?? '';
+const ADMIN_PW = process.env.FROGGY_ADMIN_PASS ?? '';
+if (!ADMIN || !ADMIN_PW) {
+  console.log('Set FROGGY_ADMIN_NAME and FROGGY_ADMIN_PASS to run this test.');
+  process.exit(2);
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 let ran = 0;
@@ -47,12 +55,16 @@ try {
 
   // ---- a player cannot change anything
   await ev(page, "f.useProfile('PLAYER1')");
-  const r1 = await ev(page, "return [f.config.saveTest({'crane.clock': 30}), f.config.publish(), f.config.setTestZone(true), f.config.restoreDefaults('crane'), f.config.resetTest()]");
+  const r1 = await ev(page, "return Promise.all([f.config.saveTest({'crane.clock': 30}), f.config.publish(), f.config.setTestZone(true), f.config.restoreDefaults('crane'), f.config.resetTest()])");
   check('a player is refused every write', r1.every((r) => !r.ok && r.msg === 'ADMIN ONLY.'), JSON.stringify(r1.map((r) => r.msg)));
   check('the player plays the default', (await ev(page, "return f.config.cfg('crane.clock')")) === 14);
 
+  // ---- the admin's name alone, without the password, is an ordinary run
+  await ev(page, 'f.useProfile(a[0])', ADMIN);
+  check('the admin name without its password is refused', !(await ev(page, "return f.config.saveTest({'crane.clock': 30})")).ok);
+
   // ---- the admin's test zone
-  await ev(page, "f.useProfile('ADDMIN128')");
+  await ev(page, 'f.useProfile(a[0]); f.adminLogin(a[1])', ADMIN, ADMIN_PW);
   const bad = await ev(page, "return f.config.saveTest({'crane.clock': 999})");
   check('an out-of-range value is refused', !bad.ok, bad.msg);
   const badChoice = await ev(page, "return f.config.saveTest({'grudge.foe': 'dragon'})");
@@ -70,7 +82,7 @@ try {
   check('a test-only pick never reaches a player', (await ev(page, "return f.config.cfg('grudge.foe')")) === 'none');
 
   // ---- reset
-  await ev(page, "f.useProfile('ADDMIN128')");
+  await ev(page, 'f.useProfile(a[0]); f.adminLogin(a[1])', ADMIN, ADMIN_PW);
   await ev(page, 'f.config.resetTest()');
   check('reset throws the test values away', (await ev(page, "return f.config.layersOf('crane.clock').test")) === undefined);
   check('reset leaves live alone', (await ev(page, "return f.config.layersOf('crane.clock').live")) === undefined);
@@ -85,7 +97,7 @@ try {
   check('a published value reaches a player', (await ev(page, "return f.config.cfg('crane.clock')")) === 25);
 
   // ---- a conflict: live moved on since the test began
-  await ev(page, "f.useProfile('ADDMIN128')");
+  await ev(page, 'f.useProfile(a[0]); f.adminLogin(a[1])', ADMIN, ADMIN_PW);
   await ev(page, "f.config.saveTest({'crane.clock': 40})");
   // (another tab publishes in between)
   await page.evaluate(() => {

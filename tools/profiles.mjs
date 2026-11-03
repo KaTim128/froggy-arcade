@@ -90,13 +90,23 @@ const bootFresh = async () => {
   await sleep(1600);
 };
 
-const newProfile = async (row, name) => {
+const newProfile = async (row, name, password) => {
   await click(237, [66, 96, 126][row]); // NEW
   await sleep(300);
   await type(name);
   await page.keyboard.press('Enter');
   await sleep(900);
+  // the admin profile asks for its password next
+  if (password) {
+    await type(password);
+    await page.keyboard.press('Enter');
+    await sleep(900);
+  }
 };
+// The admin profile's name and password are not written in the code (user,
+// 3 Nov): give them to the test as FROGGY_ADMIN_NAME / FROGGY_ADMIN_PASS.
+const ADMIN = process.env.FROGGY_ADMIN_NAME ?? '';
+const ADMIN_PW = process.env.FROGGY_ADMIN_PASS ?? '';
 
 try {
   // ------------------------------------------------- there must be a profile
@@ -163,7 +173,7 @@ try {
     (await page.evaluate(() => window.__froggy.state().tokens)) === 42);
 
   // ------------------------------------------------------- the unlimited run
-  console.log('\nprofiles  a run named addmin128 never runs out');
+  console.log('\nprofiles  the admin run never runs out');
 
   /** Play the dearest cabinet on the floor, through the room's own launch. */
   /**
@@ -200,12 +210,18 @@ try {
   // was typed now that the board has both cases, and the door is matched
   // without regard to case, so this is still the same name.  Spacing is not —
   // see the near-miss below.
+  if (!ADMIN || !ADMIN_PW) console.log('  SKIP  the admin run (set FROGGY_ADMIN_NAME and FROGGY_ADMIN_PASS)');
+  else {
   await bootFresh();
-  await newProfile(0, 'addmin128');
+  await newProfile(0, ADMIN.toLowerCase(), 'wrong-password');
+  check('the wrong password makes no admin profile', ((await index())?.slots ?? []).length === 0);
+  await page.keyboard.press('Escape');
+  await bootFresh();
+  await newProfile(0, ADMIN.toLowerCase(), ADMIN_PW);
   const admin = await index();
   const adminTokens = await page.evaluate(() => window.__froggy.state().tokens);
   check('the name is kept in the case it was typed, and still matched',
-    admin?.slots?.[0]?.name === 'addmin128', admin?.slots?.[0]?.name);
+    admin?.slots?.[0]?.name === ADMIN.toLowerCase(), admin?.slots?.[0]?.name);
   check('it starts full without waiting for the intro', adminTokens === 9999, `${adminTokens} tokens`);
 
   await page.goto(`${URL}?scene=ArcadeHub`, { waitUntil: 'networkidle2' });
@@ -215,15 +231,16 @@ try {
     `${adminPlay.cost} tokens a go`);
   check('and playing it costs nothing', adminPlay.before === 9999 && adminPlay.after === 9999,
     `${adminPlay.before} -> ${adminPlay.after}`);
+  }
 
   // The edge of the door.  A name that merely looks like it is an ordinary run,
   // so nobody unlocks this by typing something close.
   await bootFresh();
-  await newProfile(0, 'addmin 128');
+  await newProfile(0, `${ADMIN || 'X'} 1`.slice(0, 12));
   const near = await index();
   const nearTokens = await page.evaluate(() => window.__froggy.state().tokens);
   check('a name that only looks like it does nothing',
-    near?.slots?.[0]?.name === 'addmin 128' && nearTokens === 0,
+    nearTokens === 0,
     `${near?.slots?.[0]?.name} with ${nearTokens}`);
 
   // And an ordinary run still pays for everything, down the same path.

@@ -20,15 +20,14 @@
  * tab or device published in between), so one admin's publish never
  * silently overwrites another's; a log keeps the last 50 changes.
  *
- * WHERE IT IS KEPT.  This game is a static site with no server, so the
- * layers live in the browser's storage, shared by every profile on that
- * browser and kept in step between its tabs (the `storage` event).  The
- * store is one small interface (`ConfigStore`): putting a real database
- * behind it -- with the admin check made on the server -- makes published
- * settings reach every device without touching anything else here.
+ * WHERE IT IS KEPT.  LIVE comes from the settings server (api/config.js,
+ * see "the server" below) so a publish reaches every player on every
+ * device; a copy is kept in the browser for offline play.  The TEST layer
+ * stays on the admin's own device.  Tabs keep in step (the `storage` event).
  */
 
 import { store } from './state';
+import { adminPassword } from './adminAuth';
 import { CABINETS } from '../game/content';
 import { BOSSES, CREATURES } from '../game/creatures';
 
@@ -192,6 +191,15 @@ let backend: ConfigStore = browserStore;
 export function useConfigStore(s: ConfigStore): void {
   backend = s;
   reload();
+// every player's game asks the server what is live: now, every two
+// minutes, and whenever the page comes back into view
+if (typeof window !== 'undefined' && !import.meta.env?.VITEST) {
+  void fetchLive();
+  window.setInterval(() => void fetchLive(), 120_000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void fetchLive();
+  });
+}
 }
 
 const empty = (): Layer => ({ version: 0, values: {}, at: 0 });
@@ -221,6 +229,15 @@ let zone = false;
 /** Read every layer again (another tab, a test). */
 export function reloadConfig(): void {
   reload();
+// every player's game asks the server what is live: now, every two
+// minutes, and whenever the page comes back into view
+if (typeof window !== 'undefined' && !import.meta.env?.VITEST) {
+  void fetchLive();
+  window.setInterval(() => void fetchLive(), 120_000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void fetchLive();
+  });
+}
 }
 
 function reload(): void {
@@ -338,59 +355,138 @@ export function resetTest(gameId?: string): ConfigResult {
   return { ok: true, msg: 'TEST ZONE RESET.' };
 }
 
+// ------------------------------------------------------------------ the server
+
+/**
+ * WHERE PUBLISHED SETTINGS LIVE FOR EVERYONE (user, 3 Nov): the settings
+ * server (api/config.js, deployed with the site on Vercel).  Every game
+ * reads live from it when it starts and every couple of minutes after; a
+ * publish goes to it with the admin password, which it checks itself.  A
+ * copy of the last live it gave is kept on the device for playing offline.
+ * With no server to reach (the GitHub Pages copy, the dev server, no
+ * storage set up yet), live stays what this device last had -- and an
+ * admin's publish lands on this device only, and says so.
+ */
+const API: string = (import.meta.env?.VITE_CONFIG_API as string | undefined) || `${import.meta.env?.BASE_URL ?? '/'}api/config`;
+let serverOk = false;
+
+/** Whether the settings server answered the last time it was asked. */
+export const serverReachable = (): boolean => serverOk;
+
+async function call(init?: RequestInit): Promise<{ status: number; body: { ok?: boolean; msg?: string; live?: unknown } } | null> {
+  try {
+    const r = await fetch(API, { cache: 'no-store', ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
+    const type = r.headers.get('content-type') ?? '';
+    // (a static host answers an unknown path with the page itself: not a server)
+    if (!type.includes('application/json')) return null;
+    return { status: r.status, body: await r.json() };
+  } catch {
+    return null;
+  }
+}
+
+/** A live layer the server sent, every value checked as if it came from storage. */
+function takeLive(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+  backend.write('live', JSON.stringify(raw));
+  live = readLayer('live');
+  return true;
+}
+
+/** Ask the server for the live settings now (called at start, and every couple of minutes). */
+export async function fetchLive(): Promise<boolean> {
+  const r = await call();
+  serverOk = !!r && r.status === 200 && r.body.ok === true;
+  if (serverOk && takeLive(r!.body.live)) apply();
+  return serverOk;
+}
+
 /**
  * PUBLISH: every saved test value checked once more and made live, for
- * every player.  Refused if live moved on since this test was begun, or if
- * there is nothing to publish.  Test-only tools are never published.
+ * every player -- through the server when there is one.  Refused if live
+ * moved on since this test was begun, or if there is nothing to publish.
+ * Test-only tools are never published.
  */
-export function publish(): ConfigResult {
+export async function publish(): Promise<ConfigResult> {
   const no = gate();
   if (no) return no;
-  // (read again: another tab may have published since)
-  live = readLayer('live');
   const pending = Object.entries(test.values).filter(([k]) => !paramOf(k)?.testOnly);
   if (!pending.length) return refuse('NOTHING TO PUBLISH.');
-  if (test.version !== live.version) return refuse('LIVE CHANGED SINCE THIS TEST BEGAN. RESET THE TEST AND TRY AGAIN.');
-  const values = { ...live.values };
+  const values: Record<string, ConfigValue | null> = {};
   for (const [k, v] of pending) {
     const p = paramOf(k)!;
     const ok = validate(p, v);
     if (ok === null) return refuse(`${p.label} IS OUT OF RANGE.`);
-    if (ok === p.def) delete values[k];
-    else values[k] = ok;
+    values[k] = ok === p.def ? null : ok;
   }
-  live = { version: live.version + 1, values, at: Date.now() };
-  backend.write('live', JSON.stringify(live));
+  await fetchLive();
+  if (serverOk) {
+    const pw = adminPassword();
+    if (!pw) return refuse('ENTER THE ADMIN PASSWORD FIRST.');
+    const r = await call({ method: 'POST', body: JSON.stringify({ action: 'publish', password: pw, base: test.version, values }) });
+    if (!r) return refuse('COULD NOT REACH THE SETTINGS SERVER.');
+    if (!r.body.ok) {
+      if (r.body.live) takeLive(r.body.live);
+      apply();
+      return refuse(r.body.msg ?? 'PUBLISH REFUSED.');
+    }
+    takeLive(r.body.live);
+  } else {
+    // (no server: this device only)
+    live = readLayer('live');
+    if (test.version !== live.version) return refuse('LIVE CHANGED SINCE THIS TEST BEGAN. RESET THE TEST AND TRY AGAIN.');
+    const next = { ...live.values };
+    for (const [k, v] of Object.entries(values)) {
+      if (v === null) delete next[k];
+      else next[k] = v;
+    }
+    live = { version: live.version + 1, values: next, at: Date.now() };
+    backend.write('live', JSON.stringify(live));
+  }
   // the published keys leave the test layer; the tools stay
   const kept: Record<string, ConfigValue> = {};
   for (const [k, v] of Object.entries(test.values)) if (paramOf(k)?.testOnly) kept[k] = v;
   test = { version: live.version, values: kept, at: Date.now() };
   backend.write('test', Object.keys(kept).length ? JSON.stringify(test) : null);
-  log(`PUBLISHED ${pending.length} CHANGE${pending.length === 1 ? '' : 'S'}: ${pending.map(([k, v]) => `${k}=${v}`).join(', ')}`);
+  log(`PUBLISHED ${pending.length} CHANGE${pending.length === 1 ? '' : 'S'}${serverOk ? '' : ' (THIS DEVICE ONLY)'}: ${pending.map(([k, v]) => `${k}=${v}`).join(', ')}`);
   apply();
-  return { ok: true, msg: `PUBLISHED ${pending.length} CHANGE${pending.length === 1 ? '' : 'S'}.` };
+  const n = `${pending.length} CHANGE${pending.length === 1 ? '' : 'S'}`;
+  return { ok: true, msg: serverOk ? `PUBLISHED ${n} FOR EVERY PLAYER.` : `PUBLISHED ${n} ON THIS DEVICE ONLY (NO SETTINGS SERVER).` };
 }
 
 /** One game's live settings back to the defaults it shipped with.  No other game is touched. */
-export function restoreDefaults(gameId: string): ConfigResult {
+export async function restoreDefaults(gameId: string): Promise<ConfigResult> {
   const no = gate();
   if (no) return no;
-  live = readLayer('live');
-  const values = { ...live.values };
-  let n = 0;
-  for (const k of Object.keys(values))
-    if (k.startsWith(`${gameId}.`)) {
-      delete values[k];
-      n++;
+  await fetchLive();
+  if (serverOk) {
+    const pw = adminPassword();
+    if (!pw) return refuse('ENTER THE ADMIN PASSWORD FIRST.');
+    const r = await call({ method: 'POST', body: JSON.stringify({ action: 'restore', password: pw, gameId }) });
+    if (!r) return refuse('COULD NOT REACH THE SETTINGS SERVER.');
+    if (r.body.live) takeLive(r.body.live);
+    if (!r.body.ok) {
+      apply();
+      return refuse(r.body.msg ?? 'RESTORE REFUSED.');
     }
-  if (!n) return refuse('ALREADY ON ITS DEFAULTS.');
-  live = { version: live.version + 1, values, at: Date.now() };
-  backend.write('live', JSON.stringify(live));
+  } else {
+    live = readLayer('live');
+    const values = { ...live.values };
+    let n = 0;
+    for (const k of Object.keys(values))
+      if (k.startsWith(`${gameId}.`)) {
+        delete values[k];
+        n++;
+      }
+    if (!n) return refuse('ALREADY ON ITS DEFAULTS.');
+    live = { version: live.version + 1, values, at: Date.now() };
+    backend.write('live', JSON.stringify(live));
+  }
   // (and its test values go too, and the test now begins from this live)
   resetTestFor(gameId);
   log(`RESTORED DEFAULTS: ${gameId}`);
   apply();
-  return { ok: true, msg: 'DEFAULTS RESTORED.' };
+  return { ok: true, msg: serverOk ? 'DEFAULTS RESTORED FOR EVERY PLAYER.' : 'DEFAULTS RESTORED ON THIS DEVICE ONLY.' };
 }
 
 function resetTestFor(gameId: string): void {
@@ -414,7 +510,25 @@ export function setTestZone(on: boolean): ConfigResult {
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
     if (e.key && e.key.startsWith(PREFIX)) reload();
+// every player's game asks the server what is live: now, every two
+// minutes, and whenever the page comes back into view
+if (typeof window !== 'undefined' && !import.meta.env?.VITEST) {
+  void fetchLive();
+  window.setInterval(() => void fetchLive(), 120_000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void fetchLive();
+  });
+}
   });
 }
 
 reload();
+// every player's game asks the server what is live: now, every two
+// minutes, and whenever the page comes back into view
+if (typeof window !== 'undefined' && !import.meta.env?.VITEST) {
+  void fetchLive();
+  window.setInterval(() => void fetchLive(), 120_000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void fetchLive();
+  });
+}

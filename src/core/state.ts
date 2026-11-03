@@ -5,6 +5,7 @@
  * the settings (PRD ST-5, QFD FMEA #11).
  */
 
+import { forgetUnlock, isAdminName, isUnlocked } from './adminAuth';
 import { defaultLife, sanitizeLife, type LifeState } from '../game/lifeState';
 import { defaultCreatures, sanitizeCreatures, type CreatureState } from '../game/creatureState';
 import { isTouch } from './device';
@@ -359,17 +360,11 @@ interface SlotIndex {
 export const LEDGER_KEY: unique symbol = Symbol('ledger');
 
 /**
- * Name a run this and it never runs out of tokens.
- *
- * Stored as the profile name like any other and compared CASE-INSENSITIVELY,
- * so "addmin128" works as well as "ADDMIN128" — names keep their case now, and
- * a cheat that depended on the shift key would be a cheat nobody could type.
- * Spacing still matters: "ADDMIN 128" is a different name and an ordinary
- * run, which is deliberate, a cheat with fuzzy edges is one people trip over
- * by accident.  The ledger is what honours it (see TokenLedger.debit); this is
- * only the password.
+ * THE ADMIN PROFILE.  Its name is not written here (user, 3 Nov): only a
+ * hash of it, and of its password, in core/adminAuth.  A profile with that
+ * name is the admin's only once the password was given for it on this
+ * device; until then it is an ordinary run.
  */
-export const ADMIN_NAME = 'ADDMIN128';
 /** What the HUD shows for such a run.  It never moves. */
 export const ADMIN_TOKENS = 9999;
 function defaultState(): GameState {
@@ -597,13 +592,12 @@ class Store {
 
   /** True when the run in play is the one that never pays for anything. */
   isAdmin(): boolean {
-    const n = (this.activeSlotName() ?? '').toUpperCase();
-    return n === ADMIN_NAME;
+    return isAdminName(this.activeSlotName()) && isUnlocked(this.index.active);
   }
 
   /** The admin run proper, which also gets the test buttons in the pause menu. */
   isTester(): boolean {
-    return (this.activeSlotName() ?? '').toUpperCase() === ADMIN_NAME;
+    return this.isAdmin();
   }
 
   /** Progress for the picker, read straight from storage — never made active. */
@@ -666,6 +660,7 @@ class Store {
   }
 
   deleteSlot(id: string): void {
+    forgetUnlock(id);
     this.index.slots = this.index.slots.filter((s) => s.id !== id);
     try {
       localStorage.removeItem(RUN_PREFIX + id);
