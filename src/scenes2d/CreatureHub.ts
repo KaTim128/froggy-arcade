@@ -39,7 +39,7 @@ import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { REVIVE_COST, abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
+import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
 type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls';
 const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls'];
@@ -278,8 +278,7 @@ export class CreatureHub extends Phaser.Scene {
       L.add(m);
       backPlate(this, m, PALETTE.gold);
     } else if (this.screen === 'home') {
-      const tired = store.get().creatures.owned.some((o) => restLeft(o) > 0);
-      L.add(text(this, 8, GAME_H - 10, tired ? 'FAINTED: PRESS REVIVE TO GET IT BACK UP' : 'TAP A MOVE (?) TO READ WHAT IT DOES', tired ? PALETTE.ash : 0x8a90b0));
+      L.add(text(this, 8, GAME_H - 10, 'TAP A MOVE (?) TO READ WHAT IT DOES', 0x8a90b0));
     }
   }
 
@@ -342,7 +341,7 @@ export class CreatureHub extends Phaser.Scene {
    * Its level is in a chip on the picture; with `xp` (one you own), the
    * experience towards the next level as a bar, or MAX at the top level.
    */
-  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number): void {
+  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number, tall = false): void {
     const L = this.layer;
     const el = ELEMENTS[c.element];
     const artH = big ? 36 : 26;
@@ -418,19 +417,23 @@ export class CreatureHub extends Phaser.Scene {
       // (laid out so the longest name there is -- eleven letters, 66px, see
       // creatures MOVE_NAME_MAX -- sits clear of the icon and the "?")
       // (taller rows now the stat bars are off the card: easier to hit)
-      const chip = this.add.rectangle(x + 2, ty - 2, w - 4, 12, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
+      // (user, 2 Nov: on the team screen the rows are taller -- there was
+      // room under the card -- so each is an easier target)
+      const ch = tall ? 17 : 12;
+      const mid = Math.floor((ch - 12) / 2);
+      const chip = this.add.rectangle(x + 2, ty - 2, w - 4, ch, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
       L.addAt(chip, L.getIndex(g));
       // (an icon is 11px wide, centred: x+3..x+13; the name starts after it)
-      drawAbilityIcon(g, a, x + 8, ty + 4, el.light);
-      const name = text(this, x + 15, ty + 1, a.name, PALETTE.cream);
+      drawAbilityIcon(g, a, x + 8, ty + 4 + mid, el.light);
+      const name = text(this, x + 15, ty + 1 + mid, a.name, PALETTE.cream);
       L.add(name);
       // the "?" that says there is more to read
       const qx = x + w - 9;
-      L.add(this.add.rectangle(qx - 1, ty - 1, 7, 10, 0x3a4470).setOrigin(0, 0));
-      L.add(text(this, qx, ty + 1, '?', PALETTE.gold));
+      L.add(this.add.rectangle(qx - 1, ty - 1 + mid, 7, 10, 0x3a4470).setOrigin(0, 0));
+      L.add(text(this, qx, ty + 1 + mid, '?', PALETTE.gold));
       // the damage, left of the "?" -- where the name leaves room for it
       if (a.dmg) {
-        const d = text(this, qx - 4, ty + 1, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
+        const d = text(this, qx - 4, ty + 1 + mid, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
         if (name.x + name.width + 2 <= d.x - d.width) L.add(d);
         else d.destroy();
       }
@@ -438,7 +441,7 @@ export class CreatureHub extends Phaser.Scene {
       chip.on('pointerover', () => (chip.setFillStyle(0x34407a).setStrokeStyle(1, PALETTE.gold), name.setTint(PALETTE.gold), audio.sfx('ui_hover')));
       chip.on('pointerout', () => (chip.setFillStyle(0x232a4a).setStrokeStyle(1, 0x3a4470), name.setTint(PALETTE.cream)));
       chip.on('pointerdown', () => (audio.sfx('ui_blip'), this.showMove(c, a)));
-      ty += 13;
+      ty += ch + 1;
     }
   }
 
@@ -572,55 +575,67 @@ export class CreatureHub extends Phaser.Scene {
     const L = this.layer;
     const c = store.get().creatures;
     const act = activeOwned(c);
-    // ---- your two, on the left
-    L.add(text(this, 8, 23, `YOUR TEAM  ${c.owned.length}/${MAX_OWNED}`, PALETTE.gold));
-    L.add(text(this, 164, 23, `W ${c.wins}`, PALETTE.mossLight).setOrigin(1, 0));
-    L.add(text(this, 196, 23, `L ${c.losses}`, 0xff8a8a).setOrigin(1, 0));
-    for (let i = 0; i < MAX_OWNED; i++) {
-      const o = c.owned[i];
-      // (96 wide: room on a move's row for the longest name between its icon and its "?")
-      const x = 4 + i * 98;
-      const y = 33;
-      const w = 96;
-      const h = 116;
-      if (!o) {
-        const slot = this.add.rectangle(x, y, w, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a2e48);
-        L.add(slot);
-        const g = this.add.graphics();
-        g.lineStyle(1, 0x3a3e58, 1).strokeCircle(x + w / 2, y + 46, 12);
-        g.fillStyle(0x3a3e58, 1).fillRect(x + w / 2 - 5, y + 45, 11, 2).fillRect(x + w / 2 - 1, y + 41, 2, 11);
-        L.add(g);
-        L.add(centerText(this, x + w / 2, y + 70, 'EMPTY SLOT', PALETTE.ash));
-        L.add(centerText(this, x + w / 2, y + 80, 'RECRUIT TO FILL', 0x4a4e68));
-        continue;
+    // ---- YOUR MAIN CREATURE, on the left (user, 2 Nov): one card -- or,
+    // with nobody yet, one empty slot -- and in the space beside it the
+    // team: every creature you have recruited, tap one to make it the one
+    // that fights.  (Nothing faints for long: a loss leaves it on its feet.)
+    L.add(text(this, 8, 23, 'MAIN CREATURE', PALETTE.gold));
+    L.add(text(this, 196, 23, `W ${c.wins}  L ${c.losses}`, PALETTE.fog).setOrigin(1, 0));
+    const x = 4;
+    const y = 33;
+    const w = 96;
+    const h = 126;
+    if (!act) {
+      L.add(this.add.rectangle(x, y, w, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a2e48));
+      const g = this.add.graphics();
+      g.lineStyle(1, 0x3a3e58, 1).strokeCircle(x + w / 2, y + 46, 12);
+      g.fillStyle(0x3a3e58, 1).fillRect(x + w / 2 - 5, y + 45, 11, 2).fillRect(x + w / 2 - 1, y + 41, 2, 11);
+      L.add(g);
+      L.add(centerText(this, x + w / 2, y + 70, 'EMPTY SLOT', PALETTE.ash));
+      L.add(centerText(this, x + w / 2, y + 80, 'RECRUIT TO FILL', 0x4a4e68));
+    } else {
+      const cr = ownedCreature(act)!;
+      this.card(cr, x, y, w, h, true, true, act.xp ?? 0, true);
+    }
+    // ---- the team, where the second card used to be
+    const tx = 104;
+    L.add(this.add.rectangle(tx, y, 94, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
+    L.add(text(this, tx + 4, y + 3, `TEAM ${c.owned.length}/${MAX_OWNED}`, PALETTE.cream));
+    L.add(smallText(this, tx + 4, y + 13, c.owned.length > 1 ? 'TAP ONE: MAKE IT MAIN' : 'RECRUIT MORE TO PICK FROM', 0x6a7090));
+    c.owned.forEach((o, i) => {
+      const cr = ownedCreature(o);
+      if (!cr) return;
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const bx = tx + 3 + col * 45;
+      const bw = 43;
+      const bh = 20;
+      const byy = y + 21 + row * (bh + 1);
+      const main = o.uid === act?.uid;
+      const el = ELEMENTS[cr.element];
+      const tile = this.add.rectangle(bx, byy, bw, bh, main ? 0x3a2e10 : 0x1c2142).setOrigin(0, 0).setStrokeStyle(main ? 2 : 1, main ? PALETTE.gold : el.col);
+      L.add(tile);
+      this.shown.push({ c: cr, x: bx + 11, y: byy + 9, s: 0.85, f: 1 });
+      L.add(smallText(this, bx + 22, byy + 3, `LV ${levelOf(o.xp ?? 0)}`, main ? PALETTE.gold : PALETTE.cream));
+      L.add(smallText(this, bx + 22, byy + 11, main ? 'MAIN' : el.name.slice(0, 5), main ? PALETTE.gold : el.light));
+      if (!main) {
+        tile.setInteractive({ useHandCursor: true });
+        tile.on('pointerover', () => tile.setFillStyle(0x2a3060));
+        tile.on('pointerout', () => tile.setFillStyle(0x1c2142));
+        tile.on('pointerdown', () => {
+          const r = setActive(o.uid);
+          if (r.ok) {
+            this.msg = '';
+            audio.sfx('ui_blip', 0.5);
+          } else this.say(r);
+          this.draw();
+        });
       }
-      const cr = ownedCreature(o)!;
-      const on = o.uid === act?.uid;
-      this.card(cr, x, y, w, h, true, on, o.xp ?? 0);
-      const rest = restLeft(o);
-      if (rest > 0) {
-        // FAINTED: still in its slot (log #3), out of sight under the band, with its clock
-        this.shown.pop();
-        // (a band across the picture, under its level and element tags)
-        L.add(this.add.rectangle(x + 1, y + 16, w - 2, 21, 0x0a0c18, 0.82).setOrigin(0, 0));
-        L.add(centerText(this, x + w / 2, y + 21, 'FAINTED', 0xff8a8a));
-        L.add(centerText(this, x + w / 2, y + 31, 'PRESS REVIVE', PALETTE.cream));
-      }
-      if (rest > 0) {
-        // (what reviving costs is on the button's own line under the cards: RELEASE has the rest of the row)
-        L.add(button(this, x + 23, y + h + 10, 'REVIVE', () => (this.say(revive(o.uid)), this.draw()), { width: 44, height: 12, disabled: REVIVE_COST > 0 && ledger.balance() < REVIVE_COST }));
-      } else if (on) {
-        // the one that fights: a gold chip where USE would be
-        L.add(this.add.rectangle(x + 2, y + h + 4, 42, 12, 0x3a2e10).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
-        L.add(centerText(this, x + 23, y + h + 10, 'ACTIVE', PALETTE.gold));
-      } else L.add(button(this, x + 23, y + h + 10, 'USE', () => {
-        // (user, 2 Nov: no READY TO FIGHT line under the cards; only a refusal is said)
-        const r = setActive(o.uid);
-        if (r.ok) this.msg = '';
-        else this.say(r);
-        this.draw();
-      }, { width: 42, height: 12 }));
-      L.add(button(this, x + w - 24, y + h + 10, 'RELEASE', () => this.confirmRelease(o.uid, cr), { width: 44, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
+    });
+    // RELEASE: the main one, asked first
+    if (act) {
+      const cr = ownedCreature(act)!;
+      L.add(button(this, tx + 47, y + h - 9, 'RELEASE MAIN', () => this.confirmRelease(act.uid, cr), { width: 86, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     }
     // ---- the menu, on the right
     const mx = 207;
@@ -722,7 +737,7 @@ export class CreatureHub extends Phaser.Scene {
       }
       this.draw();
     }, { width: 96, height: 13, disabled: !can }));
-    if (c.owned.length >= MAX_OWNED) L.add(centerText(this, GAME_W / 2, 154, 'YOU HAVE TWO. RELEASE ONE BEFORE YOU RECRUIT.', PALETTE.gold));
+    if (c.owned.length >= MAX_OWNED) L.add(centerText(this, GAME_W / 2, 154, `YOUR TEAM IS FULL (${MAX_OWNED}). RELEASE ONE FIRST.`, PALETTE.gold));
     else if (ledger.balance() < packPrice()) L.add(centerText(this, GAME_W / 2, 154, `YOU HAVE ${ledger.balance()} TOKENS.`, PALETTE.ash));
   }
 

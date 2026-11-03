@@ -538,7 +538,8 @@ export const LADDER_COST = 20;
 export const LADDER_LEVELS = 5;
 export const LADDER_WIN = 0;
 export const LADDER_BOSS_WIN = 100;
-export const MAX_OWNED = 2;
+/** How many creatures a team holds (user, 2 Nov: more than two; one fights, the rest wait). */
+export const MAX_OWNED = 8;
 
 /**
  * THE LADDER'S OPPONENTS, drawn at the start of a run (so reloading cannot

@@ -84,7 +84,10 @@ export const REVIVE_COST = 0;
 
 /** Non-zero while it is down and needs REVIVE; 0 when it is fit to fight. */
 export function restLeft(o: Owned, _now = Date.now()): number {
-  return o.faintedAt ? 1 : 0;
+  // (user, 2 Nov: a creature that faints is back on its feet straight away --
+  // no trip to the team screen to revive it -- so nothing is ever down)
+  void o;
+  return 0;
 }
 
 /** Back on its feet now. */
@@ -138,7 +141,7 @@ export function openPack(rng: () => number = Math.random): Result {
   const c = C();
   if (c.battle) return no('FINISH THE BATTLE FIRST.');
   if (c.pending) return no('PICK A CARD FROM THE PACK YOU OPENED FIRST.');
-  if (c.owned.length >= MAX_OWNED) return no('YOU CAN ONLY KEEP TWO. RELEASE ONE FIRST.');
+  if (c.owned.length >= MAX_OWNED) return no(`YOUR TEAM IS FULL (${MAX_OWNED}). RELEASE ONE FIRST.`);
   const price = packPrice(c);
   if (ledger.balance() < price) return no(`A PACK COSTS ${price} TOKENS.`);
   const cards = rollPack(rng);
@@ -160,7 +163,7 @@ export function pickCard(index: number): Result & { id?: string; cards?: string[
   const p = c.pending;
   if (!p) return no('NO PACK IS OPEN.');
   if (!Number.isInteger(index) || index < 0 || index > 8) return no('PICK ONE OF THE NINE.');
-  if (c.owned.length >= MAX_OWNED) return no('YOU CAN ONLY KEEP TWO.');
+  if (c.owned.length >= MAX_OWNED) return no(`YOUR TEAM IS FULL (${MAX_OWNED}).`);
   const id = p.cards[index];
   edit((s) => {
     const uid = s.nextUid++;
@@ -465,15 +468,13 @@ export function finishBattle(won: boolean, foeLevel?: number): BattleEnd {
   edit((s) => {
     s.battle = null;
     s.losses += 1;
-    // FAINTED, AND STILL YOURS (log #3): it keeps its slot and rests; the
-    // other one, if it is fit, steps into the ring
+    // IT FAINTED, AND IT IS ALREADY BACK UP (user, 2 Nov): no reviving, it
+    // stays your main creature and can fight again at once
     const f = s.owned.find((o) => o.uid === s.active);
-    if (f) f.faintedAt = Date.now();
-    const fit = s.owned.find((o) => o.uid !== s.active && !restLeft(o));
-    if (fit) s.active = fit.uid;
+    if (f) delete f.faintedAt;
   });
   store.flush();
-  return { ...ok(`${name} FAINTED. REVIVE IT ON THE TEAM SCREEN.${lostXp}`), paid: 0, lost: fighter?.id, xp: lostGain, levelUp: lostUp, xpGap: foeLv - myLv };
+  return { ...ok(`${name} FAINTED - AND IS BACK ON ITS FEET.${lostXp}`), paid: 0, lost: fighter?.id, xp: lostGain, levelUp: lostUp, xpGap: foeLv - myLv };
 }
 
 /**

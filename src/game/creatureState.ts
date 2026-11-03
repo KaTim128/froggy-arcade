@@ -132,7 +132,9 @@ export function sanitizeCreatures(raw: unknown): CreatureState {
       // (a creature saved before levels: its past wins count, as if it had earned them)
       const xp = cleanXp(typeof o.xp === 'number' ? o.xp : wins * XP_WIN);
       const faintedAt = typeof o.faintedAt === 'number' && Number.isFinite(o.faintedAt) ? o.faintedAt : undefined;
-      return { uid: Math.floor(num(o.uid)), id: id ?? '', wins, xp, ...(faintedAt ? { faintedAt } : {}) };
+      // (nothing stays fainted any more: an old save's are back on their feet)
+      void faintedAt;
+      return { uid: Math.floor(num(o.uid)), id: id ?? '', wins, xp };
     })
     .filter((o) => !!o.id && !!creatureById(o.id) && o.uid > 0 && !seen.has(o.uid) && (seen.add(o.uid), true))
     .slice(0, MAX_OWNED);
