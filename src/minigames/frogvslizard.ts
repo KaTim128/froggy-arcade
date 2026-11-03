@@ -51,7 +51,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { centerText, text } from '../core/ui';
+import { centerText, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
@@ -183,6 +183,26 @@ let poisonText: Record<Who, Phaser.GameObjects.BitmapText | null> = { frog: null
 let roundText: Phaser.GameObjects.BitmapText | null = null;
 let windText: Phaser.GameObjects.BitmapText | null = null;
 let bannerText: Phaser.GameObjects.BitmapText | null = null;
+let bannerPlate: Phaser.GameObjects.Rectangle | null = null;
+/** The item about to be thrown, drawn over the frog's hand. */
+let heldIcon: Phaser.GameObjects.Graphics | null = null;
+/** Where the power bar sits: over the frog's head. */
+const POWER_Y = GROUND_Y - 52;
+/** How long the power bar's fill is when full. */
+const POWER_W = 38;
+
+/** Not yellow: the HUD never writes in yellow (user, 3 Nov) -- a yellow item colour reads cream. */
+function noYellow(c: number): number {
+  const r = (c >> 16) & 255;
+  const g = (c >> 8) & 255;
+  const b = c & 255;
+  return r > 190 && g > 150 && b < 140 ? PALETTE.cream : c;
+}
+
+/** A centred line in the small face. */
+function centerSmallish(scene: Phaser.Scene, x: number, y: number, str: string): Phaser.GameObjects.BitmapText {
+  return smallText(scene, x, y, str, PALETTE.cream).setOrigin(0.5, 0);
+}
 /** The confused side's turn: the wind bar is not shown. */
 let windHidden = false;
 let zzzT = 0;
@@ -348,7 +368,7 @@ export const frogVsLizard: MinigameModule = {
           chargeDir = 1;
         }
       }
-      powerFill?.setSize(6, (charging ? power : 0) * 48);
+      powerFill?.setSize((charging ? power : 0) * POWER_W, 3);
     }
     drawAim();
     drawStatus(delta);
@@ -430,7 +450,7 @@ export const frogVsLizard: MinigameModule = {
     phase = 'aim';
     power = 0;
     charging = false;
-    powerFill?.setSize(6, 0);
+    powerFill?.setSize(0, 3);
     refreshHud();
     banner(turn === 'frog' ? 'YOUR THROW' : 'THE LIZARD THROWS', turn === 'frog' ? PALETTE.tealLight : PALETTE.neon);
     if (turn === 'lizard') lizardTurn();
@@ -448,6 +468,8 @@ export const frogVsLizard: MinigameModule = {
     roundText = null;
     windText = null;
     bannerText = null;
+    bannerPlate = null;
+    heldIcon = null;
     slots = [];
     sides.frog.sprite = null;
     sides.lizard.sprite = null;
@@ -684,41 +706,47 @@ export function makeLizard(scene: Phaser.Scene, x: number, groundY: number): Pha
 // --------------------------------------------------------------------- hud
 
 function buildHud(scene: Phaser.Scene): void {
-  // Dark plates under the read-outs: gold and teal on a bright summer sky
-  // were unreadable, and so was the item bar on the lawn.
-  scene.add.rectangle(0, 16, GAME_W, 62, 0x000000, 0.55).setOrigin(0, 0);
+  // ONE THIN STRIP ACROSS THE TOP (user, 3 Nov): it used to be a dark plate
+  // over half the sky.  Names and the round on one row, the health bars and
+  // the wind on the next, the numbers and the keys under them -- and no
+  // yellow writing anywhere (cream, teal and the lizard's pink instead).
+  scene.add.rectangle(0, 16, GAME_W, 33, 0x000000, 0.5).setOrigin(0, 0);
   scene.add.rectangle(0, 148, GAME_W, GAME_H - 148, 0x000000, 0.6).setOrigin(0, 0).setDepth(49);
-  roundText = centerText(scene, GAME_W / 2, 23, '', PALETTE.gold);
+  roundText = centerSmallish(scene, GAME_W / 2, 19, '');
 
-  text(scene, 8, 30, 'FROG', PALETTE.tealLight);
-  text(scene, GAME_W - 8, 30, 'LIZARD', PALETTE.neon).setOrigin(1, 0);
-  scene.add.rectangle(8, 39, 96, 7, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-  hpFill.frog = scene.add.rectangle(9, 40, 94, 5, PALETTE.mossLight).setOrigin(0, 0);
-  scene.add.rectangle(GAME_W - 104, 39, 96, 7, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-  hpFill.lizard = scene.add.rectangle(GAME_W - 9, 40, 94, 5, 0xd98a3d).setOrigin(1, 0);
-  hpText.frog = text(scene, 8, 48, '', PALETTE.cream);
-  hpText.lizard = text(scene, GAME_W - 8, 48, '', PALETTE.cream).setOrigin(1, 0);
-  poisonText.frog = text(scene, 8, 57, '', 0x9b6fe0);
-  poisonText.lizard = text(scene, GAME_W - 8, 57, '', 0x9b6fe0).setOrigin(1, 0);
+  text(scene, 8, 18, 'FROG', PALETTE.tealLight);
+  text(scene, GAME_W - 8, 18, 'LIZARD', PALETTE.neon).setOrigin(1, 0);
+  scene.add.rectangle(8, 27, 96, 6, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
+  hpFill.frog = scene.add.rectangle(9, 28, 94, 4, PALETTE.mossLight).setOrigin(0, 0);
+  scene.add.rectangle(GAME_W - 104, 27, 96, 6, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
+  hpFill.lizard = scene.add.rectangle(GAME_W - 9, 28, 94, 4, 0xd98a3d).setOrigin(1, 0);
+  hpText.frog = smallText(scene, 8, 35, '', PALETTE.cream);
+  hpText.lizard = smallText(scene, GAME_W - 8, 35, '', PALETTE.cream).setOrigin(1, 0);
+  poisonText.frog = smallText(scene, 40, 35, '', 0x9b6fe0);
+  poisonText.lizard = smallText(scene, GAME_W - 40, 35, '', 0x9b6fe0).setOrigin(1, 0);
 
   // The wind, in the middle where both sides can see it.  The bar fills out
   // from the centre towards the side it is blowing, so which way is the shape
   // of it and how hard is the length.
-  windText = centerText(scene, GAME_W / 2, 32, '', PALETTE.cream);
-  scene.add.rectangle(GAME_W / 2 - 36, 39, 72, 6, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-  scene.add.rectangle(GAME_W / 2, 39, 1, 6, PALETTE.steel).setOrigin(0.5, 0);
-  windFill = scene.add.rectangle(GAME_W / 2, 40, 0, 4, PALETTE.tealLight).setOrigin(0, 0);
+  windText = centerSmallish(scene, GAME_W / 2, 35, '');
+  scene.add.rectangle(GAME_W / 2 - 36, 27, 72, 6, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
+  scene.add.rectangle(GAME_W / 2, 27, 1, 6, PALETTE.steel).setOrigin(0.5, 0);
+  windFill = scene.add.rectangle(GAME_W / 2, 28, 0, 4, PALETTE.tealLight).setOrigin(0, 0);
 
-  bannerText = centerText(scene, GAME_W / 2, 62, '', PALETTE.cream);
+  // the keys, small, along the strip's foot
+  const keys = smallText(scene, GAME_W / 2, 42, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-6 ITEM', PALETTE.fog);
+  keys.setOrigin(0.5, 0);
 
-  // the power meter, at the thrower's end of the yard
-  scene.add.rectangle(6, 94, 8, 50, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-  powerFill = scene.add.rectangle(7, 143, 6, 0, PALETTE.gold).setOrigin(0, 1);
-  text(scene, 4, 86, 'PWR', PALETTE.ash);
+  // what is happening, under the strip, on a plate of its own that fits it
+  bannerPlate = scene.add.rectangle(GAME_W / 2, 58, 10, 11, 0x000000, 0.6).setVisible(false);
+  bannerText = centerText(scene, GAME_W / 2, 56, '', PALETTE.cream);
 
-  // How to play, under the banner in the top panel: the bottom one is the
-  // items' and their description's, and three lines did not fit down there.
-  centerText(scene, GAME_W / 2, 71, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-6 ITEM', PALETTE.fog);
+  // THE THROW, WHERE YOU ARE LOOKING: the power bar and the thing you are
+  // about to throw, over the frog's head rather than off at the screen's edge
+  scene.add.rectangle(FROG_X - 20, POWER_Y, 40, 5, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(48);
+  powerFill = scene.add.rectangle(FROG_X - 19, POWER_Y + 1, 0, 3, PALETTE.tealLight).setOrigin(0, 0).setDepth(48);
+  smallText(scene, FROG_X - 22, POWER_Y, 'PWR', PALETTE.fog).setOrigin(1, 0).setDepth(48);
+  heldIcon = scene.add.graphics().setDepth(48);
 
   // THE ITEM BAR: a picture of each thing, and how many are left (the key
   // that picks it, on a keyboard).  On a phone the bar keeps clear of the
@@ -778,11 +806,12 @@ function refreshHud(): void {
     const active = ORDER[i] === sel;
     slot.box.setStrokeStyle(1, active ? PALETTE.gold : PALETTE.steel);
     slot.box.setFillStyle(active ? PALETTE.plum : PALETTE.ink);
-    slot.label.setTint(usable ? (active ? PALETTE.gold : PALETTE.cream) : PALETTE.ash);
+    slot.label.setTint(usable ? (active ? PALETTE.tealLight : PALETTE.cream) : PALETTE.ash);
     // used up: the picture greys out with the count
     slot.icon.setAlpha(usable ? 1 : 0.35);
   });
-  descText?.setText(ITEMS[sel].desc).setTint(ITEMS[sel].color === 0x2e4a9a ? 0x8aa8ff : ITEMS[sel].color);
+  descText?.setText(ITEMS[sel].desc).setTint(noYellow(ITEMS[sel].color === 0x2e4a9a ? 0x8aa8ff : ITEMS[sel].color));
+
 }
 
 /**
@@ -817,7 +846,8 @@ function drawItemIcon(g: Phaser.GameObjects.Graphics, id: ItemId, x: number, y: 
 }
 
 function banner(str: string, colour: number = PALETTE.cream): void {
-  bannerText?.setText(str).setTint(colour).setAlpha(1);
+  bannerText?.setText(str).setTint(noYellow(colour)).setAlpha(1);
+  if (bannerPlate && bannerText) bannerPlate.setSize(Math.ceil(bannerText.width) + 10, 11).setPosition(GAME_W / 2 - (Math.ceil(bannerText.width) + 10) / 2, 54).setOrigin(0, 0).setVisible(!!str).setAlpha(1);
 }
 
 /** A number that floats off whoever it just happened to. */
@@ -890,7 +920,7 @@ function beginTurn(who: Who, first = false): void {
   if (!first) rollWind();
   power = 0;
   charging = false;
-  powerFill?.setSize(6, 0);
+  powerFill?.setSize(0, 3);
 
   // ASLEEP: the turn goes by without him.  Two of them, then he wakes.
   if (s.sleep > 0) {
@@ -948,7 +978,7 @@ function throwItem(who: Who, angle: number, pow: number, id: ItemId): void {
   phase = 'flight';
   power = 0;
   charging = false;
-  powerFill?.setSize(6, 0);
+  powerFill?.setSize(0, 3);
   aimG?.clear();
   refreshHud();
   banner(`${item.name} AWAY`, item.color);
@@ -1496,7 +1526,10 @@ function endFlight(hit: boolean): void {
 function drawAim(): void {
   if (!aimG) return;
   aimG.clear();
+  heldIcon?.clear();
   if (phase !== 'aim' || turn !== 'frog') return;
+  // the thing about to be thrown, held up in the frog's hand
+  if (heldIcon) drawItemIcon(heldIcon, sel, FROG_X + HAND.dx - 4, GROUND_Y + HAND.dy - 12);
 
   const x0 = FROG_X + HAND.dx;
   const y0 = GROUND_Y + HAND.dy;
