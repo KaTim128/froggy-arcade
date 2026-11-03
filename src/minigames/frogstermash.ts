@@ -1168,6 +1168,12 @@ export interface LizardType {
   /** Hardly ever gives ground. */
   stubborn?: boolean;
   /**
+   * THE KICKER (user, 3 Nov): about one blow in four it wheels and lands a
+   * BUCK KICK with both hind hooves -- harder, and it drives the other one
+   * back out of its reach, so it fights from the edge of its range.
+   */
+  kicker?: boolean;
+  /**
    * How it is BUILT, and it has to be readable as a silhouette.
    *
    * `wide` and `tall` shape the torso and the head, `limb` is leg length, and
@@ -1185,7 +1191,7 @@ export interface LizardType {
  * WHAT EACH ARCHETYPE IS.  Not a lizard with a different head on: each one is
  * built from its own anatomy -- see `ANATOMY` and `dressAnimal`.
  */
-export type Animal = 'gorilla' | 'cheetah' | 'rhino' | 'hyena' | 'giraffe' | 'lion' | 'lizard' | 'wolf';
+export type Animal = 'gorilla' | 'cheetah' | 'rhino' | 'hyena' | 'giraffe' | 'lion' | 'lizard' | 'wolf' | 'zebra';
 
 export const LIZARDS: LizardType[] = [
   // ---- EIGHT ANIMALS, one per way of fighting.  The numbers that decide the
@@ -1222,6 +1228,11 @@ export const LIZARDS: LizardType[] = [
   { key: 'balanced', name: 'LIZARD', power: 1.0, speed: 1.0, avoid: 1.0, resist: 1.0, nerve: 1.0, spacing: 1.0,
     build: { scale: 1.0, wide: 1.0, tall: 1.0, limb: 1.0, head: 1.0, skin: 0x9c5a2e, light: 0xc98243, dark: 0x5e3218, crest: 0xc2522e, animal: 'lizard' },
     blurb: 'VERSATILE COMBATANT' },
+  // THE KICKER is a zebra: quick on its hooves, slippery, light in the body --
+  // and its specialty is the buck kick that throws you back (see `kicker`).
+  { key: 'kicker', name: 'ZEBRA', power: 0.92, speed: 1.2, avoid: 1.18, resist: 0.86, nerve: 1.0, spacing: 1.2, kicker: true,
+    build: { scale: 1.0, wide: 0.82, tall: 1.06, limb: 1.3, head: 0.95, skin: 0xf2f0ea, light: 0xffffff, dark: 0x1a1a1e, crest: 0x1a1a1e, animal: 'zebra' },
+    blurb: 'BUCK KICKS YOU AWAY' },
   // THE TRICKSTER is a wolf.
   { key: 'trickster', name: 'WOLF', power: 0.94, speed: 1.06, avoid: 1.16, resist: 0.94, nerve: 1.0, spacing: 1.1, restless: true,
     build: { scale: 0.98, wide: 0.96, tall: 1.0, limb: 1.16, head: 1.0, skin: 0x6c737e, light: 0xc9cdd3, dark: 0x363a42, crest: 0xe8c04a, animal: 'wolf' },
@@ -1916,6 +1927,8 @@ export interface InFlight {
 
 export interface Blow {
   hit: boolean;
+  /** The zebra's buck kick (its `kicker` specialty). */
+  buck?: boolean;
   dodged: boolean;
   /** Both of them swung and the weapons met instead of either body. */
   clashed?: boolean;
@@ -2417,6 +2430,14 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   if (sp.atRange) raw *= 1 + sp.atRange * outside;       // spear, trident, halberd
   if (sp.atClose) raw *= 1 + sp.atClose * inside;        // knuckles, dagger, gladius
   if (sp.crit && rng() < sp.crit) { raw *= CRIT_MUL; out.crit = true; }
+  // THE ZEBRA'S BUCK KICK: both hind hooves, harder, and it drives them back
+  if (att.type?.kicker && rng() < 0.24) {
+    raw *= 1.45;
+    out.crit = true;
+    out.buck = true;
+    out.move = 'BUCK KICK';
+    def.x += Math.sign(def.x - att.x || 1) * 16;
+  }
   if (sp.vsArmour) raw *= 1 + (sp.vsArmour - 1) * Math.min(1, def.st.defence / 0.3);
   if (sp.execute) raw *= 1 + (sp.execute - 1) * (1 - def.hp / def.st.maxHp);
   if (sp.counter && att.countering) { raw *= 1 + sp.counter; out.countered = true; }
@@ -4806,6 +4827,7 @@ const ANATOMY: Record<Animal, Anatomy> = {
   lion: { neck: 0, fwd: 2, drop: 1, arm: 1.06, hand: 1.2, feet: 'paw', claws: true },
   lizard: { neck: 0, fwd: 0, drop: 0, arm: 1.0, hand: 1.0, feet: 'claw', claws: true },
   wolf: { neck: 0, fwd: 2, drop: -1, arm: 1.05, hand: 0.95, feet: 'paw', claws: true },
+  zebra: { neck: 5, fwd: 4, drop: 0, arm: 1.1, hand: 0.9, feet: 'hoof', claws: false },
 };
 
 /** What `dressAnimal` hands back: the parts, sorted by where they are drawn. */
@@ -5080,6 +5102,35 @@ function dressAnimal(scene: Phaser.Scene, animal: Animal, c: {
       // a heavy brush, pale-tipped, dark along the top
       const path = bez([0, 0], [-5, 4], [-11, 8], [-14, 13], 12);
       tailBits.push(tube(path, 6, 3, skin), tube(path.slice(8), 4, 2.4, light), tube(path.slice(0, 7), 2, 1, dark));
+      break;
+    }
+    case 'zebra': {
+      // ---- A HORSE'S HEAD ON A SHORT THICK NECK, STRIPED.  A long tapering
+      // muzzle with a dark soft nose, tall black-tipped ears, a stiff banded
+      // mane standing up the back of the neck, black stripes curving round
+      // the face, the neck and the body, and a tufted tail.
+      skullW = 9;
+      skullH = 8;
+      neckTo(8, 7, skin);
+      const ink = 0x1a1a1e;
+      // the mane, banded black and white, standing up behind the neck
+      for (let i = 0; i < 7; i++) headBack.push(R(HX - 4.6 - i * 0.8, HY - 4 + i * 2.2, 2.2, 3.2, i % 2 ? ink : 0xf8f8f4, -22));
+      // tall ears, black-tipped
+      headBack.push(T(HX - 3.6, HY - 3, HX - 0.8, HY - 3.4, HX - 2.4, HY - 10.6, skin), T(HX - 2.9, HY - 8.6, HX - 1.9, HY - 8.8, HX - 2.4, HY - 10.6, ink));
+      headBack.push(T(HX - 0.4, HY - 3.2, HX + 2.4, HY - 3.4, HX + 1, HY - 10, down(skin, 0.1)));
+      // the long muzzle and its dark nose
+      face.push(E(HX + 6, HY + 2, 11, 6, skin).setStrokeStyle(1, outline));
+      face.push(E(HX + 10, HY + 2.8, 5.2, 4.4, 0x34343a), C(HX + 11.2, HY + 2, 0.7, 0x0e0e12));
+      face.push(R(HX + 8.6, HY + 5, 4, 0.7, ink));
+      // stripes over the brow and down the muzzle
+      for (const [x, y, a] of [[-2.2, -3.4, 20], [0.4, -3.8, 10], [3.2, -0.4, 72], [5.2, -0.2, 76], [7.2, 0.2, 80]] as const) face.push(R(HX + x, HY + y, 1.1, 4.4, ink, a));
+      face.push(C(HX + 1.4, HY - 1, 1.3, 0x1a1208), C(HX + 1, HY - 1.4, 0.4, 0xffffff));
+      // the body's stripes, curving round it, and a pale belly
+      for (let i = 0; i < 6; i++) body.push(R(-1, torsoTop + 2 + (i * torsoH) / 6, torsoW * 1.05, 1.4, ink, i % 2 ? 14 : -14).setAlpha(0.9));
+      body.push(E(3, torsoCY + 2, torsoW * 0.42, torsoH * 0.5, 0xffffff, 0.5));
+      // a tail with a black tuft on the end
+      const path = bez([0, 0], [-3, 3], [-5, 7], [-6, 11], 10);
+      tailBits.push(tube(path, 1.8, 1.2, skin), E(-6.2, 12.4, 3, 4.6, ink));
       break;
     }
     case 'lizard':
@@ -5931,6 +5982,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
           lion: [1.6, 7.8, 0.4, 6.4, 2.4, -2.3],
           lizard: [1, 9, 0, 5, 2, -2],
           wolf: [2, 12, -0.4, 4.4, 2.8, -1.6],
+          zebra: [1.6, 11.4, -0.2, 4.6, 1.6, -1.2],
         };
         const [x0, x1, y0, y1, ex, ey] = F[animal];
         return { x0: HX + x0, x1: HX + x1, y0: HY + y0, y1: HY + y1, eyeX: HX + ex, eyeY: HY + ey };
