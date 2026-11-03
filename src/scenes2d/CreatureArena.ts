@@ -33,7 +33,7 @@ import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../
 import { SPECIALS } from '../game/specials';
 import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
-import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
+import { MAX_LEVEL, levelOf, withLevel, xpProgress } from '../game/creatureLevel';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, EVADE_CHANCE, EVADE_S, FOCUS_CRIT, FOCUS_S, FURY_MUL, FURY_S, QUICK_RATE, QUICK_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, WALL_DEFAULT, WALL_SPECS, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
@@ -364,7 +364,9 @@ export class CreatureArena extends Phaser.Scene {
   /** Story: which world, which of its stages, and who (drawn when the fight opens, paid at the bell). */
   private storyWorld = 0;
   private storyStage = 0;
-  private storyFoeId = '';
+  /** The trail node asked for, and whether this fight is a replay of one already beaten. */
+  private storyNode: number | undefined;
+  private storyReplay = false;
   private vsShown = false;
   /** The ladder step this is (6 = the boss). */
   private level = 0;
@@ -488,8 +490,9 @@ export class CreatureArena extends Phaser.Scene {
   /** Back after a reload with the battle already open and paid for (core/session). */
   private resumed = false;
 
-  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training' | 'story'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec; world?: number }): void {
+  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training' | 'story'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec; world?: number; node?: number }): void {
     this.storyWorld = data.world ?? 0;
+    this.storyNode = typeof data.node === 'number' ? data.node : undefined;
     this.vsShown = false;
     this.resumed = data.resumed === true;
     // (dev only: tools/clash.mjs)
@@ -566,7 +569,9 @@ export class CreatureArena extends Phaser.Scene {
       const ob = cs.battle;
       const open = this.resumed && ob?.mode === 'story';
       const w = open ? ob!.world ?? 0 : this.storyWorld;
-      const stage = open ? ob!.stage ?? 0 : cs.story.stage[w] ?? 0;
+      // (the node picked on the world's trail; by default its next unbeaten one)
+      const stage = open ? ob!.stage ?? 0 : this.storyNode ?? Math.min(STAGES, cs.story.best[w] ?? 0);
+      this.storyReplay = open ? ob!.replay === true : stage < (cs.story.best[w] ?? 0);
       const foeId = open ? ob!.foe ?? '' : stage >= STAGES ? WORLDS[w].boss : lineupFoe(w, stage);
       const sf = storyFoe(w, stage, foeId);
       if (!sf) {
@@ -575,7 +580,6 @@ export class CreatureArena extends Phaser.Scene {
       }
       this.storyWorld = w;
       this.storyStage = stage;
-      this.storyFoeId = foeId;
       this.biome = BIOMES.find((b) => b.id === WORLDS[w].biome) ?? this.biome;
       wild = sf.foe;
       this.boss = sf.boss;
@@ -763,9 +767,9 @@ export class CreatureArena extends Phaser.Scene {
     const open = this.resumed && !!store.get().creatures.battle;
     this.resumed = false;
     if (!this.training && !open) {
-      const r = this.mode === 'ladder' ? startLadderBattle() : this.mode === 'story' ? startStory(this.storyWorld, this.storyFoeId) : startBattle(this.biome.id, this.foe.c.id);
+      const r = this.mode === 'ladder' ? startLadderBattle() : this.mode === 'story' ? startStory(this.storyWorld, this.storyStage) : startBattle(this.biome.id, this.foe.c.id);
       if (!r.ok) {
-        this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'story' : 'map', msg: r.msg });
+        this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'trail' : 'map', msg: r.msg });
         return;
       }
       // its own cry, at the bell
@@ -1378,8 +1382,7 @@ export class CreatureArena extends Phaser.Scene {
   private confirmLeave(): void {
     if (this.dialog || this.over) return;
     const paid = this.started;
-    const c = store.get().creatures;
-    const risk = !paid ? 0 : this.mode === 'ladder' ? LADDER_COST : this.mode === 'story' ? storyPrice(this.storyWorld, this.storyWorld < c.story.cleared).cost : BATTLE_COST;
+    const risk = !paid ? 0 : this.mode === 'ladder' ? LADDER_COST : this.mode === 'story' ? storyPrice(this.storyWorld, this.storyReplay).cost : BATTLE_COST;
     const name = this.me.c.name.toUpperCase();
     const lines = !paid
       ? ['LEAVE BEFORE THE BELL?', 'NOTHING HAS BEEN PAID YET.']
@@ -1396,8 +1399,8 @@ export class CreatureArena extends Phaser.Scene {
         this.dialog = null;
         this.over = true;
         this.settled = true;
-        const screen = this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'story' : 'map';
-        const r = paid ? finishBattle(false) : null;
+        const screen = this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'trail' : 'map';
+        const r = paid ? finishBattle(false, this.foeLevel) : null;
         const fainted = r && !r.runOver ? `YOU LEFT. ${name} FAINTED.` : 'YOU LEFT. THE RUN IS OVER.';
         this.scene.start('CreatureHub', { from: this.from, screen, world: this.storyWorld, msg: r ? fainted : 'YOU LEFT BEFORE THE BELL.' });
       },
@@ -3644,7 +3647,7 @@ export class CreatureArena extends Phaser.Scene {
     this.settled = true;
     // (what the run had paid before this one, for the run's total)
     const before = store.get().creatures.ladder?.earned ?? 0;
-    const r = finishBattle(won);
+    const r = finishBattle(won, this.foeLevel);
     audio.sfx(won ? 'cha_ching' : 'death_stinger', 0.6);
     const timeUp = this.me.hp > 0 && this.foe.hp > 0;
     const ladder = this.mode === 'ladder';
@@ -3668,15 +3671,17 @@ export class CreatureArena extends Phaser.Scene {
         if (story) {
           const nextW = WORLDS[this.storyWorld + 1];
           lines.push([
-            this.boss ? (r.worldOpened ? (nextW ? `${nextW.name} IS OPEN!` : 'THE STORY IS DONE - THE LADDER IS OPEN!') : 'BACK TO BATTLE 1 OF THIS WORLD.') : this.storyStage + 1 >= STAGES ? `NEXT: ${WORLDS[this.storyWorld].bossName}` : `NEXT: BATTLE ${this.storyStage + 2} OF ${STAGES}`,
+            r.replay
+              ? 'REPLAY WON: GOOD PRACTICE'
+              : this.boss ? (r.worldOpened ? (nextW ? `${nextW.name} IS OPEN!` : 'THE STORY IS DONE - THE LADDER IS OPEN!') : 'WORLD CLEARED') : this.storyStage + 1 >= STAGES ? `NEXT: ${WORLDS[this.storyWorld].bossName}` : `NEXT: BATTLE ${this.storyStage + 2} OF ${STAGES}`,
             PALETTE.cream,
           ]);
         }
         if (ladder) lines.push([this.boss ? `THE RUN PAID ${before + r.paid} TOKENS IN ALL.` : this.level >= LADDER_LEVELS ? 'NEXT: THE FINAL BOSS' : `NEXT: LEVEL ${this.level + 1} OF ${LADDER_LEVELS}`, PALETTE.cream]);
-        const xpLine = r.xp ? `+${r.xp} XP` : this.myLevel >= MAX_LEVEL ? 'MAX LEVEL - NO MORE XP' : '';
-        if (xpLine) lines.push([xpLine, 0x8ae88a]);
+        if (!this.training) lines.push([this.xpLine(r.xp ?? 0, r.xpGap ?? 0), 0x8ae88a]);
       } else {
-        lines.push([r.msg, PALETTE.cream]);
+        lines.push([r.msg.replace(/ \+\d+ XP\..*$/, ''), PALETTE.cream]);
+        if (!this.training && r.xp) lines.push([this.xpLine(r.xp, r.xpGap ?? 0), 0x8ae88a]);
         // (nothing said of what a loss does not give back: log #65)
         if (ladder && before) lines.push([`THE RUN PAID ${before} TOKENS. THEY ARE YOURS TO KEEP.`, PALETTE.ash]);
       }
@@ -3690,9 +3695,22 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('chime', 0.7);
       }
       // back to where the fight came from: the run's ladder, or the map
-      const screen = ladder ? 'ladder' : story ? 'story' : 'map';
+      const screen = ladder ? 'ladder' : story ? 'trail' : 'map';
       box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen, world: this.storyWorld }), { width: 80, height: 13 }));
     });
+  }
+
+  /**
+   * THE EXPERIENCE, AND HOW FAR TO THE NEXT LEVEL (user, 2 Nov): "+34 XP
+   * LV 4 40/130", and a word when the foe was well below you -- that is why
+   * it taught so little.
+   */
+  private xpLine(xp: number, gap: number): string {
+    const own = activeOwned();
+    const p = xpProgress(own?.xp ?? 0);
+    if (p.max) return xp ? `+${xp} XP - MAX LEVEL` : 'MAX LEVEL - NO MORE XP';
+    const note = gap <= -3 ? ' (WEAK FOE)' : gap >= 2 ? ' (TOUGH FOE!)' : '';
+    return `+${xp} XP${note}  LV ${p.level}: ${p.into}/${p.need}`;
   }
 
   /**

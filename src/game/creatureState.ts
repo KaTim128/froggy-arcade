@@ -54,12 +54,15 @@ export interface CreatureState {
    * A battle that has started and not finished.  `ladder` names the step of
    * the run it is (so it is settled against that step, once).
    */
-  battle: { mode: 'zone' | 'ladder' | 'story'; biome: string; level?: number; world?: number; stage?: number; foe?: string } | null;
+  battle: { mode: 'zone' | 'ladder' | 'story'; biome: string; level?: number; world?: number; stage?: number; foe?: string; replay?: boolean } | null;
   /**
    * STORY MODE (game/creatureStory): how many worlds are beaten (they open in
    * order), and each world's next stage (0..3 its battles, 4 its boss).
+   * `best`: how many of each world's five fights are beaten (0..5) -- its
+   * trail's progress, kept apart for every world (user, 2 Nov).  A beaten
+   * one can be fought again for experience, as a replay.
    */
-  story: { cleared: number; stage: number[] };
+  story: { cleared: number; stage: number[]; best: number[] };
   /** The ladder run in progress, or null. */
   ladder: LadderRun | null;
   /** The last boss a finished (or lost) run had: the next one draws another. */
@@ -89,7 +92,7 @@ export function defaultCreatures(): CreatureState {
     pending: null,
     battle: null,
     ladder: null,
-    story: { cleared: 0, stage: [0, 0, 0, 0, 0] },
+    story: { cleared: 0, stage: [0, 0, 0, 0, 0], best: [0, 0, 0, 0, 0] },
     lastBoss: null,
     bossesBeaten: [],
     lastFoe: {},
@@ -149,14 +152,20 @@ export function sanitizeCreatures(raw: unknown): CreatureState {
       ? b.mode === 'ladder'
         ? { mode: 'ladder' as const, biome: b.biome as string, level: Math.floor(num(b.level, 1)) }
         : b.mode === 'story'
-          ? { mode: 'story' as const, biome: b.biome as string, world: Math.max(0, Math.min(4, Math.floor(num(sb?.world)))), stage: Math.max(0, Math.min(4, Math.floor(num(sb?.stage)))), foe: isCreature(sb?.foe) ? (sb!.foe as string) : 'mole' }
+          ? { mode: 'story' as const, biome: b.biome as string, world: Math.max(0, Math.min(4, Math.floor(num(sb?.world)))), stage: Math.max(0, Math.min(4, Math.floor(num(sb?.stage)))), foe: isCreature(sb?.foe) ? (sb!.foe as string) : 'mole', ...((b as { replay?: unknown }).replay === true ? { replay: true } : {}) }
           : { mode: 'zone' as const, biome: b.biome as string }
       : null;
-  const st = (r as { story?: { cleared?: unknown; stage?: unknown } }).story;
-  const story = {
-    cleared: Math.max(0, Math.min(5, Math.floor(num(st?.cleared)))),
-    stage: [0, 1, 2, 3, 4].map((i) => Math.max(0, Math.min(4, Math.floor(num(Array.isArray(st?.stage) ? st!.stage[i] : 0))))),
-  };
+  const st = (r as { story?: { cleared?: unknown; stage?: unknown; best?: unknown } }).story;
+  const cleared = Math.max(0, Math.min(5, Math.floor(num(st?.cleared))));
+  const stage = [0, 1, 2, 3, 4].map((i) => Math.max(0, Math.min(4, Math.floor(num(Array.isArray(st?.stage) ? st!.stage[i] : 0)))));
+  // (a save from before the trails: a beaten world is all done; the open
+  // one is as far as its next stage; anything past it untouched)
+  const best = [0, 1, 2, 3, 4].map((i) => {
+    const saved = Math.max(0, Math.min(5, Math.floor(num(Array.isArray(st?.best) ? st!.best[i] : 0))));
+    const was = i < cleared ? 5 : i === cleared ? stage[i] : 0;
+    return Math.max(saved, was);
+  });
+  const story = { cleared, stage, best };
   const L = r.ladder;
   const ladder =
     L &&

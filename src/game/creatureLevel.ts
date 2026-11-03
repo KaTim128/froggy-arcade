@@ -30,6 +30,27 @@ export const XP_BOSS = 60;
 /** ...and a little for a lost one: it still learnt something (user, 31 Oct). */
 export const XP_LOSS = 10;
 
+/**
+ * ---- EXPERIENCE FOR A FIGHT (user, 2 Nov): by the level gap.  A foe above
+ * your creature teaches it more, one below less, and a much weaker one
+ * almost nothing -- so beating the first world's sprouts over and over at
+ * level 15 is no way up.  The base grows with the foe's level, so the later
+ * levels (which ask more) take about as many fair fights as the early ones.
+ *
+ *   gap (foe - yours)   +5 or more  +2    0    -2    -4    -5 or less
+ *   share of the base     x2.0     x1.4  x1.0  x0.6  x0.2    x0.1
+ *
+ * A boss is half as much again; a loss a quarter.  Always at least a point
+ * or two, so a fight is never for nothing.
+ */
+export function battleXp(mine: number, foe: number, opts: { boss?: boolean; won: boolean }): number {
+  const gap = Math.round(foe) - Math.round(mine);
+  const share = gap >= 0 ? 1 + 0.2 * Math.min(gap, 5) : Math.max(0.1, 1 + 0.2 * gap);
+  const base = 30 + 4 * Math.max(1, Math.min(MAX_LEVEL, Math.round(foe)));
+  const xp = base * share * (opts.boss ? 1.5 : 1) * (opts.won ? 1 : 0.25);
+  return Math.max(opts.won ? 2 : 1, Math.round(xp));
+}
+
 /** What a level adds, on top of the creature as it was caught. */
 function growth(level: number): { hp: number; dmg: number; speed: number } {
   const n = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level))) - 1;
