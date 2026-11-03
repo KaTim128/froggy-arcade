@@ -346,7 +346,7 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     const under = affordable ? '' : `YOU NEED ${opts.cost - opts.balance} MORE`;
     const best = opts.record ?? (opts.keepsRecord ? 'NO BEST YET' : '');
     // the block, measured, then set in the middle of the picture's height
-    const h = (best ? 10 : 0) + pitch.length * 9 + 6 + 18 + (under ? 10 : 0) + (opts.onPractice ? 26 : 0) + (free ? 0 : 12);
+    const h = (best ? 10 : 0) + pitch.length * 9 + 6 + 18 + (under ? 10 : 0) + (opts.onPractice ? 34 : 0) + (free ? 0 : 12);
     let y = Math.max(CARD.y + 17, Math.round(CARD.y + 12 + (BOTTOM_Y - 12 - CARD.y - 12 - h) / 2));
     if (best) {
       keep(centerSmall(scene, cx, y, best, opts.record ? PALETTE.gold : PALETTE.ash).setDepth(903));
@@ -364,9 +364,10 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
       y += 10;
     }
     if (opts.onPractice) {
-      keep(button(scene, cx, y + 11, 'PRACTICE', practice, { width: MW, height: 15, fill: 0x1f4a5a }).setDepth(905));
-      keep(centerSmall(scene, cx, y + 23, 'FREE - WINS NOTHING', PALETTE.tealLight).setDepth(903));
-      y += 26;
+      // (a clear gap between the button and the line under it, and the next: user, 3 Nov)
+      keep(button(scene, cx, y + 12, 'PRACTICE', practice, { width: MW, height: 15, fill: 0x1f4a5a }).setDepth(905));
+      keep(centerSmall(scene, cx, y + 26, 'FREE - WINS NOTHING', PALETTE.tealLight).setDepth(903));
+      y += 33;
     }
     if (!free) keep(centerSmall(scene, cx, y + 8, 'LEAVE A PAID GAME AND YOU FORFEIT', PALETTE.ash).setDepth(903));
     keep(button(scene, CX - 98, BOTTOM_Y, 'HOW TO PLAY', () => show('howto'), { width: 90, height: 15 }).setDepth(905));

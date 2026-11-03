@@ -1142,29 +1142,60 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
         g.lineStyle(0.8, seam, 1).strokePoints(pts, true);
         return g;
       };
-      // the shadow it throws on itself, a dark rim, then the dome in two
-      // tones -- the sunlit top and the shaded skirt -- so it reads as round
-      shell.push(E(1, 2, sw + 3, sh + 2, 0x1e180c).setAlpha(0.5));
-      shell.push(E(0, 0, sw + 2, sh + 2, rim));
-      shell.push(E(0, 0.6, sw, sh, 0x5e4c26));
-      shell.push(E(0, -1, sw - 2, sh - 3, 0x7a6232));
-      // the marginal plates round the skirt, each with its own seam
-      for (let k = -6; k <= 6; k++) {
-        const a = Math.PI / 2 + (k / 6.6) * (Math.PI / 2.05);
-        shell.push(E(Math.cos(a) * (sw / 2 - 1.6), Math.sin(a) * (sh / 2 - 1.6), 3, 2.6, k % 2 ? 0x8a7040 : 0x7e6638).setStrokeStyle(0.6, rim));
+      // A DOME, NOT A BALL (user, 3 Nov: "fix the overlapping circular
+      // appearance").  The carapace is a high arch with a FLAT underside and
+      // a lip of marginal plates along it, sat on the back -- so the outline
+      // is a tortoise's, with legs coming out under it, not a disc stuck on
+      // a body.
+      const dome = (w: number, h: number, base: number, col: number): Phaser.GameObjects.Graphics => {
+        const pts: Phaser.Math.Vector2[] = [];
+        for (let k = 0; k <= 16; k++) {
+          const a = Math.PI + (k / 16) * Math.PI;
+          pts.push(new Phaser.Math.Vector2(Math.cos(a) * w / 2, base + Math.sin(a) * h));
+        }
+        pts.push(new Phaser.Math.Vector2(w / 2 - 1, base + 1.2), new Phaser.Math.Vector2(-w / 2 + 1, base + 1.2));
+        return scene.add.graphics().fillStyle(col, 1).fillPoints(pts, true);
+      };
+      const base = sh * 0.34;
+      shell.push(dome(sw + 4, sh * 0.86 + 2, base + 1.5, 0x1e180c).setAlpha(0.45));
+      shell.push(dome(sw + 2, sh * 0.86 + 1, base, rim));
+      shell.push(dome(sw, sh * 0.86, base - 0.4, 0x5e4c26));
+      shell.push(dome(sw - 3, sh * 0.78, base - 1.6, 0x7a6232));
+      // the lip: a row of marginal plates along the flat underside
+      for (let k = 0; k < 7; k++) {
+        const px = -sw / 2 + 2.5 + (k * (sw - 5)) / 6;
+        shell.push(R(px, base - 0.6, (sw - 5) / 6 - 0.4, 2.6, k % 2 ? 0x8a7040 : 0x7e6638).setStrokeStyle(0.5, rim));
       }
-      // the scutes: a spine of three down the middle and two pairs either
-      // side, every one with pale growth rings and a dark seam
-      for (const [x, y, r] of [[0, -5, 4.2], [0, 0.6, 4], [-6, -2, 3.6], [6, -2, 3.6], [-5.2, 3.6, 3.2], [5.2, 3.6, 3.2]] as const) {
+      // the scutes: a spine of three along the crown, a row of four under it,
+      // every one with pale growth rings and a dark seam
+      for (const [x, y, r] of [[-5.4, -sh * 0.46, 3.4], [0, -sh * 0.56, 3.8], [5.4, -sh * 0.46, 3.4], [-8.6, -1.4, 2.8], [-3, -2.6, 3.2], [3, -2.6, 3.2], [8.6, -1.4, 2.8]] as const) {
         shell.push(hex(x, y, r, 0x9a7c42, 0x3a2c14));
-        shell.push(hex(x, y - 0.3, r * 0.68, 0xa8884a, 0x8a6e36).setAlpha(0.8));
-        shell.push(hex(x, y - 0.5, r * 0.36, 0xc8a85e, 0xa8884a).setAlpha(0.75));
+        shell.push(hex(x, y - 0.3, r * 0.66, 0xa8884a, 0x8a6e36).setAlpha(0.8));
+        shell.push(hex(x, y - 0.5, r * 0.34, 0xc8a85e, 0xa8884a).setAlpha(0.75));
       }
-      // the keel along the top, and the sun on the dome
-      shell.push(R(0, -2, 1, sh - 8, 0x4a3a1c).setAlpha(0.45));
-      shell.push(E(-3, -sh / 2 + 3.6, sw * 0.46, 2.6, 0xfff0c0).setAlpha(0.4));
-      shell.push(E(-5, -sh / 2 + 5.2, 3, 1.4, 0xffffff).setAlpha(0.35));
-      // a hooked horny beak, a wrinkled old neck, and scales on the crown
+      // the sun along the top of the dome
+      shell.push(E(-2, -sh * 0.66, sw * 0.5, 2.2, 0xfff0c0).setAlpha(0.38));
+      shell.push(E(-5, -sh * 0.58, 3, 1.2, 0xffffff).setAlpha(0.35));
+      // A NECK.  Wrinkled and leathery, reaching forward and up out of the
+      // shell's mouth to the head -- the head is not just parked on top.
+      {
+        const neck = bez([0, -4], [2, -7], [3, -10], [3.4, -13], 10);
+        body.push(tube(neck, 6, 4.6, d.skin), tube(neck, 2.4, 1.6, shade(d.skin, 0.12)));
+        for (const k of [0.3, 0.5, 0.7]) {
+          const [nx, ny] = neck[Math.round(k * (neck.length - 1))];
+          body.push(R(nx, ny, 4.6, 0.6, dark).setAlpha(0.45));
+        }
+      }
+      // FOUR LIMBS.  The front two are the shared legs; the hind pair are
+      // thick stumps with claws, half behind the shell's lip.
+      for (const hx of [-10, -5]) {
+        root.push(R(hx, -5, 5, 8, shade(d.skin, 0.16)).setStrokeStyle(0.6, dark));
+        root.push(E(hx + 0.5, -1, 7, 3.4, shade(d.skin, 0.1)));
+        for (const c of [-2, 0, 2]) root.push(R(hx + 1.5 + c, 0.6, 1, 1.2, 0xd8d0b0));
+      }
+      // and a short pointed tail, out from under the back of the shell
+      tailParts.push(TA(-sw / 2 - 1, -2, -sw / 2 - 6, 1, -sw / 2 + 1, 1.5, d.skin));
+      // a hooked horny beak, wrinkles under the jaw, and scales on the crown
       head.push(TA(3.4, -0.4, 7.6, 0.6, 4, 3.4, 0x5a5230), TA(6, 0.2, 7.6, 0.6, 6.8, 2.2, 0x3a3420));
       head.push(R(-1, 3, 5, 0.8, dark).setAlpha(0.6), R(0, 5, 4, 0.8, dark).setAlpha(0.6), R(-0.5, 6.8, 3.4, 0.7, dark).setAlpha(0.5));
       for (const [sx, sy] of [[-2, -3.4], [0.4, -3.8], [-0.8, -2.2], [1.8, -2.6]] as const) head.push(E(sx, sy, 1.8, 1.3, shade(d.skin, 0.18)).setAlpha(0.8));
@@ -1347,7 +1378,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
   // that follow the part they belong to; see `Art.headGear`.
   const gear = foe ? foeGear(scene, foe) : { head: [], body: [], back: [], root: [], puff: [], tail: [], tailRoot: [0, 0] as [number, number], drags: false, headBack: [], shell: [] };
   const headBack = scene.add.container(2, -30, gear.headBack);
-  const shellC = gear.shell.length ? scene.add.container(-4, -20, gear.shell) : null;
+  const shellC = gear.shell.length ? scene.add.container(-5, -20, gear.shell).setAngle(-90) : null;
   // a shadow on the boards, which is how a jump reads as off the ground
   const shadow = scene.add.ellipse(x, FLOOR_Y + 1, foe ? foe.bodyW + 8 : 24, 4, 0x000000).setAlpha(0.28).setDepth(19);
   const tailC = gear.tail.length ? scene.add.container(gear.tailRoot[0], -18 + gear.tailRoot[1], gear.tail) : null;
@@ -1971,7 +2002,9 @@ function render(f: Fighter, dt: number): void {
     const root = a.root;
     if (front && root.getIndex(a.shell) < root.getIndex(a.torso)) root.moveAbove(a.shell, a.bodyGear as unknown as Phaser.GameObjects.Container);
     if (!front && root.getIndex(a.shell) > root.getIndex(a.torso)) root.moveBelow(a.shell, a.torso as unknown as Phaser.GameObjects.Container);
-    a.shell.setPosition(-4 + k * 11, -20 + crouch + breathe - k * 2).setScale(1 - k * 0.12, 1).setAngle(k * 8);
+    // (the dome curves out behind its back, flat side against it; to block it
+    // swings round to curve out in front)
+    a.shell.setPosition(-5 + k * 13, -20 + crouch + breathe - k * 2).setScale(1 - k * 0.12, 1).setAngle(-90 + k * 180);
     a.head.x -= k * 3;
     a.head.y += k * 5;
   }
