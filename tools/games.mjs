@@ -82,7 +82,7 @@ const GAMES = [
   // Aim, charge, throw one over the fence, then try a special item.
   { id: 'frogvslizard', drive: async (p) => { await p.keyboard.press('KeyW'); await p.keyboard.down('Space'); await sleep(620); await p.keyboard.up('Space'); await sleep(3200); await p.keyboard.press('Digit3'); await sleep(300); } },
   // One spin of the wheel, and a scripted dancer who actually plays the chart.
-  { id: 'wheel', drive: async (p) => { await p.keyboard.press('Space'); await sleep(4400); } },
+  { id: 'wheel', drive: async (p) => { await p.keyboard.press('Space'); await sleep(6600); await p.keyboard.press('Space'); await sleep(400); } },
   { id: 'danceoff', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.keyboard.press(['KeyA', 'KeyS', 'KeyW', 'KeyD'][i % 4]); await sleep(190); } } },
   // Four chests, then the fight: the mash is the one cabinet where the game
   // proper is four screens in, so the drive walks the picks rather than
@@ -2653,12 +2653,15 @@ for (const g of [
   // else: the net move for one spin is the face minus the price of the go.
   // Off the wheel, not typed here: the price of a go is the machine's to set.
   const SPIN = await page.evaluate(async () => {
-    const { SPIN_COST } = await import('/src/minigames/wheel.ts');
-    return SPIN_COST;
+    const { spinCost } = await import('/src/minigames/wheel.ts');
+    return spinCost();
   });
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.keyboard.press('Space');
-  await sleep(4600);
+  await sleep(6800);
+  // (the day's respin is on offer: SPACE keeps the result)
+  await page.keyboard.press('Space');
+  await sleep(300);
   const after = await page.evaluate(() => ({
     tokens: window.__froggy.state().tokens,
     at: window.__wheel.state().at,

@@ -36,14 +36,44 @@
  * paid the moment the wheel stops, and LEAVE settles up.  Nothing leaves
  * except through the ledger (MG-3).
  *
- * THE PRICE IS THE LEVER.  These faces average about 33.43 tokens a spin, and
- * `SPIN_COST` is twenty-five — so the wheel still hands back about eight more
- * than it takes, every spin, forever.  It remains the one fixture in the
- * building with a positive edge to the customer, and a patient player can farm
- * the prize shelf off it rather than off the cabinets.  If the shelf has to
- * mean something again, the price is the whole of that decision: at thirty-four
- * the wheel is level and at forty the house keeps about six.  The faces are cut
- * to the odds and are not the place to do it.
+ * THE PRICE IS THE LEVER (user, 3 Nov: "a long term house advantage").  These
+ * faces average about 33.43 tokens a spin and a spin now costs FORTY (the
+ * admin's `wheel.cost`), so the house keeps about 6.6 of every paid spin --
+ * about 16% -- however long anyone plays.
+ *
+ * ---- ONE RESPIN AND TWO BONUS SPINS A DAY, PER PROFILE.
+ *
+ *   RESPIN   after a paid spin, throw its result away and spin again, free.
+ *            The second result stands.  One a day.
+ *   BONUS    two free spins a day, once the day's first paid spin is in.
+ *            Each one, on its own: 85% a prize under 25 (1-15), 15% a prize
+ *            of 40-70.  Nothing else can come up on a bonus spin.
+ *
+ * What the day's allowance can add is fixed (about 20 for the respin, used
+ * well, and 27 for the two bonus spins), so it never grows with play: paid
+ * spins keep the edge above, and the more anyone spins the more the house is
+ * ahead.
+ *
+ * ---- NOTHING TWICE, NOTHING BACK.
+ *
+ *   - Every result is drawn and WRITTEN DOWN before the wheel moves
+ *     (`froggy.wheel.<profile>`, "pending").  A reload, a closed tab or a
+ *     crash mid-spin does not hand the price back and does not re-roll: the
+ *     result already drawn is paid the next time the wheel is opened.  It used
+ *     to refund a cut-off spin, which let a player watch a bad result slow
+ *     down and reload it away.
+ *   - A result held for RESPIN is the same: a reload collects it.
+ *   - The allowance is kept per profile, against the date, and it only
+ *     resets when the clock has moved FORWARD past the last time it was
+ *     used: winding the clock back gives nothing, and winding it forward
+ *     spends those days for real.  The game already runs in one tab at a
+ *     time (core/singleInstance).
+ *   - A short cooldown between spins, and every spin logged (the last 30).
+ *
+ * WHAT THIS CANNOT DO.  The tokens live on the player's device, so a player
+ * who edits their own browser storage can give themselves anything; the only
+ * cure for that is an economy kept on a server, which this game does not
+ * have.  Everything above is about the game itself never paying twice.
  */
 
 import Phaser from 'phaser';
@@ -53,10 +83,92 @@ import { button, centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
+import { cfgNum } from '../core/gameConfig';
+import { store } from '../core/state';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'wheel' as const;
-export const SPIN_COST = 25;
+/** What a spin costs: the cabinet's own price, which the admin can move. */
+export function spinCost(): number {
+  const v = cfgNum('wheel.cost');
+  return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 40;
+}
+export const RESPINS_A_DAY = 1;
+export const BONUS_A_DAY = 2;
+/** After a spin settles, before the next may start. */
+const COOLDOWN_MS = 900;
+
+// ------------------------------------------------------------ the book
+
+type SpinKind = 'paid' | 'respin' | 'bonus';
+interface Pending {
+  kind: SpinKind;
+  /** The face drawn, by index into FACES, and what it pays. */
+  face: number;
+  pays: number;
+  cost: number;
+  at: number;
+  /** A paid result held while the player decides whether to RESPIN it. */
+  held?: boolean;
+}
+interface WheelBook {
+  day: string;
+  /** The latest time the book was used: the clock must pass it to reset. */
+  seen: number;
+  respins: number;
+  bonus: number;
+  paidToday: number;
+  pending: Pending | null;
+  log: Array<{ at: number; kind: SpinKind; cost: number; pays: number }>;
+}
+
+const bookKey = (): string => `froggy.wheel.${store.activeSlotId() ?? 'guest'}`;
+const today = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
+const int = (v: unknown, lo: number, hi: number, d: number): number =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.floor(v))) : d;
+
+/** The profile's wheel book, read fresh every time (never cached across a spin). */
+export function readBook(): WheelBook {
+  let raw: Partial<WheelBook> = {};
+  try {
+    raw = JSON.parse(localStorage.getItem(bookKey()) ?? '{}') ?? {};
+  } catch {
+    raw = {};
+  }
+  const pend = raw.pending as Pending | null | undefined;
+  const b: WheelBook = {
+    day: typeof raw.day === 'string' ? raw.day : '',
+    seen: int(raw.seen, 0, Number.MAX_SAFE_INTEGER, 0),
+    respins: int(raw.respins, 0, RESPINS_A_DAY, 0),
+    bonus: int(raw.bonus, 0, BONUS_A_DAY, 0),
+    paidToday: int(raw.paidToday, 0, 1e6, 0),
+    pending:
+      pend && typeof pend === 'object' && FACES[pend.face] && (pend.kind === 'paid' || pend.kind === 'respin' || pend.kind === 'bonus')
+        ? { kind: pend.kind, face: pend.face, pays: FACES[pend.face].pays, cost: int(pend.cost, 0, 1e4, 0), at: int(pend.at, 0, Number.MAX_SAFE_INTEGER, 0), held: pend.held === true }
+        : null,
+    log: Array.isArray(raw.log) ? raw.log.filter((e) => e && typeof e === 'object').slice(-30) : [],
+  };
+  // A new day only once the clock has really moved on: set back, it gives nothing.
+  const now = Date.now();
+  if (b.day !== today() && now >= b.seen) {
+    b.day = today();
+    b.respins = RESPINS_A_DAY;
+    b.bonus = BONUS_A_DAY;
+    b.paidToday = 0;
+  }
+  b.seen = Math.max(b.seen, now);
+  return b;
+}
+function writeBook(b: WheelBook): void {
+  try {
+    localStorage.setItem(bookKey(), JSON.stringify({ ...b, log: b.log.slice(-30) }));
+  } catch {
+    /* storage full or blocked: the spin still plays, it just is not kept */
+  }
+}
 
 /**
  * The faces, in the order they sit round the rim, with the share of the wheel
@@ -108,7 +220,23 @@ const MIN_DEG = 10;
 const RARE_DEG: Record<number, number> = { 5000: 7.5, 1000: 8.2, 500: 9 };
 /** Where the pointer sits, in radians: straight up. */
 const POINTER = -Math.PI / 2;
-const SPIN_MS = 3400;
+/** A long, slow wind-down: most of the suspense is the last crawl past the pointer. */
+const SPIN_MS = 5600;
+const WIND_MS = 320;
+/**
+ * The spin's shape: a smooth run-up over its first twelfth, then a long
+ * quartic slow-down, joined so the speed never jumps.
+ */
+const EASE_A = 0.12;
+const EASE_K = 4 / (2 * EASE_A + 2 * EASE_A * EASE_A);
+export function spinEase(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  const p1 = EASE_K * EASE_A * EASE_A;
+  if (t < EASE_A) return EASE_K * t * t;
+  const u = (t - EASE_A) / (1 - EASE_A);
+  return p1 + (1 - p1) * (1 - Math.pow(1 - u, 4));
+}
 
 interface Slice {
   pays: number;
@@ -131,6 +259,15 @@ let statusText: Phaser.GameObjects.BitmapText | null = null;
 let balanceText: Phaser.GameObjects.BitmapText | null = null;
 let spinBtn: Phaser.GameObjects.Container | null = null;
 let leaveBtn: Phaser.GameObjects.Container | null = null;
+let respinBtn: Phaser.GameObjects.Container | null = null;
+let bonusBtn: Phaser.GameObjects.Container | null = null;
+let allowText: Phaser.GameObjects.BitmapText | null = null;
+let pegs: Phaser.GameObjects.Arc[] = [];
+/** A paid result waiting on COLLECT or RESPIN. */
+let holding: Pending | null = null;
+let current: Pending | null = null;
+let readyAt = 0;
+let chase = 0;
 /** Which face the pointer was over last frame, for the ratchet tick. */
 let lastFace = -1;
 
@@ -202,9 +339,26 @@ function draw1(): { face: number; angle: number } {
     r -= FACES[i].share;
     if (r < 0) break;
   }
+  return { face: i, angle: stopIn(i) };
+}
+
+/** A point well inside face `i` for the wheel to stop on. */
+function stopIn(i: number): number {
   const s = slices[i];
-  const angle = s.from + (s.to - s.from) * (0.15 + Math.random() * 0.7);
-  return { face: i, angle };
+  return s.from + (s.to - s.from) * (0.15 + Math.random() * 0.7);
+}
+
+/** The small change (under 25) and the 40-70 band, by face. */
+const SMALL = FACES.map((f, i) => (f.pays > 0 && f.pays < 25 ? i : -1)).filter((i) => i >= 0);
+const MID = FACES.map((f, i) => (f.pays >= 40 && f.pays <= 70 ? i : -1)).filter((i) => i >= 0);
+/** The bonus odds: 85% a prize under 25, 15% one of 40-70, each spin on its own. */
+export const BONUS_BIG = 0.15;
+
+/** A BONUS spin's face: 85% the small change, 15% the 40-70 band, a face of it at random. */
+function drawBonus(): { face: number; angle: number } {
+  const band = Math.random() < BONUS_BIG ? MID : SMALL;
+  const i = band[Math.floor(Math.random() * band.length)];
+  return { face: i, angle: stopIn(i) };
 }
 
 /** The rotation that puts `angle` (a point on the rim, unturned) under the pointer. */
@@ -225,34 +379,46 @@ export function faceAt(rot: number): Slice {
 
 export const wheelOfFortune: MinigameModule = {
   // (in play from the first spin: walking up and away again is LEAVE)
-  inPlay: () => spins > 0 || spinning,
+  inPlay: () => spins > 0 || spinning || holding !== null,
   id: ID,
   title: 'WHEEL OF FORTUNE',
   music: 'game_wheel',
-  rules: '25 a spin - the wheel says what it pays',
+  get rules() {
+    return `${spinCost()} a spin - 1 respin and 2 bonus spins a day`;
+  },
   payoutNote: 'PAYS 0 - 5000',
   tutorial: {
     pitch: 'ONE SPIN, ONE PRIZE.',
     steps: [
       { say: 'SPACE SPINS THE WHEEL.', phone: 'SPIN SPINS THE WHEEL.', demo: 'wheel.spin' },
       { say: 'THE THINNEST FACES ARE THE RAREST. THE BOARD SHOWS THE REAL CHANCE OF EACH.', demo: 'wheel.odds' },
-      { say: 'WHATEVER IT STOPS ON IS YOURS. LEAVE WHENEVER YOU LIKE.', demo: 'wheel.keep' },
+      { say: 'ONCE A DAY, R THROWS A RESULT AWAY AND SPINS AGAIN FREE.', phone: 'ONCE A DAY, RESPIN THROWS A RESULT AWAY AND SPINS AGAIN FREE.', demo: 'wheel.keep' },
+      { say: 'TWO FREE BONUS SPINS A DAY (F), AFTER YOUR FIRST PAID SPIN.', phone: 'TWO FREE BONUS SPINS A DAY, AFTER YOUR FIRST PAID SPIN.', demo: 'wheel.spin' },
     ],
     objective: [
       'ONE SPIN, ONE PRIZE, WHATEVER IT STOPS ON.',
       'THE THINNEST FACES ARE THE RAREST.',
-      'THE BOARD SHOWS THE REAL CHANCE OF EACH.',
-      'LEAVE WHENEVER YOU LIKE - IT IS ALL YOURS.',
+      'ONE FREE RESPIN A DAY: THE NEW RESULT STANDS.',
+      'TWO BONUS SPINS A DAY: 85% UNDER 25, 15% 40-70.',
+      'A SPIN CUT OFF BY A RELOAD IS PAID NEXT TIME.',
     ],
     controls: [
-      ['SPACE', 'SPIN'],
-      ['MOUSE', 'SPIN OR LEAVE'],
+      ['SPACE', 'SPIN / COLLECT'],
+      ['R', 'RESPIN'],
+      ['F', 'BONUS SPIN'],
     ],
   },
-  touch: { buttons: [{ label: 'SPIN', key: 'SPACE', primary: true }] },
+  touch: {
+    buttons: [
+      { label: 'SPIN', key: 'SPACE', primary: true },
+      { label: 'RESPIN', key: 'R' },
+      { label: 'BONUS', key: 'F' },
+    ],
+  },
 
-  // Every spin is paid the moment it stops, so only a spin still turning is at stake.
-  atRisk: () => (spinning ? SPIN_COST : 0),
+  // Nothing is ever handed back: a result is drawn and written down before
+  // the wheel turns, and a spin the page cut off is paid next time instead.
+  atRisk: () => 0,
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;
     sceneRef = scene;
@@ -262,6 +428,11 @@ export const wheelOfFortune: MinigameModule = {
     spins = 0;
     won = 0;
     lastFace = -1;
+    holding = null;
+    current = null;
+    readyAt = 0;
+    chase = 0;
+    pegs = [];
     build();
 
     // the room: carpet, a rope, and the wheel standing in it
@@ -284,7 +455,7 @@ export const wheelOfFortune: MinigameModule = {
     // pegs round the rim, which is what the pointer would actually tick off
     for (let i = 0; i < 24; i++) {
       const pa = (i / 24) * Math.PI * 2;
-      scene.add.circle(CX + Math.cos(pa) * (R + 6), CY + Math.sin(pa) * (R + 6), 1.3, 0x7a5a2a).setAlpha(0.85).setDepth(7);
+      pegs.push(scene.add.circle(CX + Math.cos(pa) * (R + 6), CY + Math.sin(pa) * (R + 6), 1.3, 0x7a5a2a).setAlpha(0.85).setDepth(7));
     }
     face = scene.add.graphics().setDepth(4);
     // The labels ride the rim, so they are containers of their own that get
@@ -331,19 +502,40 @@ board.forEach(([what, tint], i) => {
   text(scene, 180, 34 + i * 8, what, tint);
 });
 
-balanceText = text(scene, 180, 102, '', PALETTE.cream);
-statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
+    balanceText = text(scene, 180, 100, '', PALETTE.cream);
+    statusText = text(scene, 180, 110, `SPIN IT - ${spinCost()} A GO`, PALETTE.gold);
+    allowText = text(scene, 180, 120, '', PALETTE.fog);
 
-    spinBtn = button(scene, 214, 150, `SPIN - ${SPIN_COST}`, () => spin(), { width: 66, height: 14 });
-    leaveBtn = button(scene, 284, 150, 'LEAVE', () => leave(), { width: 52, height: 14, fill: PALETTE.slate });
-    scene.input.keyboard?.on('keydown-SPACE', () => spin());
+    spinBtn = button(scene, 214, 141, `SPIN - ${spinCost()}`, () => primary(), { width: 66, height: 13 });
+    bonusBtn = button(scene, 284, 141, 'BONUS', () => bonusSpin(), { width: 52, height: 13, fill: PALETTE.slate });
+    respinBtn = button(scene, 214, 160, 'RESPIN', () => respin(), { width: 66, height: 13, fill: PALETTE.slate });
+    leaveBtn = button(scene, 284, 160, 'LEAVE', () => leave(), { width: 52, height: 13, fill: PALETTE.slate });
+    scene.input.keyboard?.on('keydown-SPACE', () => primary());
+    scene.input.keyboard?.on('keydown-R', () => respin());
+    scene.input.keyboard?.on('keydown-F', () => bonusSpin());
+    // a spin the page cut off last time, or a result left held: pay it now
+    scene.time.delayedCall(60, () => settleLeftover());
 
     draw();
+    setButtons();
     refresh();
 
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__wheel = {
-        state: () => ({ spinning, spins, won, rotation, at: faceAt(rotation).pays }),
+        state: () => ({ spinning, spins, won, rotation, at: faceAt(rotation).pays, holding: holding?.pays ?? null, book: readBook() }),
+        /** The bonus draw, sampled n times: what it would pay. */
+        sampleBonus: (n: number) => {
+          const seen: Record<string, number> = {};
+          for (let i = 0; i < n; i++) {
+            const p = faceAt(rotationFor(drawBonus().angle)).pays;
+            seen[p] = (seen[p] ?? 0) + 1;
+          }
+          return seen;
+        },
+        respin: () => respin(),
+        bonus: () => bonusSpin(),
+        collect: () => primary(),
+        ease: (t: number) => spinEase(t),
         /** The face under the pointer for a given rotation, without spinning. */
         faceAt: (rot: number) => faceAt(rot).pays,
         /**
@@ -359,7 +551,7 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
           }
           return seen;
         },
-        spin: () => spin(),
+        spin: () => primary(),
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__wheel;
@@ -370,7 +562,8 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
   // ---- A RELOAD (log #87): the wheel where it stopped, and what it has paid.
   // A spin the page cut off mid-turn is not played out: its price comes back.
   snapshot() {
-    return { rotation, spins: spins - (spinning ? 1 : 0), won, refund: spinning ? SPIN_COST : 0 };
+    // (no refund: the spin in the air, or the result held, is in the book and is paid on the way back in)
+    return { rotation, spins, won, refund: 0 };
   },
 
   restore(snap: unknown) {
@@ -379,9 +572,11 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
     spins = v.spins;
     won = v.won;
     spinning = false;
+    holding = null;
+    current = null;
     lastFace = -1;
     draw();
-    setButtons(true);
+    setButtons();
     refresh();
   },
 
@@ -392,6 +587,10 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
     balanceText = null;
     spinBtn = null;
     leaveBtn = null;
+    respinBtn = null;
+    bonusBtn = null;
+    allowText = null;
+    pegs = [];
     apiRef = null;
     sceneRef = null;
   },
@@ -447,83 +646,275 @@ function paintNumbers(): void {
   });
 }
 
-function spin(): void {
-  if (over || spinning || !sceneRef || !apiRef) return;
-  // Nothing was paid at the door, so every spin — the first one included — is
-  // raised here.  Look for free, pay to play.
-  if (!apiRef.raise(SPIN_COST)) {
+/** SPACE / the big button: collect a held result, or buy a spin. */
+function primary(): void {
+  if (holding) collect();
+  else paidSpin();
+}
+
+/** Why a spin cannot start right now, or null if it can. */
+function blocked(): boolean {
+  if (over || spinning || !sceneRef || !apiRef) return true;
+  if (performance.now() < readyAt) return true;
+  // (a result from before still owed: pay it first, never alongside a new one)
+  if (readBook().pending && !holding) {
+    settleLeftover();
+    return true;
+  }
+  return false;
+}
+
+function paidSpin(): void {
+  if (blocked() || holding) return;
+  const cost = spinCost();
+  // Nothing was paid at the door, so every spin -- the first one included --
+  // is raised here.  Look for free, pay to play.
+  if (!apiRef!.raise(cost)) {
     audio.sfx('buzzer');
-    statusText?.setText(`YOU NEED ${SPIN_COST}`).setTint(PALETTE.blood);
+    statusText?.setText(`YOU NEED ${cost}`).setTint(PALETTE.blood);
     return;
   }
+  const pick = draw1();
+  const book = readBook();
+  current = { kind: 'paid', face: pick.face, pays: FACES[pick.face].pays, cost, at: Date.now() };
+  book.paidToday++;
+  // WRITTEN DOWN BEFORE THE WHEEL MOVES: a reload from here on cannot re-roll it
+  book.pending = current;
+  writeBook(book);
   spins++;
+  refresh();
+  turnTo(pick.angle, 'SPINNING...');
+}
+
+function respin(): void {
+  if (over || spinning || !sceneRef || !apiRef) return;
+  if (!holding) {
+    statusText?.setText('RESPIN AFTER A PAID SPIN').setTint(PALETTE.fog);
+    return;
+  }
+  const book = readBook();
+  if (book.respins <= 0 || !book.pending || book.pending.at !== holding.at) {
+    statusText?.setText('NO RESPIN LEFT TODAY').setTint(PALETTE.fog);
+    return;
+  }
+  book.respins--;
+  book.log.push({ at: Date.now(), kind: 'paid', cost: holding.cost, pays: 0 });
+  const pick = draw1();
+  current = { kind: 'respin', face: pick.face, pays: FACES[pick.face].pays, cost: 0, at: Date.now() };
+  book.pending = current;
+  writeBook(book);
+  holding = null;
+  audio.sfx('coin_spin', 0.7);
+  turnTo(pick.angle, 'RESPIN! THIS ONE STANDS...');
+}
+
+function bonusSpin(): void {
+  if (holding) {
+    statusText?.setText('COLLECT OR RESPIN FIRST').setTint(PALETTE.fog);
+    return;
+  }
+  if (blocked()) return;
+  const book = readBook();
+  if (book.bonus <= 0) {
+    statusText?.setText('NO BONUS SPINS LEFT TODAY').setTint(PALETTE.fog);
+    return;
+  }
+  if (book.paidToday < 1) {
+    statusText?.setText('SPIN ONCE TODAY TO UNLOCK').setTint(PALETTE.fog);
+    return;
+  }
+  book.bonus--;
+  const pick = drawBonus();
+  current = { kind: 'bonus', face: pick.face, pays: FACES[pick.face].pays, cost: 0, at: Date.now() };
+  book.pending = current;
+  writeBook(book);
+  audio.sfx('coin_spin', 0.7);
+  turnTo(pick.angle, 'BONUS SPIN...');
+}
+
+/**
+ * Send the wheel round to stop at `angle`: a small wind back, a smooth run-up,
+ * five to eight turns, and a long crawl over the last few faces.
+ */
+function turnTo(angle: number, say: string): void {
+  if (!sceneRef) return;
   spinning = true;
   lastFace = -1;
-  statusText?.setText('...').setTint(PALETTE.fog);
-  setButtons(false);
+  statusText?.setText(say).setTint(PALETTE.fog);
+  setButtons();
   audio.sfx('coin_drop', 0.6);
-
-  // The draw decides the face, by the table's odds; the wheel is then sent
-  // round five to eight times and stopped inside that face.
-  const pick = draw1();
   const twoPi = Math.PI * 2;
-  const base = rotationFor(pick.angle);
+  const base = rotationFor(angle);
+  const start = rotation - 0.18;
   const turns = 5 + Math.floor(Math.random() * 3);
-  const ahead = (((base - rotation) % twoPi) + twoPi) % twoPi;
-  const target = rotation + ahead + twoPi * turns;
-  sceneRef.tweens.addCounter({
+  const ahead = (((base - start) % twoPi) + twoPi) % twoPi;
+  const target = start + ahead + twoPi * turns;
+  const tick = (): void => {
+    draw();
+    const idx = slices.indexOf(faceAt(rotation));
+    if (idx !== lastFace) {
+      lastFace = idx;
+      audio.sfx('wheel_tick', 0.5);
+    }
+  };
+  const scene = sceneRef;
+  // the wind back: the wheel is pulled against its spin before it is let go
+  scene.tweens.addCounter({
     from: rotation,
-    to: target,
-    duration: SPIN_MS,
-    ease: 'Cubic.easeOut',
+    to: start,
+    duration: WIND_MS,
+    ease: 'Sine.easeInOut',
     onUpdate: (tw) => {
       rotation = tw.getValue() ?? rotation;
       draw();
-      // the ratchet: one tick per face that goes past the pointer
-      const idx = slices.indexOf(faceAt(rotation));
-      if (idx !== lastFace) {
-        lastFace = idx;
-        audio.sfx('wheel_tick', 0.5);
-      }
     },
-    onComplete: () => settleSpin(),
+    onComplete: () => {
+      scene.tweens.addCounter({
+        from: start,
+        to: target,
+        duration: SPIN_MS,
+        ease: spinEase,
+        onUpdate: (tw) => {
+          rotation = tw.getValue() ?? rotation;
+          tick();
+          // the rim lights chase round while it turns, slowing with it
+          const p = tw.progress;
+          chase += 0.9 * (1 - p) + 0.08;
+          lightPegs(Math.floor(chase), p > 0.82);
+        },
+        onComplete: () => settleSpin(),
+      });
+    },
+  });
+}
+
+/** The rim lights: one lit in three, stepping round; all of them gold near the end. */
+function lightPegs(step: number, close: boolean): void {
+  pegs.forEach((pg, i) => {
+    const on = (i + step) % 3 === 0;
+    pg.setFillStyle(on ? (close ? PALETTE.blood : 0xffd45e) : 0x7a5a2a).setAlpha(on ? 1 : 0.7).setScale(on ? 1.7 : 1);
   });
 }
 
 /**
  * The wheel has stopped.  ONE face, ONE payout, and the latch is what
- * guarantees it: the tween's completion is the only caller, but a spin that
- * somehow settled twice would pay twice, and that is the one bug a wheel must
- * not have.
+ * guarantees it: a spin that somehow settled twice would pay twice, and that
+ * is the one thing a wheel must not do.  A paid spin with the day's respin
+ * still unused is HELD for the player to collect or respin.
  */
 function settleSpin(): void {
-  if (!apiRef || !sceneRef || !spinning) return;
+  if (!apiRef || !sceneRef || !spinning || !current) return;
   spinning = false;
-  const landed = faceAt(rotation);
-  if (landed.pays > 0) {
-    apiRef.payout(landed.pays);
-    apiRef.record(landed.pays);
-    won += landed.pays;
-    audio.sfx(landed.pays >= 50 ? 'chime' : landed.pays >= 20 ? 'bell_ding' : 'ui_blip');
-    statusText
-      ?.setText(`${landed.pays} TOKEN${landed.pays === 1 ? '' : 'S'}`)
-      .setTint(landed.pays >= 20 ? PALETTE.gold : PALETTE.cream);
-    if (landed.pays >= 50) {
-      sceneRef.cameras.main.shake(160, 0.004);
-      const pop = centerText(sceneRef, CX, CY - R - 18, `${landed.pays}!`, PALETTE.gold, 16).setDepth(20);
-      sceneRef.tweens.add({ targets: pop, y: CY - R - 30, alpha: 0, duration: 1200, onComplete: () => pop.destroy() });
-    }
+  readyAt = performance.now() + COOLDOWN_MS;
+  const p = current;
+  current = null;
+  lightPegs(0, false);
+  const book = readBook();
+  if (p.kind === 'paid' && book.respins > 0 && book.pending?.at === p.at) {
+    holding = p;
+    book.pending = { ...p, held: true };
+    writeBook(book);
+    audio.sfx(p.pays >= 40 ? 'bell_ding' : 'ui_blip');
+    statusText?.setText(`${p.pays || 'NOTHING'} - KEEP IT OR RESPIN?`).setTint(p.pays >= 40 ? PALETTE.gold : PALETTE.cream);
+    setButtons();
+    refresh();
+    return;
+  }
+  pay(p);
+}
+
+function collect(): void {
+  if (!holding || spinning) return;
+  const p = holding;
+  holding = null;
+  pay(p);
+}
+
+/**
+ * Pay `p` -- if the book still owes it.  The book is cleared FIRST, so the
+ * same result can never be paid a second time, by this tab or the next load.
+ */
+function pay(p: Pending, late = false): void {
+  if (!apiRef || !sceneRef) return;
+  const book = readBook();
+  if (!book.pending || book.pending.at !== p.at) {
+    setButtons();
+    refresh();
+    return;
+  }
+  book.pending = null;
+  book.log.push({ at: Date.now(), kind: p.kind, cost: p.cost, pays: p.pays });
+  writeBook(book);
+  const tag = late ? 'LAST SPIN PAID: ' : p.kind === 'bonus' ? 'BONUS: ' : '';
+  if (p.pays > 0) {
+    apiRef.payout(p.pays);
+    apiRef.record(p.pays);
+    won += p.pays;
+    audio.sfx(p.pays >= 50 ? 'chime' : p.pays >= 20 ? 'bell_ding' : 'ui_blip');
+    statusText?.setText(`${tag}${p.pays} TOKEN${p.pays === 1 ? '' : 'S'}`).setTint(p.pays >= 20 ? PALETTE.gold : PALETTE.cream);
+    if (!late) celebrate(p.pays);
   } else {
     audio.sfx('buzzer', 0.6);
-    statusText?.setText('NOTHING').setTint(PALETTE.fog);
+    statusText?.setText(`${tag}NOTHING`).setTint(PALETTE.fog);
   }
-  setButtons(true);
+  setButtons();
   refresh();
 }
 
-function setButtons(on: boolean): void {
-  spinBtn?.setAlpha(on ? 1 : 0.5);
-  leaveBtn?.setAlpha(on ? 1 : 0.5);
+/** A result the last visit left owing (cut off mid-spin, or held): paid now, as drawn. */
+function settleLeftover(): void {
+  if (spinning || holding) return;
+  const b = readBook();
+  if (b.pending) pay(b.pending, true);
+  else {
+    setButtons();
+    refresh();
+  }
+}
+
+/** The bigger the prize, the bigger the noise: a pop, confetti, a flash. */
+function celebrate(pays: number): void {
+  const scene = sceneRef;
+  if (!scene || pays < 40) return;
+  scene.cameras.main.shake(pays >= 200 ? 320 : 160, pays >= 200 ? 0.008 : 0.004);
+  if (pays >= 200) scene.cameras.main.flash(260, 255, 212, 94);
+  const pop = centerText(scene, CX, CY - R - 18, `${pays}!`, PALETTE.gold, 16).setDepth(20);
+  scene.tweens.add({ targets: pop, y: CY - R - 30, alpha: 0, duration: 1200, onComplete: () => pop.destroy() });
+  const n = pays >= 200 ? 48 : 24;
+  const cols = [0xffd45e, PALETTE.blood, 0x5aa85f, PALETTE.cream];
+  for (let i = 0; i < n; i++) {
+    const bit = scene.add.rectangle(CX, CY - R, 2, 2, cols[i % cols.length]).setDepth(19);
+    const a = Math.random() * Math.PI * 2;
+    const d = 30 + Math.random() * 60;
+    scene.tweens.add({
+      targets: bit,
+      x: CX + Math.cos(a) * d,
+      y: CY - R + Math.sin(a) * d * 0.6 + 40,
+      angle: 360,
+      alpha: 0,
+      duration: 900 + Math.random() * 700,
+      ease: 'Quad.easeOut',
+      onComplete: () => bit.destroy(),
+    });
+  }
+  let blinks = 0;
+  scene.time.addEvent({ delay: 110, repeat: 7, callback: () => lightPegs(blinks++ % 2 ? 1 : 0, true) });
+}
+
+const labelOf = (b: Phaser.GameObjects.Container | null): Phaser.GameObjects.BitmapText | null =>
+  (b?.list[1] as Phaser.GameObjects.BitmapText | undefined) ?? null;
+
+function setButtons(): void {
+  const book = readBook();
+  const busy = spinning;
+  labelOf(spinBtn)?.setText(holding ? 'COLLECT' : `SPIN - ${spinCost()}`);
+  spinBtn?.setAlpha(busy ? 0.5 : 1);
+  respinBtn?.setAlpha(!busy && holding && book.respins > 0 ? 1 : 0.4);
+  bonusBtn?.setAlpha(!busy && !holding && book.bonus > 0 && book.paidToday > 0 ? 1 : 0.4);
+  labelOf(bonusBtn)?.setText(`BONUS ${book.bonus}`);
+  labelOf(respinBtn)?.setText(`RESPIN ${book.respins}`);
+  leaveBtn?.setAlpha(busy ? 0.5 : 1);
+  allowText?.setText(`LEFT: RESPIN ${book.respins} BONUS ${book.bonus}`);
 }
 
 function refresh(): void {
@@ -532,6 +923,8 @@ function refresh(): void {
 
 function leave(): void {
   if (over || spinning) return;
+  // walking away with a result held keeps it
+  if (holding) collect();
   over = true;
   apiRef?.cashOut();
 }
