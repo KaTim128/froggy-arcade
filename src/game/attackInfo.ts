@@ -235,14 +235,15 @@ function rawInfo(a: Attack, el: Element, scale: number): AttackInfo {
  */
 export function attackCard(a: Attack, el: Element, scale = 1): string[] {
   const i = attackInfo(a, el, scale);
-  const out = [`TYPE: ${i.type}`, `HITS: ${i.target}`, `RANGE: ${i.range}`];
-  out.push(`DAMAGE: ${a.dmg > 0 ? `${a.dmg}` : 'NONE'} - COOLDOWN: ${a.cd}S`);
+  // (user, 3 Nov: in more detail -- each line one fact, so the card can space them)
+  const out = [`TYPE: ${i.type} - HITS: ${i.target}`, `RANGE: ${i.range}`];
+  const perSec = a.dmg > 0 ? ` (ABOUT ${Math.round((a.dmg / Math.max(0.1, a.cd)) * 10) / 10} A SECOND)` : '';
+  out.push(`DAMAGE: ${a.dmg > 0 ? `${a.dmg}` : 'NONE'}${perSec} - READY AGAIN AFTER ${a.cd}S`);
   const dur = durationOf(a);
-  if (dur) out.push(`DURATION: ${dur}`);
-  out.push(a.sp ? `SPECIAL: ${i.special}` : 'PLAIN ATTACK - NO SPECIAL');
-  if (i.effect) out.push(`ELEMENT: ${i.effect}`);
-  // (a special's line already says what it is for; a plain attack gets the kind's advice)
-  if (!a.sp) out.push(`USE: ${i.use}`);
+  if (dur) out.push(`LASTS: ${dur}`);
+  out.push(a.sp ? `WHAT IT DOES: ${i.special}` : 'A PLAIN ATTACK: NO SPECIAL EFFECT');
+  if (i.effect) out.push(`ELEMENT BONUS: ${i.effect}`);
+  out.push(`HOW TO USE IT: ${i.use}`);
   return out.map(plainWords);
 }
 

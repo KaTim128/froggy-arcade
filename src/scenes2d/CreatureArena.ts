@@ -1899,6 +1899,12 @@ export class CreatureArena extends Phaser.Scene {
         ring(a.reach, 0x9ab84a);
         audio.sfx('poison_hiss', 0.6);
         return true;
+      case 'heat_haze':
+        // the shimmer: hits slide off (EVASION, from its mod) and their aim bends
+        o.st.n_dazzle = 2;
+        ring(18, 0xffc880);
+        audio.sfx('wind_gust', 0.3);
+        return true;
       case 'blubber':
         f.st.armour = 5;
         f.st.anchor = 5;
@@ -2255,6 +2261,14 @@ export class CreatureArena extends Phaser.Scene {
         break;
       case 'dazzle':
         to.st.n_dazzle = 2;
+        break;
+      case 'ink_cloud':
+        to.blind = Math.max(to.blind, 2);
+        to.slow = Math.max(to.slow, 3);
+        break;
+      case 'rut_bellow':
+        if (!to.st.unstop) to.stun = Math.max(to.stun, 0.4);
+        to.weak = Math.max(to.weak, 1.5);
         break;
       default:
         break;

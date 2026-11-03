@@ -34,6 +34,7 @@ import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
 import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { battleXp, levelOf, xpProgress } from '../game/creatureLevel';
+import { traitsOf } from '../game/creatureTraits';
 import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
@@ -460,7 +461,7 @@ export class CreatureHub extends Phaser.Scene {
     const lines = attackCard(a, c.element);
     // (user, 28 Oct: the move only -- the creature's strengths are on its
     // STATS page -- in the bigger house font, wrapped inside the box)
-    const w = 280;
+    const w = 300;
     const close = (): void => this.draw();
     const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
@@ -469,13 +470,16 @@ export class CreatureHub extends Phaser.Scene {
     // element and a long weakness ran the card off the bottom of the screen
     // and took the CLOSE button with it; in the 3x5 face, wrapped, every
     // move fits with room to spare.
+    // (user, 3 Nov: more detail, the small face, a clear gap between facts)
     const rows: Array<{ s: string; col: number; gap: boolean }> = [];
-    const per = Math.floor((w - 16) / 6);
+    const per = Math.floor((w - 20) / 4);
     const lineOf = (ln: string, col: number): void => {
       wrapWords(ln, per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
     };
-    lines.forEach((ln, i) => lineOf(ln, i === 0 ? PALETTE.cream : ln.startsWith('SPECIAL') ? PALETTE.gold : PALETTE.fog));
-    const LH = 9;
+    lines.forEach((ln) =>
+      lineOf(ln, ln.startsWith('WHAT IT DOES') ? PALETTE.gold : ln.startsWith('ELEMENT') ? el.light : ln.startsWith('HOW TO USE') ? 0x9ad0ff : ln.startsWith('DAMAGE') ? 0xffb08a : PALETTE.fog),
+    );
+    const LH = 7;
     const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
     // (and never taller than the screen: the button always shows)
     const h = Math.min(GAME_H - 4, 27 + textH + 22);
@@ -490,9 +494,9 @@ export class CreatureHub extends Phaser.Scene {
     M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
     let ly = y + 28;
     for (const r of rows) {
-      if (r.gap) ly += 2;
-      if (ly + 8 > y + h - 20) break;
-      M.add(text(this, x + 8, ly, r.s, r.col));
+      if (r.gap) ly += 3;
+      if (ly + 6 > y + h - 20) break;
+      M.add(smallText(this, x + 8, ly, r.s, r.col));
       ly += LH;
     }
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
@@ -518,54 +522,65 @@ export class CreatureHub extends Phaser.Scene {
     const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
     M.add(veil);
-    const w = 284;
-    const h = 146;
+    // (user, 3 Nov: more detail, clearly spaced -- nearly the whole screen,
+    // the points in the small face as bullets in two columns)
+    const w = 312;
+    const h = 172;
     const x = (GAME_W - w) / 2;
     const y = (GAME_H - h) / 2;
     M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
     // the creature, big, on its element's ground
-    M.add(this.add.rectangle(x + 4, y + 4, 70, 56, el.dark, 0.6).setOrigin(0, 0));
+    M.add(this.add.rectangle(x + 4, y + 4, 66, 50, el.dark, 0.6).setOrigin(0, 0));
     const pic = this.add.graphics();
     M.add(pic);
-    drawCreature(pic, c, x + 39, y + 34, 2, 1, 0);
+    drawCreature(pic, c, x + 37, y + 30, 1.9, 1, 0);
     const lvl = xp !== undefined ? `LV ${levelOf(xp)}` : 'LV 1';
-    M.add(text(this, x + 80, y + 6, c.name.toUpperCase(), PALETTE.gold));
-    M.add(text(this, x + w - 6, y + 6, lvl, PALETTE.cream).setOrigin(1, 0));
-    M.add(text(this, x + 80, y + 16, `${c.role} - ${el.name}`, el.light));
+    M.add(text(this, x + 76, y + 5, c.name.toUpperCase(), PALETTE.gold));
+    M.add(text(this, x + w - 6, y + 5, lvl, PALETTE.cream).setOrigin(1, 0));
+    M.add(smallText(this, x + 76, y + 15, `${c.role} - ${el.name} - ${c.moves}`.slice(0, 58), el.light));
     // ---- the four stats
     const n = c.attacks[0];
     const atk = Math.round(n.dmg / Math.max(0.1, n.cd));
     const guards = c.attacks.some((a) => a.kind === 'shield' || ['guard', 'reflect', 'thorns'].includes(a.mod));
     const heals = c.attacks.some((a) => a.kind === 'mend' || ['regen', 'drain'].includes(a.mod));
     const def = Phaser.Math.Clamp(Math.round(c.hp / 17) + (guards ? 1 : 0) + (heals ? 1 : 0) + (c.element === 'stone' ? 1 : 0), 1, 10);
-    const melee = (n.kind === 'beam' && n.reach < 50) || n.kind === 'dash';
-    let sy = y + 28;
+    let sy = y + 24;
     const stat = (label: string, value: string, frac: number, col: number): void => {
-      M.add(text(this, x + 80, sy, label, PALETTE.ash));
-      const v = text(this, x + w - 6, sy, value, PALETTE.cream).setOrigin(1, 0);
+      M.add(smallText(this, x + 76, sy, label, PALETTE.ash));
+      const v = smallText(this, x + w - 6, sy, value, PALETTE.cream).setOrigin(1, 0);
       M.add(v);
-      const bx = x + 80 + 8 * 6;
+      const bx = x + 76 + 8 * 4;
       const bw = x + w - 6 - Math.ceil(v.width) - 4 - bx;
-      M.add(this.add.rectangle(bx, sy + 2, bw, 4, 0x0a0d1e).setOrigin(0, 0));
-      M.add(this.add.rectangle(bx, sy + 2, Math.max(1, bw * Phaser.Math.Clamp(frac, 0, 1)), 4, col).setOrigin(0, 0));
-      sy += 9;
+      M.add(this.add.rectangle(bx, sy + 1, bw, 4, 0x0a0d1e).setOrigin(0, 0));
+      M.add(this.add.rectangle(bx, sy + 1, Math.max(1, bw * Phaser.Math.Clamp(frac, 0, 1)), 4, col).setOrigin(0, 0));
+      sy += 8;
     };
     stat('ATTACK', `${atk}/SEC`, atk / 24, 0xff8a6a);
     stat('DEFENCE', `${def}/10`, def / 10, 0xc8b890);
     stat('SPEED', String(c.speed), c.speed / 90, 0x6ac8e8);
     stat('HP', String(c.hp), c.hp / 160, 0x6ad86a);
-    let ly = y + 66;
-    const line = (s: string, col: number): void => {
-      for (const ln of wrapWords(s, Math.floor((w - 16) / 6))) {
-        M.add(text(this, x + 8, ly, ln, col));
-        ly += 9;
+    // ---- how it fights, and its element
+    const t = traitsOf(c);
+    M.add(smallText(this, x + 6, y + 58, t.style, 0x9ad0ff));
+    M.add(smallText(this, x + 6, y + 66, t.element.slice(0, 76), el.light));
+    M.add(this.add.rectangle(x + 4, y + 75, w - 8, 1, 0x2a3050).setOrigin(0, 0));
+    // ---- strengths | weaknesses, side by side, a bullet each
+    const colW = (w - 18) / 2;
+    const per = Math.floor((colW - 8) / 4);
+    const column = (cx: number, title: string, col: number, items: string[]): void => {
+      M.add(text(this, cx, y + 79, title, col));
+      let ly = y + 90;
+      for (const item of items) {
+        const lines = wrapWords(item.toUpperCase(), per);
+        if (ly + lines.length * 7 > y + h - 18) break;
+        M.add(this.add.rectangle(cx + 1, ly + 2, 2, 2, col).setOrigin(0, 0));
+        lines.forEach((ln, i) => M.add(smallText(this, cx + 6, ly + i * 7, ln, PALETTE.cream)));
+        ly += lines.length * 7 + 3;
       }
     };
-    line(melee ? 'FIGHTS UP CLOSE: A MELEE FIGHTER' : `FIGHTS FROM RANGE: SHOTS UP TO ${Math.max(1, Math.round(n.reach / 16))} TILES`, melee ? 0xffb08a : 0x9ad0ff);
-    line(`${el.name}: ${el.effect}`, el.light);
-    ly += 2;
-    line(`GOOD AT: ${c.strong}`, PALETTE.mossLight);
-    line(`WEAK: ${c.weak}`, 0xff9a9a);
+    column(x + 6, 'GOOD AT', PALETTE.mossLight, t.strengths);
+    M.add(this.add.rectangle(x + w / 2, y + 79, 1, h - 98, 0x2a3050).setOrigin(0, 0));
+    column(x + w / 2 + 5, 'WEAK AGAINST', 0xff9a9a, t.weaknesses);
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
   }
 

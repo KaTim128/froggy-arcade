@@ -182,7 +182,8 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('ash_volley', 'ASH VOLLEY', 'arc', 13, 4.5, 120, 'hidden', 'A LOBBED CLUMP OF HOT ASH THAT SAILS OVER COVER AND BURSTS WHERE IT LANDS.'),
   D('current_ram', 'UNDERTOW', 'dash', 13, 3.8, 230, 'close', 'A 65PX RUSH THAT DRAGS WHAT IT HITS TOWARDS IT.', 'pull'),
   D('slick_coat', 'SLICK COAT', 'aura', 0, 8, 5, 'self', 'FOR 5S IT IS 35% FASTER AND HITS 25% HARDER, AND IT SHAKES OFF BURNS, POISON, SLOWS AND HOLDS.', 'cleanse'),
-  D('ink_cloud', 'INK CLOUD', 'arc', 8, 5, 110, 'hidden', 'A LOBBED BLOB OF INK THAT BURSTS AND HALVES THEIR SPEED FOR 3S.', 'chill'),
+  // (audit, 3 Nov: a trickster's ink blinds -- it does not just slow)
+  D('ink_cloud', 'INK CLOUD', 'arc', 8, 5, 110, 'hidden', 'A LOBBED BLOB OF INK THAT BURSTS OVER COVER: WHOEVER IT HITS IS BLINDED FOR 2S AND 30% SLOWER FOR 3S.'),
   D('tentacle_grab', 'ARM GRAB', 'snare', 8, 4.5, 160, 'poke', 'A REACHING ARM: WHAT IT CATCHES IS HELD FOR 1.3S AND DRAGGED CLOSER.', 'pull'),
   D('moss_hide', 'MOSS HIDE', 'shield', 0, 7, 1.8, 'defend', 'BLOCKS ALL DAMAGE FOR 1.8S, THEN HEALS 3 A SECOND FOR 4S.', 'regen'),
   D('root_rush', 'ROOT RUSH', 'dash', 13, 4.5, 200, 'close', 'A 55PX CHARGE THAT HOLDS WHATEVER IT HITS IN PLACE FOR 0.8S.', 'root'),
@@ -220,7 +221,8 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('stripe_zap', 'STRIPE ZAP', 'beam', 10, 5, 150, 'poke', 'A 150PX FLASH FROM ITS STRIPES THAT ADDS 1.2S TO ALL THEIR COOLDOWNS.', 'silence'),
 
   // ------------------------------------------------ twenty more (28 Oct, user: "40 creatures and 80 abilities")
-  D('heat_haze', 'HEAT HAZE', 'aura', 0, 9, 5, 'self', 'FOR 5S IT IS 35% FASTER AND HITS 25% HARDER, AND FOR 4S 30% OF HITS ON IT MISS IN THE SHIMMER.', 'evade'),
+  // (audit: an endurance plodder is not made faster -- the haze is about not being hit)
+  D('heat_haze', 'HEAT HAZE', 'aura', 0, 8, 5, 'defend', 'A SHIMMER OF HEAT: FOR 4S 30% OF HITS ON IT MISS, AND THEIR NEXT 2 SHOTS BEND 30 DEGREES OFF COURSE.', 'evade'),
   D('sand_spit', 'SAND SPIT', 'spread', 5, 3.2, 170, 'poke', 'A FAN OF 3 SPITS OF HOT SAND; ONE THAT HITS MARKS THEM: THE NEXT HIT ON THEM DEALS +50%.', 'mark'),
   D('flame_kick', 'FLAME KICK', 'beam', 13, 3.6, 38, 'close', 'AN INSTANT 38PX KICK OF A BURNING LEG; ONE TIME IN FOUR IT DEALS DOUBLE.', 'crit'),
   D('pink_blaze', 'PINK BLAZE', 'nova', 12, 6, 44, 'close', 'A 44PX RING OF PINK FIRE THAT LEAVES THE GROUND BURNING FOR 3S.', 'linger'),
@@ -235,7 +237,8 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('dam_wall', 'DAM WALL', 'wall', 0, 8, 30, 'mid', 'RAISES A STURDY WALL OF LOGS 2 TILES AWAY FOR 7S (SHOTS CAN BREAK IT, SLOWLY), AND HEALS 3 A SECOND FOR 4S.', 'regen'),
   D('tail_slap', 'TAIL SLAP', 'beam', 12, 4.5, 40, 'close', 'AN INSTANT 40PX SLAP OF ITS FLAT TAIL THAT KNOCKS THEM A LONG WAY BACK.', 'push'),
   D('antler_charge', 'ANTLER RAM', 'dash', 14, 4.5, 220, 'close', 'A 60PX CHARGE, ANTLERS DOWN, THAT HALVES THE SPEED OF WHAT IT HITS FOR 3S.', 'chill'),
-  D('cold_bellow', 'COLD BELLOW', 'nova', 10, 6, 46, 'close', 'A 46PX BELLOW OF FREEZING BREATH THAT HALVES THEIR SPEED FOR 3S.', 'chill'),
+  // (audit: its charge already slows; the bellow drives you off and rattles you)
+  D('rut_bellow', 'RUT BELLOW', 'nova', 10, 6, 46, 'close', 'A 46PX BELLOW THAT KNOCKS THEM 60PX AWAY AND RATTLES THEM: STUNNED 0.4S, AND THEIR NEXT HIT DEALS 30% LESS.', 'push'),
   D('harpoon', 'HARPOON', 'snare', 9, 5, 170, 'poke', 'A TUSK OF ICE: WHAT IT CATCHES IS HELD FOR 1.3S AND TAKES 25% MORE DAMAGE FOR 3S.', 'shred'),
   D('rime_wall', 'RIME WALL', 'wall', 0, 8, 30, 'mid', 'RAISES A WALL OF ICE 2 TILES AWAY FOR 7S, AND THE FIRST HIT ON IT WITHIN 1.5S IS BLOCKED.', 'guard'),
   D('ring_tail', 'RING TAIL', 'bolt', 9, 3, 200, 'poke', 'A CRACKLING FLICK OF ITS RINGED TAIL THAT STUNS FOR A MOMENT.', 'stagger'),
