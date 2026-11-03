@@ -180,7 +180,7 @@ interface Fx {
  */
 interface Pool {
   owner: Fighter;
-  kind?: 'burn' | 'flow' | 'honey' | 'floe' | 'mycel' | 'rune' | 'beacon' | 'trail' | 'drift' | 'halo';
+  kind?: 'burn' | 'flow' | 'honey' | 'floe' | 'mycel' | 'rune' | 'beacon' | 'trail' | 'drift' | 'halo' | 'stink';
   x: number;
   y: number;
   x2?: number;
@@ -1476,7 +1476,8 @@ export class CreatureArena extends Phaser.Scene {
     f.atk = ATK_T;
     f.atkX = ux;
     f.atkY = uy;
-    // out of hiding the moment it attacks
+    // out of hiding the moment it attacks (and an ambush remembers it was)
+    if (f.st.invis > 0) f.st.n_hidden = 1;
     f.st.invis = 0;
     const col = ELEMENTS[f.c.element].col;
     // glow pierces; so does anything fired from beside its own beacon
@@ -1515,7 +1516,7 @@ export class CreatureArena extends Phaser.Scene {
       case 'dash':
         f.dash = { vx: ux * a.reach * mired, vy: uy * a.reach * mired, t: 0.28, dmg, hit: false, a };
         if (a.sp === 'thunder_charge') f.st.unstop = 0.3;
-        if (a.sp === 'hit_and_run') {
+        if (a.sp === 'hit_and_run' || a.sp === 'sucker_punch') {
           f.ref.retX = f.x;
           f.ref.retY = f.y;
         }
@@ -1865,6 +1866,52 @@ export class CreatureArena extends Phaser.Scene {
         f.st.n_cap = 0;
         ring(14, 0xfff4a0);
         return true;
+      // ---------------------------------------------- the audit's new moves (3 Nov)
+      case 'smoke_bomb': {
+        // a puff of smoke: whoever is near is blinded, and it slips away unseen
+        for (let k = 0; k < 6; k++) this.fx.push({ kind: 'ring', x: f.x + Phaser.Math.Between(-8, 8), y: f.y + Phaser.Math.Between(-6, 6), r: 12 + k * 3, t: 0, life: 0.6, col: 0x6a6a78 });
+        if (Math.hypot(o.x - f.x, o.y - f.y) < 40 + 6 * o.scale) o.blind = Math.max(o.blind, 2);
+        f.st.invis = 1.5;
+        const d = Math.hypot(f.x - o.x, f.y - o.y) || 1;
+        const to = { x: cx(f.x + ((f.x - o.x) / d) * a.reach), y: cy(f.y + ((f.y - o.y) / d) * a.reach) };
+        if (!this.props.some((p) => Math.hypot(p.x - to.x, p.y - to.y) < p.r + 6)) {
+          f.x = to.x;
+          f.y = to.y;
+        }
+        audio.sfx('poison_hiss', 0.5);
+        return true;
+      }
+      case 'play_dead': {
+        // flops over: untouchable, lost to them, mending -- and the next hit is a mean one
+        const back = Math.round(f.max * MEND_FRAC);
+        this.heal(f, back);
+        f.invuln = Math.max(f.invuln, 1.5);
+        f.st.invis = 1.5;
+        f.root = Math.max(f.root, 1.5);
+        f.st.crit2 = 3;
+        this.floatNum(f, 0, 0x8ae88a, `+${back} `);
+        ring(12, 0x8ae88a);
+        audio.sfx('item_thud', 0.4);
+        return true;
+      }
+      case 'musk_cloud':
+        this.pools.push({ owner: f, kind: 'stink', x: f.x, y: f.y, r: a.reach, t: 4, tick: 0 });
+        ring(a.reach, 0x9ab84a);
+        audio.sfx('poison_hiss', 0.6);
+        return true;
+      case 'blubber':
+        f.st.armour = 5;
+        f.st.anchor = 5;
+        ring(16, 0xc8d8e8);
+        audio.sfx('item_thud', 0.4);
+        return true;
+      case 'submerge':
+        f.st.invis = 2.5;
+        f.st.sunk = 2.5;
+        f.st.n_lurk = 1;
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y + 4, r: 14, t: 0, life: 0.5, col: 0x7a8a6a });
+        audio.sfx('splash', 0.4);
+        return true;
       case 'eel_dive':
         f.st.invis = 2;
         f.st.n_eel = 1;
@@ -2196,6 +2243,7 @@ export class CreatureArena extends Phaser.Scene {
         to.st.confused = 1.5;
         break;
       case 'hit_and_run':
+      case 'sucker_punch':
         if (dash) dash.back = true;
         break;
       case 'ill_omen':
@@ -2675,6 +2723,21 @@ export class CreatureArena extends Phaser.Scene {
       d -= 10;
       to.st.n_bark -= 1;
     }
+    // A SUCKER PUNCH is only fair if the fight is: out of hiding, or on
+    // someone stunned, held or blind, it lands double and takes their buffs
+    if (a?.sp === 'sucker_punch' && ((from.st.n_hidden ?? 0) > 0 || to.stun > 0 || to.root > 0 || to.blind > 0)) {
+      d *= 2;
+      to.aura = to.shield = to.guard = 0;
+      for (const k of ['b_fury', 'b_focus', 'b_evade', 'b_quicken', 'armour']) delete to.st[k];
+      this.floatNum(to, 0, 0xc090e0, 'STOLEN ');
+    }
+    // out of the water: the lurker's first bite
+    if ((from.st.n_lurk ?? 0) > 0 && a) {
+      from.st.n_lurk = 0;
+      d *= 1.8;
+      to.root = Math.max(to.root, 0.8);
+    }
+    if (a) from.st.n_hidden = 0;
     // FURY: its hits land harder while it lasts
     if ((from.st.b_fury ?? 0) > 0 && a) d *= FURY_MUL;
     let crit = false;
@@ -2808,6 +2871,8 @@ export class CreatureArena extends Phaser.Scene {
     // (the size it is drawn at: a big boss stops at the cover with its body,
     // not with a point in its middle)
     const r = BODY_R * f.scale;
+    // (blubber: nothing knocks it back while it lasts)
+    if (f.st.anchor) f.kx = f.ky = 0;
     let nx = f.x + (vx + f.kx) * dt;
     let ny = f.y + (vy + f.ky) * dt;
     f.kx *= Math.pow(0.02, dt);
@@ -2850,9 +2915,12 @@ export class CreatureArena extends Phaser.Scene {
     for (const pl of this.pools) {
       if (Math.hypot(pl.x - f.x, pl.y - f.y) > pl.r) continue;
       if (pl.kind === 'honey' && pl.owner !== f) k *= 0.4;
+      if (pl.kind === 'stink' && pl.owner !== f) k *= 0.85;
       if (pl.kind === 'floe') k *= pl.owner === f ? 1.4 : 0.6;
       if (pl.kind === 'drift' && pl.owner !== f) k *= 0.5;
     }
+    // submerged: creeping along under the surface
+    if (f.st.sunk) k *= 0.7;
     if (f.st.comet && this.pools.some((pl) => pl.kind === 'trail' && pl.owner === f && Math.hypot(pl.x - f.x, pl.y - f.y + 5) < 8)) k *= 1.5;
     // (an enraged boss comes at you faster)
     if (this.boss && f === this.foe && this.bossRage) k *= 1.15;
@@ -3371,6 +3439,16 @@ export class CreatureArena extends Phaser.Scene {
         case 'mycel':
           if (near) this.heal(pl.owner, 2 * dt);
           break;
+        case 'stink':
+          // the musk: it stings, and nobody hits properly with their eyes watering
+          if (near) {
+            o.weak = Math.max(o.weak, 0.4);
+            if (pl.tick <= 0) {
+              pl.tick = 0.5;
+              this.hit(pl.owner, o, 1, null);
+            }
+          }
+          break;
         case 'rune': {
           const d = Math.hypot(pl.x - o.x, pl.y - o.y) || 1;
           if (d < 110 && d > 4) {
@@ -3811,6 +3889,16 @@ export class CreatureArena extends Phaser.Scene {
         case 'honey':
           g.fillStyle(0xe8a830, Math.min(0.7, pl.t)).fillCircle(pl.x, pl.y, pl.r);
           break;
+        case 'stink': {
+          // a drifting green-yellow fog, puffs rolling in it
+          const a = Math.min(0.45, pl.t * 0.4);
+          g.fillStyle(0x9ab84a, a * 0.6).fillCircle(pl.x, pl.y, pl.r);
+          for (let k = 0; k < 6; k++) {
+            const q = t * 0.6 + k * 1.05;
+            g.fillStyle(0xc8d86a, a).fillCircle(pl.x + Math.cos(q) * pl.r * 0.55, pl.y + Math.sin(q * 1.3) * pl.r * 0.45, 5 + (k % 3));
+          }
+          break;
+        }
         case 'floe':
           g.fillStyle(0xd8f4ff, Math.min(0.6, pl.t)).fillCircle(pl.x, pl.y, pl.r);
           g.lineStyle(1, 0xffffff, Math.min(0.8, pl.t)).strokeCircle(pl.x, pl.y, pl.r);
