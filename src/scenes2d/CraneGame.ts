@@ -212,6 +212,8 @@ const REACH_Z = 0.1;
 /** From the claw's hanging point down to its fingertips, in claw units. */
 /** From the claw's hanging point to the tips of its fingers, open. */
 const FINGERS = 24 * TOY_RES;
+/** From the claw's hanging point down to the top of a held toy's head, in pixels (under the hub's 5.5 claw units). */
+const HEAD_GAP = 6 * CLAW_K;
 
 /** Front of the floor is lower on screen; the back of it is higher. */
 const floorY = (z: number): number => 146 - z * 32;
@@ -344,6 +346,8 @@ export class CraneGame extends Phaser.Scene {
   /** Where the held prize was when the claw closed on it, and how long since. */
   private heldFrom = new Phaser.Math.Vector2();
   private heldT = 0;
+  /** The gap between where it lay and the claw's fingers, closed over heldT. */
+  private heldOff = new Phaser.Math.Vector2();
   /** How far through the carry the prize slips out, or -1 if it holds. */
   private slipAt = -1;
   /**
@@ -1279,14 +1283,19 @@ export class CraneGame extends Phaser.Scene {
     if (this.held && this.phase !== 'release') {
       const k = scaleAt(this.clawZ);
       const hx = screenX(this.clawX, this.clawZ) + this.sway;
-      // hanging from the closed claw by its head
-      // its head between the closed prongs: the hooks under its chin
-      const hy = gantryY(this.clawZ) + (this.drop + 9 * CLAW_K + TOY_H * 0.74) * k;
-      // from where it lay into the claw's fingers, over a moment, not a snap
-      this.heldT = Math.min(1, this.heldT + dt / 0.3);
-      const e = this.heldT * this.heldT * (3 - 2 * this.heldT);
+      // HELD BY THE HEAD, IN THE CLAW.  The top of its head just under the
+      // hub, the head between the shut prongs, the hooks under its chin --
+      // so it hangs from the fingers, not stuck up through the claw (its
+      // feet are its origin: TOY_H under the top of its head).
+      const hy = this.claw.y + (HEAD_GAP + TOY_H) * k;
+      // From where it lay into the fingers over a moment, not a snap -- the
+      // gap closing on a claw that is already rising, so the toy goes up
+      // with it from the first frame instead of trailing behind.
+      if (this.heldT === 0) this.heldOff.set(this.heldFrom.x - hx, this.heldFrom.y - hy);
+      this.heldT = Math.min(1, this.heldT + dt / 0.25);
+      const e = 1 - this.heldT * this.heldT * (3 - 2 * this.heldT);
       this.held.art
-        .setPosition(Phaser.Math.Linear(this.heldFrom.x, hx, e), Phaser.Math.Linear(this.heldFrom.y, hy, e))
+        .setPosition(hx + this.heldOff.x * e, hy + this.heldOff.y * e)
         .setScale(k)
         .setDepth(this.clawDepth() - 0.005);
     }
@@ -1755,7 +1764,8 @@ export class CraneGame extends Phaser.Scene {
         this.sideHeld = this.add.image(0, 0, toyTexture(this, this.held.look as Parameters<typeof toyTexture>[1], drawn, 0, 'side')).setOrigin(0.5, 1).setData('drawn', drawn);
         this.sideBox.add(this.sideHeld);
       }
-      this.sideHeld.setPosition(x, tip + (10 * CLAW_K + TOY_H * 0.8) * k).setScale(k / (this.sideHeld.getData('drawn') as number)).setVisible(true);
+      // (hung the same way as in the front view: head under the hub, between the prongs)
+      this.sideHeld.setPosition(x, this.sideClaw.y + (HEAD_GAP + TOY_H) * k).setScale(k / (this.sideHeld.getData('drawn') as number)).setVisible(true);
     } else this.dropSideHeld();
   }
 

@@ -81,9 +81,14 @@ export interface WallSpec {
 }
 export const WALL_SPECS: Record<string, WallSpec> = {
   kelp_weave: { shape: 'curve', life: 9, hp: 12 },
+  // (user, 3 Nov: walls creatures put up can be shot down -- all but the ice
+  // slab, which pays for being unbreakable by standing only 4 seconds)
   glacier_slab: { shape: 'long', life: 4, hp: 0 },
+  leaf_wall: { shape: 'line', life: WALL_S, hp: 10 },
+  dam_wall: { shape: 'line', life: WALL_S, hp: 18 },
+  rime_wall: { shape: 'line', life: WALL_S, hp: 14 },
 };
-export const WALL_DEFAULT: WallSpec = { shape: 'line', life: WALL_S, hp: 0 };
+export const WALL_DEFAULT: WallSpec = { shape: 'line', life: WALL_S, hp: 12 };
 /** A laid mine waits this long before it fizzles. */
 export const MINE_S = 8;
 

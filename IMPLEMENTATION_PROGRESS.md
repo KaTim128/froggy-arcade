@@ -566,3 +566,11 @@ Wait for the user's answers on C1–C8 and M1–M9, and for "DO IT". Then start 
 - ExteriorDay: on touch devices the alley mouth only opens on the closing-time way in (`backWayOpen`); the after-the-story visit (`froggyGone`) is desktop only.
 - resume.ts: a phone save left in BackAlley outside that window resumes on ExteriorDay.
 - The story route through ExteriorNight (ejected) is unchanged.
+
+## 3 Nov queue (user: "do them all in order")
+| # | Request | Status |
+|---|---|---|
+| N1 | Goals: CLAIM label drifts out of its button when scrolling | done: core/ui no longer nudges text inside a masked (scrolling) window on screen |
+| N2 | Clash desktop: STATS / ? card closes at once; text over RELEASE; no READY TO FIGHT | done: removed the once-a-second hub redraw (closed cards while a creature was fainted); HOW TO PLAY tile sub = THE BASICS; USE says nothing on success |
+| N3 | Clash: walls creatures put up should be breakable | done: LEAF SCREEN 10, DAM WALL 18, RIME WALL 14, any other 12 hp; ICE SLAB stays unbreakable (4 s); cards say BREAKABLE |
+| N4 | Crane: the prize properly held by the claw | done: held toy hangs head-in-claw (top of head under the hub, hooks under the chin) in front and side view; the lift into the fingers no longer trails the rising claw |
