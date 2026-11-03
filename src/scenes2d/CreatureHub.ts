@@ -130,10 +130,9 @@ export class CreatureHub extends Phaser.Scene {
     const c = store.get().creatures;
     // (no starter, log #3: an empty team goes straight to recruiting its first)
     this.screen = c.pending ? 'pack' : needsRecovery() ? 'recruit' : this.want ?? 'home';
-    // a resting creature's clock, kept current on the team screen
-    this.time.addEvent({ delay: 1000, loop: true, callback: () => {
-      if (this.screen === 'home' && !this.dialog && store.get().creatures.owned.some((o) => restLeft(o) > 0)) this.draw();
-    } });
+    // (no clock to keep current: a fainted creature waits for REVIVE, it
+    // does not rest.  The once-a-second redraw that ran while one was down
+    // shut a STATS or move card a moment after it opened.)
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x10142a).setOrigin(0, 0);
     // a starfield of tiny element sparks behind everything
     const bg = this.add.graphics();
@@ -565,7 +564,13 @@ export class CreatureHub extends Phaser.Scene {
         // the one that fights: a gold chip where USE would be
         L.add(this.add.rectangle(x + 2, y + h + 4, 42, 12, 0x3a2e10).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
         L.add(centerText(this, x + 23, y + h + 10, 'ACTIVE', PALETTE.gold));
-      } else L.add(button(this, x + 23, y + h + 10, 'USE', () => (this.say(setActive(o.uid)), this.draw()), { width: 42, height: 12 }));
+      } else L.add(button(this, x + 23, y + h + 10, 'USE', () => {
+        // (user, 2 Nov: no READY TO FIGHT line under the cards; only a refusal is said)
+        const r = setActive(o.uid);
+        if (r.ok) this.msg = '';
+        else this.say(r);
+        this.draw();
+      }, { width: 42, height: 12 }));
       L.add(button(this, x + w - 24, y + h + 10, 'RELEASE', () => this.confirmRelease(o.uid, cr), { width: 44, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     }
     // ---- the menu, on the right
@@ -601,7 +606,7 @@ export class CreatureHub extends Phaser.Scene {
     }, () => this.go(busy ? 'pack' : 'recruit'));
     // (the keys, on a keyboard only: a phone's controls are on the screen -- C7)
     if (!isTouch())
-      this.tile(mx, 142, mw, 24, 'HOW TO PLAY', 'MOVES, STATS, EFFECTS', 0x4ad0c0, (g, x, y, col) => {
+      this.tile(mx, 142, mw, 24, 'HOW TO PLAY', 'THE BASICS', 0x4ad0c0, (g, x, y, col) => {
         g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
         g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
       }, () => this.go('controls'));
