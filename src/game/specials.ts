@@ -183,7 +183,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('current_ram', 'UNDERTOW', 'dash', 13, 3.8, 230, 'close', 'A 65PX RUSH THAT DRAGS WHAT IT HITS TOWARDS IT.', 'pull'),
   D('slick_coat', 'SLICK COAT', 'aura', 0, 8, 5, 'self', 'FOR 5S IT IS 35% FASTER AND HITS 25% HARDER, AND IT SHAKES OFF BURNS, POISON, SLOWS AND HOLDS.', 'cleanse'),
   // (audit, 3 Nov: a trickster's ink blinds -- it does not just slow)
-  D('ink_cloud', 'INK CLOUD', 'arc', 8, 5, 110, 'hidden', 'A LOBBED BLOB OF INK THAT BURSTS OVER COVER: WHOEVER IT HITS IS BLINDED FOR 2S AND 30% SLOWER FOR 3S.'),
+  D('ink_cloud', 'INK CLOUD', 'arc', 11, 4, 110, 'hidden', 'A LOBBED BLOB OF INK THAT BURSTS OVER COVER: WHOEVER IT HITS IS BLINDED FOR 2S AND 30% SLOWER FOR 3S.'),
   D('tentacle_grab', 'ARM GRAB', 'snare', 8, 4.5, 160, 'poke', 'A REACHING ARM: WHAT IT CATCHES IS HELD FOR 1.3S AND DRAGGED CLOSER.', 'pull'),
   D('moss_hide', 'MOSS HIDE', 'shield', 0, 7, 1.8, 'defend', 'BLOCKS ALL DAMAGE FOR 1.8S, THEN HEALS 3 A SECOND FOR 4S.', 'regen'),
   D('root_rush', 'ROOT RUSH', 'dash', 13, 4.5, 200, 'close', 'A 55PX CHARGE THAT HOLDS WHATEVER IT HITS IN PLACE FOR 0.8S.', 'root'),
