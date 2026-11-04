@@ -482,7 +482,6 @@ export const wheelOfFortune: MinigameModule = {
       smallText(scene, PX, 36 + i * 7, what, tint);
       smallText(scene, GAME_W - 8, 36 + i * 7, pct, tint).setOrigin(1, 0);
     });
-    smallText(scene, PX, 108, 'BONUS: 85% 1-15, 15% 40-70', PALETTE.fog);
 
     balanceText = smallText(scene, PX, 120, '', PALETTE.cream);
     statusText = smallText(scene, PX, 129, `SPIN IT - ${spinCost()} A GO`, PALETTE.gold);
