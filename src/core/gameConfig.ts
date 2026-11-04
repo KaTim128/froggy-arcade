@@ -99,7 +99,9 @@ export function schemas(): GameSchema[] {
       pct('clash.foeHp', 'OPPONENT HP %', ''),
       pct('clash.foeDmg', 'OPPONENT DAMAGE %', ''),
       pct('clash.foeSpeed', 'OPPONENT SPEED %', ''),
-      { key: 'clash.recruit', label: 'RECRUIT THIS ONE', kind: 'choice', def: 'none', choices: creatureChoices, testOnly: true, hint: 'TEST ZONE: EVERY PACK HOLDS IT' },
+      // (user, 4 Nov: a yes or no; on yes, RECRUIT lets the admin pick any
+      // creature, from their pictures)
+      { key: 'clash.pickRecruit', label: 'CHOOSE ANY RECRUIT', kind: 'choice', def: 'no', choices: [['no', 'NO'], ['yes', 'YES']], testOnly: true, hint: 'TEST ZONE: RECRUIT SHOWS EVERY CREATURE TO PICK' },
       { key: 'clash.foe', label: 'FIGHT THIS ONE', kind: 'choice', def: 'none', choices: creatureChoices, testOnly: true, hint: 'TEST ZONE: STORY / TRAINING FOE' },
       { key: 'clash.boss', label: 'BOSS TO BATTLE', kind: 'choice', def: 'none', choices: bossChoices, testOnly: true, hint: 'TEST ZONE: EVERY STORY BOSS' },
       // (user, 4 Nov: to try every move and ultimate without waiting -- yours only, the opponent's still wait)

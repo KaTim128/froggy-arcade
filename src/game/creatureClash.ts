@@ -144,9 +144,6 @@ export function openPack(rng: () => number = Math.random): Result {
   const price = packPrice(c);
   if (ledger.balance() < price) return no(`A PACK COSTS ${price} TOKENS.`);
   const cards = rollPack(rng);
-  // (the admin's test zone: the creature asked for is in every pack)
-  const want = cfgStr('clash.recruit');
-  if (want !== 'none' && creatureById(want) && !cards.includes(want)) cards[0] = want;
   if (price > 0 && !ledger.debit(price, 'creature')) return no(`A PACK COSTS ${price} TOKENS.`);
   edit((s) => {
     s.pending = { cards };
@@ -154,6 +151,31 @@ export function openPack(rng: () => number = Math.random): Result {
   });
   store.flush();
   return ok(price ? 'PICK ONE CARD.' : 'YOUR FIRST ONE IS FREE. PICK ONE CARD.');
+}
+
+/** The admin's test zone, CHOOSE ANY RECRUIT on: recruiting lets them pick any creature. */
+export const canChooseRecruit = (): boolean => cfgStr('clash.pickRecruit') === 'yes';
+
+/**
+ * That pick: every creature chosen joins the team, free (a test, not a
+ * pull) -- one, or several at once (user, 4 Nov: "admin can recruit
+ * multiple at once").
+ */
+export function recruitChosen(ids: string | string[]): Result {
+  const c = C();
+  const list = (Array.isArray(ids) ? ids : [ids]).filter((id) => creatureById(id));
+  if (!canChooseRecruit()) return no('NOT AVAILABLE.');
+  if (c.battle) return no('FINISH THE BATTLE FIRST.');
+  if (!list.length) return no('PICK AT LEAST ONE.');
+  edit((s) => {
+    for (const id of list) {
+      const uid = s.nextUid++;
+      s.owned.push({ uid, id, wins: 0, xp: 0 });
+      if (!s.owned.some((o) => o.uid === s.active)) s.active = uid;
+    }
+  });
+  store.flush();
+  return ok(list.length === 1 ? `${creatureById(list[0])!.name.toUpperCase()} JOINS YOU.` : `${list.length} CREATURES JOIN YOU.`);
 }
 
 /** Turn over one of the nine: it is yours, and the pack is spent. */
