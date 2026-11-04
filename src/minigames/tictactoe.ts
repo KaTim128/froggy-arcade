@@ -523,24 +523,62 @@ function roundOver(result: 'win' | 'lose' | 'draw', detail = ''): void {
 
 function render(): void {
   for (let i = 0; i < 9; i++) {
-    // Drawn marks, not typed ones: a thick X in ember, a ring in teal.
+    // Drawn marks, not typed ones: a thick X in ember, a ring in teal --
+    // drawn round the mark's own origin, so it can be dropped into the cell.
     const g = marks[i];
     const { x, y } = cells[i];
     if (board[i] !== '') cells[i].setFillStyle(0xfff0c9); // no hover tint on a taken square
     g.clear();
+    if (!dropping.has(i)) g.setPosition(x, y).setScale(1).setAlpha(1);
     if (board[i] === 'X') {
       g.lineStyle(3, PALETTE.ember, 1);
       g.beginPath();
-      g.moveTo(x - 8, y - 8);
-      g.lineTo(x + 8, y + 8);
-      g.moveTo(x + 8, y - 8);
-      g.lineTo(x - 8, y + 8);
+      g.moveTo(-8, -8);
+      g.lineTo(8, 8);
+      g.moveTo(8, -8);
+      g.lineTo(-8, 8);
       g.strokePath();
     } else if (board[i] === 'O') {
       g.lineStyle(3, PALETTE.teal, 1);
-      g.strokeCircle(x, y, 8);
+      g.strokeCircle(0, 0, 8);
     }
   }
+}
+
+/** The marks still falling, so a redraw leaves them where the tween has them. */
+const dropping = new Set<number>();
+/** How long a mark takes to fall into its cell. */
+const DROP_MS = 260;
+
+/**
+ * ---- A MARK DROPS INTO ITS CELL (user): from above the board, falling in
+ * with a little squash where it lands and a puff of dust off the paper.
+ */
+function dropMark(i: number): void {
+  const scene = sceneRef;
+  const g = marks[i];
+  const c = cells[i];
+  if (!scene || !g || !c) return;
+  dropping.add(i);
+  g.setPosition(c.x, c.y - 34).setAlpha(0).setScale(1.15);
+  scene.tweens.add({
+    targets: g,
+    y: c.y,
+    alpha: 1,
+    scale: 1,
+    duration: DROP_MS,
+    ease: 'Quad.easeIn',
+    onComplete: () => {
+      dropping.delete(i);
+      audio.sfx('item_thud', 0.35);
+      scene.tweens.add({ targets: g, scaleX: 1.2, scaleY: 0.8, duration: 60, yoyo: true });
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        const d = scene.add.circle(c.x + Math.cos(a) * 8, c.y + Math.sin(a) * 8, 1.2, 0xd8c8a0).setDepth(6);
+        scene.tweens.add({ targets: d, x: c.x + Math.cos(a) * 14, y: c.y + Math.sin(a) * 14, alpha: 0, duration: 260, onComplete: () => d.destroy() });
+      }
+    },
+  });
 }
 
 function play(i: number): void {
@@ -548,20 +586,28 @@ function play(i: number): void {
   if (!scene || busy || board[i] !== '') return;
   board[i] = 'X';
   audio.sfx('ui_blip');
-  render();
-
-  if (settle()) return;
-
+  // (busy for the whole fall: a second click cannot start another one)
   busy = true;
-  scene.time.delayedCall(360, () => {
-    const move = aiMove();
-    if (move >= 0) {
-      board[move] = 'O';
-      audio.sfx('ui_hover');
-      render();
-    }
+  render();
+  dropMark(i);
+
+  scene.time.delayedCall(DROP_MS + 40, () => {
     busy = false;
-    settle();
+    if (settle()) return;
+    busy = true;
+    scene.time.delayedCall(320, () => {
+      const move = aiMove();
+      if (move >= 0) {
+        board[move] = 'O';
+        audio.sfx('ui_hover');
+        render();
+        dropMark(move);
+      }
+      scene.time.delayedCall(move >= 0 ? DROP_MS + 40 : 0, () => {
+        busy = false;
+        settle();
+      });
+    });
   });
 }
 

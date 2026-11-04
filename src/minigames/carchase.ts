@@ -2515,15 +2515,22 @@ function layClosure(): void {
     for (const e of [-1, 1]) parts.push(scene0.add.triangle(e * (w / 2 - 2), k, 0, 5, 2.5, 0, 5, 5, 0xff7a20).setOrigin(0.5, 0.5));
   // the merge arrows painted in the lane BEFORE the cones (further up = sooner)
   for (const ay of [-34, -64]) parts.push(scene0.add.triangle(inward * 3, ay, 0, 6, 6, 0, 3, 8, 0xffffff).setAngle(inward * 45).setAlpha(0.8));
-  // the signs: LANE ENDS at the head, LANE OPEN at the tail
-  parts.push(scene0.add.rectangle(0, 4, w - 4, 9, PALETTE.amber), text(scene0, 0, 8, 'ENDS', 0x1a1a22).setOrigin(0.5, 0));
-  parts.push(scene0.add.rectangle(0, CLOSURE_LEN - 6, w - 4, 9, 0x2a8a3a), text(scene0, 0, CLOSURE_LEN - 2, 'OPEN', PALETTE.cream).setOrigin(0.5, 0));
+  // a warning sign ahead of the cones (user: a sign, not words): an amber
+  // diamond on a post with a black border and a "!" in it
+  parts.push(
+    scene0.add.rectangle(0, -12, 1.5, 8, 0x5a5d64),
+    scene0.add.rectangle(0, -4, 12, 12, 0x1a1a22).setAngle(45),
+    scene0.add.rectangle(0, -4, 10, 10, PALETTE.amber).setAngle(45),
+    // (written for the flip below: the bar ends up above the dot)
+    scene0.add.rectangle(0, -3, 1.5, 4, 0x1a1a22),
+    scene0.add.rectangle(0, -6.5, 1.5, 1.5, 0x1a1a22),
+  );
   // (drawn head-down: the road scrolls TOWARD you, so the end you meet first --
   // the arrows, the ENDS sign and the taper -- is the bottom of it, and the
   // lane opening again is the top)
   for (const o of parts as Array<Phaser.GameObjects.GameObject & { y: number; angle: number; type: string }>) {
     o.y = CLOSURE_LEN - o.y;
-    if (o.type === 'Rectangle') o.angle = -o.angle;
+    if (o.type === 'Rectangle' && o.angle !== 45) o.angle = -o.angle;
   }
   const body = scene0.add.container(LANES[lane], y, parts).setDepth(3);
   closures.push({ lane, y, body });
