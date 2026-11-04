@@ -676,15 +676,18 @@ function makeFrog(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameO
   for (const [sx, sy] of [[-6, -17], [-1, -19], [4, -21], [-9, -12], [9, -16], [1, -12]] as const) g.fillRect(sx, sy, 1, 1);
   // the mouth line
   g.lineStyle(1, ink, 1).lineBetween(-2, -16, 7, -16);
-  // eyes: a green ring (not yellow -- user, 4 Nov), cream, black, a glint
+  // a crisp lit edge on the crown
+  g.lineStyle(1, 0xa8f0b8, 0.7).beginPath();
+  g.arc(-1, -13, 10.5, Math.PI * 0.95, Math.PI * 1.2);
+  g.strokePath();
+  // the eyes LAST, each in its own dark rim: nothing on the body -- the lit
+  // edge, a blotch, a speck -- is ever drawn across them (user, 4 Nov)
+  g.fillStyle(0x10240e, 1).fillCircle(-6, -23, 5.2).fillCircle(6, -23, 5.2);
+  // a green ring (not yellow -- user, 4 Nov), cream, black, a glint
   g.fillStyle(0x3aa860, 1).fillCircle(-6, -23, 4.4).fillCircle(6, -23, 4.4);
   g.fillStyle(0xfff4d8, 1).fillCircle(-6, -23, 3.4).fillCircle(6, -23, 3.4);
   g.fillStyle(PALETTE.black, 1).fillCircle(-5, -23, 2).fillCircle(7, -23, 2);
   g.fillStyle(0xffffff, 1).fillRect(-7, -25, 1, 1).fillRect(5, -25, 1, 1);
-  // a crisp lit edge on the crown
-  g.lineStyle(1, 0xa8f0b8, 0.7).beginPath();
-  g.arc(-1, -13, 10.5, Math.PI * 1.1, Math.PI * 1.55);
-  g.strokePath();
   return scene.add.container(x, groundY, [g]).setDepth(20);
 }
 
