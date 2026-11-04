@@ -572,18 +572,22 @@ export class Player {
     } else {
       // knees forward at seat height, shins straight down (to the floor,
       // however high the seat)
+      // Up on a sofa's cushion (`lift`) the thigh runs further forward out
+      // from under the jacket, so a clear length of it shows to the knee and
+      // the shin hangs from that knee -- not from nowhere off the seat
+      // (user, 4 Nov).  Drawn behind the body, as a chair's is: in front of
+      // it the thigh came out of the chest.
       const up = s.lift;
-      block(-1, -9 - up, 8, 3, this.colOf('J'));
-      lap.add(scene.add.rectangle(d > 0 ? -1 : -7, -9 - up, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
-      block(5, -6 - up, 3, 5 + up, this.colOf('j'));
-      block(5, -1, 4, 1, this.colOf('K'));
+      const reach = up > 0 ? 4 : 0;
+      // (and the thigh at the jacket's hem, where the lap is, not up at the waist)
+      const ty = -9 - up + (up > 0 ? 5 : 0);
+      block(-1, ty, 8 + reach, 3, this.colOf('J'));
+      lap.add(scene.add.rectangle(d > 0 ? -1 : -7 - reach, ty, 8 + reach, 1, c(this.colOf('H'))).setOrigin(0, 0));
+      block(5 + reach, ty + 3, 3, -1 - (ty + 3), this.colOf('j'));
+      block(5 + reach, -1, 4, 1, this.colOf('K'));
     }
     // (the legs go behind the body, as the old man's do -- the can alone in front of it)
-    // (sat up on a sofa's cushion, the thigh comes forward over the jacket's
-    // hem to the knee, so it is drawn in front of the body: behind it, the
-    // shin hung on its own off the cushion, joined to nothing -- user, 4 Nov)
-    if (s.lift > 0) this.sprite.add(lap);
-    else this.sprite.addAt(lap, 0);
+    this.sprite.addAt(lap, 0);
     this.lap = lap;
     if (s.can) {
       // a dented tin held out on the knee, open end up
