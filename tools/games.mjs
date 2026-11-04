@@ -82,7 +82,7 @@ const GAMES = [
   // Aim, charge, throw one over the fence, then try a special item.
   { id: 'frogvslizard', drive: async (p) => { await p.keyboard.press('KeyW'); await p.keyboard.down('Space'); await sleep(620); await p.keyboard.up('Space'); await sleep(3200); await p.keyboard.press('Digit3'); await sleep(300); } },
   // One spin of the wheel, and a scripted dancer who actually plays the chart.
-  { id: 'wheel', drive: async (p) => { await p.keyboard.press('Space'); await sleep(6600); await p.keyboard.press('Space'); await sleep(400); } },
+  { id: 'wheel', drive: async (p) => { await p.keyboard.press('Space'); for (let i = 0; i < 40; i++) { await sleep(500); if (await p.evaluate(() => !window.__wheel?.state().book.pending)) break; } } },
   { id: 'danceoff', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.keyboard.press(['KeyA', 'KeyS', 'KeyW', 'KeyD'][i % 4]); await sleep(190); } } },
   // Four chests, then the fight: the mash is the one cabinet where the game
   // proper is four screens in, so the drive walks the picks rather than
@@ -2658,18 +2658,20 @@ for (const g of [
   });
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.keyboard.press('Space');
-  await sleep(6800);
-  // (the day's respin is on offer: SPACE keeps the result)
-  await page.keyboard.press('Space');
-  await sleep(300);
+  // (a run can go round more than once: RE spins again, +2 adds two bonus spins)
+  for (let i = 0; i < 60; i++) {
+    await sleep(500);
+    if (await page.evaluate(() => !window.__wheel.state().book.pending && !window.__wheel.state().spinning)) break;
+  }
   const after = await page.evaluate(() => ({
     tokens: window.__froggy.state().tokens,
     at: window.__wheel.state().at,
     won: window.__wheel.state().won,
     spins: window.__wheel.state().spins,
+    log: window.__wheel.state().book.log.slice(-1)[0],
   }));
   const net = after.tokens - before;
-  const paid = net === after.at - SPIN && after.won === after.at && after.spins === 1;
+  const paid = net === after.won - SPIN && after.log && after.won === after.log.pays && after.spins === 1;
   console.log(
     `${paid ? 'PASS' : 'FAIL'}  wheel: one spin, one prize  — landed ${after.at}, net ${net}, banked ${after.won}`,
   );
