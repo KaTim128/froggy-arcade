@@ -780,7 +780,7 @@ export class ExteriorDay extends Phaser.Scene {
       '"If you want to get away from them, change your appearance. ALL of it. Sharp\'s, the barber, east of here, for the hair -- and Threads for the rest."',
       '"The hat, the coat, the scarf, the trousers, the shoes. Glasses, even. Every stitch that\'s on that poster. Until then, any one of them who sees you knows you."',
       '"Keep out of their sight on the way. Duck down an alley if one comes -- they won\'t follow you down one unless they see you go in."',
-      '"And if they catch you before it\'s done, it\'s all for nothing: you\'re back to the $200 and whatever you\'d bought is gone. All seven in one go."',
+      '"And if they catch you before it\'s done, it\'s all for nothing: you\'re back to the $200 and whatever you\'d bought is gone. So do it all before they get to you."',
       '"And don\'t even think of trying to find a place to sleep until your appearance is changed. If you try to sleep before changing your look, you will get caught."',
       '"Home is Lily\'s again. I rented you a flat: LEVEL 2, ROOM 213. The middle door."',
       `"The first week's on me. After that the rent comes to me, not the landlord. $${RENT_PRICE} a week."`,

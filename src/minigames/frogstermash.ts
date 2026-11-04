@@ -1174,6 +1174,11 @@ export interface LizardType {
    */
   kicker?: boolean;
   /**
+   * THE QUILLED ONE (user): a porcupine.  Anything that hits it up close --
+   * any weapon, not only a bare hand -- comes away pricked by its quills.
+   */
+  quilled?: boolean;
+  /**
    * How it is BUILT, and it has to be readable as a silhouette.
    *
    * `wide` and `tall` shape the torso and the head, `limb` is leg length, and
@@ -1191,7 +1196,7 @@ export interface LizardType {
  * WHAT EACH ARCHETYPE IS.  Not a lizard with a different head on: each one is
  * built from its own anatomy -- see `ANATOMY` and `dressAnimal`.
  */
-export type Animal = 'gorilla' | 'cheetah' | 'rhino' | 'hyena' | 'giraffe' | 'lion' | 'lizard' | 'wolf' | 'zebra';
+export type Animal = 'gorilla' | 'cheetah' | 'rhino' | 'hyena' | 'giraffe' | 'lion' | 'lizard' | 'wolf' | 'zebra' | 'porcupine';
 
 export const LIZARDS: LizardType[] = [
   // ---- EIGHT ANIMALS, one per way of fighting.  The numbers that decide the
@@ -1233,6 +1238,10 @@ export const LIZARDS: LizardType[] = [
   { key: 'kicker', name: 'ZEBRA', power: 0.92, speed: 1.2, avoid: 1.18, resist: 0.86, nerve: 1.0, spacing: 1.2, kicker: true,
     build: { scale: 1.0, wide: 0.82, tall: 1.06, limb: 1.3, head: 0.95, skin: 0xf2f0ea, light: 0xffffff, dark: 0x1a1a1e, crest: 0x1a1a1e, animal: 'zebra' },
     blurb: 'BUCK KICKS YOU AWAY' },
+  // THE QUILLED ONE is a porcupine: squat, slow to hurt, and costly to touch.
+  { key: 'quilled', name: 'PORCUPINE', power: 0.9, speed: 0.92, avoid: 0.9, resist: 1.1, nerve: 1.05, spacing: 0.95, quilled: true,
+    build: { scale: 0.94, wide: 1.2, tall: 0.92, limb: 0.86, head: 0.92, skin: 0x6a4a34, light: 0xc8a888, dark: 0x3a281a, crest: 0xf0e8d8, animal: 'porcupine' },
+    blurb: 'QUILLS PRICK EVERY HIT' },
   // THE TRICKSTER is a wolf.
   { key: 'trickster', name: 'WOLF', power: 0.94, speed: 1.06, avoid: 1.16, resist: 0.94, nerve: 1.0, spacing: 1.1, restless: true,
     build: { scale: 0.98, wide: 0.96, tall: 1.0, limb: 1.16, head: 1.0, skin: 0x6c737e, light: 0xc9cdd3, dark: 0x363a42, crest: 0xe8c04a, animal: 'wolf' },
@@ -2069,6 +2078,12 @@ function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: ()
       out.spiked = Math.max(1, Math.round(spikes));
       att.hp = Math.max(0, att.hp - out.spiked);
     }
+  }
+  // ---- THE PORCUPINE'S QUILLS: any blow landed on it up close pricks back
+  if (def.type?.quilled && !o.ranged && out.dmg > 0 && att.hp > 0) {
+    const prick = bareHand ? 6 : 3;
+    out.spiked = (out.spiked ?? 0) + prick;
+    att.hp = Math.max(0, att.hp - prick);
   }
 
   if (def.hp > 0) {
@@ -4828,6 +4843,7 @@ const ANATOMY: Record<Animal, Anatomy> = {
   lizard: { neck: 0, fwd: 0, drop: 0, arm: 1.0, hand: 1.0, feet: 'claw', claws: true },
   wolf: { neck: 0, fwd: 2, drop: -1, arm: 1.05, hand: 0.95, feet: 'paw', claws: true },
   zebra: { neck: 5, fwd: 4, drop: 0, arm: 1.1, hand: 0.9, feet: 'hoof', claws: false },
+  porcupine: { neck: 0, fwd: 2, drop: 2, arm: 0.95, hand: 0.9, feet: 'paw', claws: true },
 };
 
 /** What `dressAnimal` hands back: the parts, sorted by where they are drawn. */
@@ -5102,6 +5118,30 @@ function dressAnimal(scene: Phaser.Scene, animal: Animal, c: {
       // a heavy brush, pale-tipped, dark along the top
       const path = bez([0, 0], [-5, 4], [-11, 8], [-14, 13], 12);
       tailBits.push(tube(path, 6, 3, skin), tube(path.slice(8), 4, 2.4, light), tube(path.slice(0, 7), 2, 1, dark));
+      break;
+    }
+    case 'porcupine': {
+      // ---- A BLUNT LITTLE FACE AND A COAT OF QUILLS fanning up and back off
+      // the crown and the whole back, banded dark and pale.
+      skullW = 8;
+      skullH = 7;
+      const band = 0x2a1e16;
+      for (let i = 0; i < 8; i++) {
+        const a = -3.05 + i * 0.17;
+        const len = 8 + (i % 3) * 2;
+        headBack.push(R(HX - 2 + Math.cos(a) * len * 0.55, HY - 2 + Math.sin(a) * len * 0.55, len, 1.3, i % 2 ? crest : band, (a * 180) / Math.PI));
+      }
+      for (let i = 0; i < 12; i++) {
+        const a = -3.1 + i * 0.12;
+        const len = 8 + (i % 2) * 3;
+        body.push(R(-2 + Math.cos(a) * (torsoW * 0.45 + len * 0.4), torsoCY + Math.sin(a) * (torsoH * 0.55 + len * 0.3), len, 1.4, i % 2 ? crest : band, (a * 180) / Math.PI).setAlpha(0.95));
+      }
+      face.push(E(HX + 5, HY + 2, 8, 5.4, light).setStrokeStyle(1, outline));
+      face.push(E(HX + 8.6, HY + 1.6, 2.4, 2, 0xd86a7a));
+      face.push(C(HX + 1.6, HY - 1, 1.3, 0x1a1208), C(HX + 1.2, HY - 1.4, 0.4, 0xffffff));
+      body.push(E(3, torsoCY + 2, torsoW * 0.42, torsoH * 0.5, light, 0.55));
+      const path = bez([0, 0], [-2, 2], [-4, 4], [-5, 6], 6);
+      tailBits.push(tube(path, 4, 2.6, band));
       break;
     }
     case 'zebra': {
@@ -5983,6 +6023,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
           lizard: [1, 9, 0, 5, 2, -2],
           wolf: [2, 12, -0.4, 4.4, 2.8, -1.6],
           zebra: [1.6, 11.4, -0.2, 4.6, 1.6, -1.2],
+          porcupine: [1.2, 8.4, 0, 4.6, 2, -1.2],
         };
         const [x0, x1, y0, y1, ex, ey] = F[animal];
         return { x0: HX + x0, x1: HX + x1, y0: HY + y0, y1: HY + y1, eyeX: HX + ex, eyeY: HY + ey };

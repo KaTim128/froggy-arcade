@@ -210,6 +210,13 @@ const FOES: FoeDef[] = [
     skin: 0xb49660, skinLight: 0xd8c18e, glove: 0x7a2a6a, gloveLit: 0xb05a9a, bodyW: 14, bodyH: 17, headW: 11, look: 'hyena',
     speed: 1.1, power: 0.95, windup: 0.9, reach: 0.95, guard: 1.1, blockRate: 0.8, tempo: 0.85, dodge: 0.08, style: 'lows', chaos: 0.35, counter: 0.2,
     note: 'LAUGHS AND GOES LOW' },
+  // ---- THE PORCUPINE (user): small, slow to come forward, and covered in
+  // quills -- every punch that lands on him pricks the fist that threw it, and
+  // twice as hard if he had them up in a block.
+  { key: 'porcupine', name: 'PORCUPINE', rare: false, weight: 10,
+    skin: 0x6a4a34, skinLight: 0xc8a888, glove: 0x3a6a8a, gloveLit: 0x6a9aba, bodyW: 16, bodyH: 17, headW: 10, look: 'porcupine',
+    speed: 0.9, power: 0.95, windup: 1, reach: 0.9, guard: 0.85, blockRate: 1.25, tempo: 1.05, dodge: 0, style: 'balanced', chaos: 0.1, counter: 0.3,
+    note: 'EVERY HIT COSTS YOU' },
   { key: 'lion', name: 'LION', rare: false, weight: 10,
     skin: 0xcc8e3e, skinLight: 0xecc684, glove: 0x8a1e1e, gloveLit: 0xc04040, bodyW: 18, bodyH: 19, headW: 12, look: 'lion',
     speed: 0.95, power: 1.2, windup: 1.1, reach: 1.0, guard: 0.9, blockRate: 0.9, tempo: 1.0, dodge: 0, style: 'highs', chaos: 0.05, counter: 0.2,
@@ -460,6 +467,28 @@ let foeLabel: Phaser.GameObjects.BitmapText | null = null;
 /** Who they are and what they do, under READY on the first round. */
 let introName: Phaser.GameObjects.BitmapText | null = null;
 let introNote: Phaser.GameObjects.BitmapText | null = null;
+/** The line under the note: how to beat this one (user: better pre-fight hints). */
+let introTip: Phaser.GameObjects.BitmapText | null = null;
+/** How to fight each of them, shown before round one. */
+const TIPS: Record<string, string> = {
+  lizard: 'TIP: BAIT A SWING, THEN PUNISH IT',
+  croc: 'TIP: STAY OUT, HIT AFTER HIS BIG ONE',
+  gecko: 'TIP: BLOCK HIGH, SWEEP HIS LEGS',
+  tortoise: 'TIP: HIS SHELL BLOCKS ALL - GO LOW',
+  snake: 'TIP: HE SLIPS HITS - DO NOT SPAM',
+  rhino: 'TIP: BLOCK THE CHARGE, THEN JAB',
+  monkey: 'TIP: KEEP YOUR GUARD, WAIT HIM OUT',
+  penguin: 'TIP: HE GOES LOW - CROUCH-BLOCK',
+  wolf: 'TIP: DO NOT CHASE - LET HIM COME',
+  zebra: 'TIP: THE KICK HITS TWICE - BLOCK BOTH',
+  porcupine: 'TIP: QUILLS PRICK YOU - HIT LESS, HARDER',
+  hyena: 'TIP: CROUCH-BLOCK HIS LOW RUSH',
+  lion: 'TIP: BLOCK HIGH, COUNTER LOW',
+  gorilla: 'TIP: EVERY HIT HURTS - BLOCK FIRST',
+  chameleon: 'TIP: WATCH THE TONGUE - IT REACHES',
+  komodo: 'TIP: KEEP MOVING, DO NOT TRADE',
+  gator: 'TIP: GET OUT OF THE ROLL, THEN HIT',
+};
 /** Seconds since the scene opened, for the idle breathing. */
 let sceneClock = 0;
 /** DEV only: hold the lizard still, so a test can aim at something. */
@@ -583,6 +612,7 @@ export const grudge: MinigameModule = {
     announce = centerText(scene, GAME_W / 2, 90, '', PALETTE.gold, 16);
     introName = centerText(scene, GAME_W / 2, 106, '', PALETTE.cream);
     introNote = centerText(scene, GAME_W / 2, 116, '', PALETTE.amber);
+    introTip = centerText(scene, GAME_W / 2, 127, '', PALETTE.fog);
 
     const kb = scene.input.keyboard;
     if (kb) {
@@ -860,6 +890,7 @@ export const grudge: MinigameModule = {
     sceneClock = v.sceneClock;
     introName?.setText('');
     introNote?.setText('');
+    introTip?.setText('');
     announce?.setText('');
     roundText?.setText(practicing ? `PUNCHING BAG - HITS ${bagHits}` : `ROUND ${wins1 + wins2 + 1}   ${wins1}-${wins2}`);
     timerText?.setText(`${Math.ceil(roundMs / 1000)}`);
@@ -1142,6 +1173,34 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       {
         const root: Pt = [-bw + 3, bh - 5];
         tailParts.push(tube(bez(root, [root[0] - 3, root[1] + 2], [root[0] - 6, root[1] + 5], [root[0] - 8, root[1] + 8], 8), 4.4, 3, 0x3a2c1a));
+      }
+      break;
+    }
+    case 'porcupine': {
+      // ---- A BLUNT LITTLE FACE IN A COAT OF QUILLS.  A round snout with a
+      // pink nose, small ears, and banded quills fanning back off the head
+      // and the whole back.
+      const quill = 0xf0e8d8;
+      const band = 0x2a1e16;
+      head.push(E(6, 2, 8, 5.4, d.skinLight), E(9.6, 1.6, 2.4, 2, 0xd86a7a));
+      headBack.push(E(-1, -5, 3.4, 3.4, dark));
+      for (let i = 0; i < 9; i++) {
+        // (fanned up and back, off the crown: never out over the face)
+        const a = -3.05 + i * 0.16;
+        const len = 9 + (i % 3) * 2;
+        const x0 = -2 + Math.cos(a) * 3;
+        const y0 = -2 + Math.sin(a) * 3;
+        headBack.push(R(x0 + Math.cos(a) * len * 0.5, y0 + Math.sin(a) * len * 0.5, len, 1.4, i % 2 ? quill : band, (a * 180) / Math.PI));
+      }
+      for (let i = 0; i < 11; i++) {
+        const a = -3.1 + i * 0.13;
+        const len = 9 + (i % 2) * 3;
+        body.push(R(-3 + Math.cos(a) * (bw * 0.5 + len * 0.4), -bh * 0.2 + Math.sin(a) * (bh * 0.6 + len * 0.3), len, 1.5, i % 2 ? quill : band, (a * 180) / Math.PI).setAlpha(0.95));
+      }
+      body.push(E(3, 3, bw * 0.7, bh * 0.75, d.skinLight).setAlpha(0.6));
+      {
+        const root: Pt = [-bw + 3, bh - 5];
+        tailParts.push(tube(bez(root, [root[0] - 2, root[1] + 2], [root[0] - 4, root[1] + 4], [root[0] - 5, root[1] + 6], 6), 4, 2.6, band));
       }
       break;
     }
@@ -1524,10 +1583,12 @@ function startRound(): void {
   } else if (first && foe) {
     introName?.setText(`VS ${foe.name}`).setTint(foe.rare ? PALETTE.gold : PALETTE.cream);
     introNote?.setText(foe.rare ? `RARE - ${foe.note}` : foe.note);
+    introTip?.setText(TIPS[foe.key] ?? '');
   }
   sceneRef?.time.delayedCall(first ? 1500 : 800, () => {
     introName?.setText('');
     introNote?.setText('');
+    introTip?.setText('');
     announce?.setText('FIGHT');
     roundOver = false;
     sceneRef?.time.delayedCall(500, () => announce?.setText(''));
@@ -1947,6 +2008,12 @@ function tryHit(f: Fighter): void {
   impact(hx, hy, f.move, blocked);
   // ...and the second hind hoof, a beat after the first
   if (f.foe?.key === 'zebra' && f.move === 'special') zebraKick = 160;
+  // ---- QUILLS: a fist that lands on the porcupine pays for it
+  if (target.foe?.key === 'porcupine' && target === p2 && f === p1) {
+    const prick = (blocked ? 4 : 2) * cfgPct('grudge.foePower');
+    f.hp -= prick;
+    impact(f.x + f.facing * 8, f.y - 24, 'low', false);
+  }
 }
 
 /** The STAMPEDE KICK's second hoof: ms until it lands (0: none coming). */
