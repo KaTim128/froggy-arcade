@@ -38,7 +38,7 @@ import { SPECIALS } from '../game/specials';
 import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, bossById, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel, xpProgress } from '../game/creatureLevel';
-import { ULT_COOLDOWN_S, ULT_UNLOCK_S, ultColour, ultimateOf, type Ultimate, type UltFx } from '../game/ultimates';
+import { BLIND_R, CROW_LIFE, GIANT_TAKEN, LIFESTEAL_FRAC, PACK_LIFE, ULT_COOLDOWN_S, ULT_UNLOCK_S, ultColour, ultimateOf, type Ultimate, type UltFx } from '../game/ultimates';
 import { MINI_INFO, MINI_LEVEL, MINI_PRICE, abandonMini, boutOver, currentMini } from '../game/creatureMinis';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, EVADE_CHANCE, EVADE_S, FOCUS_CRIT, FOCUS_S, FURY_MUL, FURY_S, QUICK_RATE, QUICK_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
@@ -230,7 +230,9 @@ interface Fx {
  */
 interface Pool {
   owner: Fighter;
-  kind?: 'burn' | 'flow' | 'honey' | 'floe' | 'mycel' | 'rune' | 'beacon' | 'trail' | 'drift' | 'halo' | 'stink';
+  kind?: 'burn' | 'flow' | 'honey' | 'floe' | 'mycel' | 'rune' | 'beacon' | 'trail' | 'drift' | 'halo' | 'stink' | 'hole';
+  /** A black hole's damage a second. */
+  dps?: number;
   x: number;
   y: number;
   x2?: number;
@@ -249,7 +251,7 @@ interface Pool {
  */
 interface Minion {
   owner: Fighter;
-  kind: 'drone' | 'devil' | 'crow' | 'decoy' | 'husk' | 'spiderling' | 'copy' | 'lure';
+  kind: 'drone' | 'devil' | 'crow' | 'decoy' | 'husk' | 'spiderling' | 'copy' | 'lure' | 'biter' | 'turret' | 'totem' | 'blade' | 'twister' | 'ball';
   x: number;
   y: number;
   ang: number;
@@ -259,6 +261,11 @@ interface Minion {
   cd: number;
   /** A spiderling holding on to someone. */
   latched?: boolean;
+  /** An ultimate's own: what each hit deals, a heal a second, and a velocity (the bouncing boulder). */
+  dmg?: number;
+  hps?: number;
+  vx?: number;
+  vy?: number;
 }
 
 /** A wave rolling outward from where it started. */
@@ -3035,7 +3042,7 @@ export class CreatureArena extends Phaser.Scene {
           mi.y = o.y + Math.sin(mi.ang) * 9;
           if (!mi.cd) {
             mi.cd = (Math.PI * 2) / 5;
-            this.hit(mi.owner, o, 2, null);
+            this.hit(mi.owner, o, mi.dmg ?? 2, null);
           }
           break;
         case 'husk':
@@ -3043,7 +3050,7 @@ export class CreatureArena extends Phaser.Scene {
           if (touching) {
             mi.life = 0;
             this.fx.push({ kind: 'boom', x: mi.x, y: mi.y, r: 14, t: 0, life: 0.35, col: 0x8affc0 });
-            this.hit(mi.owner, o, 12, null);
+            this.hit(mi.owner, o, mi.dmg ?? 12, null);
             audio.sfx('arcane_blast', 0.4);
           }
           break;
@@ -3059,6 +3066,76 @@ export class CreatureArena extends Phaser.Scene {
             }
           }
           break;
+        // ---- AN ULTIMATE'S OWN
+        case 'biter':
+          // a fast hunter: on at them, and biting while it touches
+          if (!touching) chase(78);
+          mi.ang = o.x >= mi.x ? 1 : -1;
+          if (touching && !mi.cd) {
+            mi.cd = 0.6;
+            this.hit(mi.owner, o, mi.dmg ?? 3, null);
+          }
+          break;
+        case 'turret':
+          // stands where it was built, and shoots at them
+          if (!mi.cd) {
+            mi.cd = 0.9;
+            const ang = Math.atan2(o.y - mi.y, o.x - mi.x);
+            const a = { ...mi.owner.c.attacks[0], kind: 'bolt' as const, sp: undefined, mod: 'none' as const };
+            this.shots.push({ owner: mi.owner, x: mi.x + Math.cos(ang) * 5, y: mi.y + Math.sin(ang) * 5, vx: Math.cos(ang) * 190, vy: Math.sin(ang) * 190, life: 1.2, dmg: mi.dmg ?? 4, a, pierce: false, t: 0, ang });
+          }
+          break;
+        case 'totem':
+          // heals its maker while it stays near
+          if (!mi.cd) {
+            mi.cd = 0.5;
+            if (Math.hypot(mi.owner.x - mi.x, mi.owner.y - mi.y) < 50) {
+              this.heal(mi.owner, (mi.hps ?? 3) / 2);
+              this.fx.push({ kind: 'ring', x: mi.owner.x, y: mi.owner.y, r: 8 * mi.owner.scale, t: 0, life: 0.3, col: 0x8ae88a });
+            }
+          }
+          break;
+        case 'blade':
+          // round its maker, close, cutting what it passes through
+          mi.ang += 5.5 * dt;
+          mi.x = mi.owner.x + Math.cos(mi.ang) * 20 * mi.owner.scale;
+          mi.y = mi.owner.y + Math.sin(mi.ang) * 15 * mi.owner.scale;
+          if (Math.hypot(o.x - mi.x, o.y - mi.y) < 8 * o.scale && !mi.cd) {
+            mi.cd = 0.4;
+            this.hit(mi.owner, o, mi.dmg ?? 4, null);
+          }
+          break;
+        case 'twister':
+          // drifts after them; on them, it hurts and holds them back
+          chase(52);
+          mi.ang += 14 * dt;
+          if (toO < 12 + 5 * o.scale) {
+            o.slow = Math.max(o.slow, 0.3);
+            if (!mi.cd) {
+              mi.cd = 0.5;
+              this.hit(mi.owner, o, mi.dmg ?? 3, null);
+            }
+          }
+          break;
+        case 'ball': {
+          // round the arena off the walls; running into them knocks them aside
+          mi.x += (mi.vx ?? 0) * dt;
+          mi.y += (mi.vy ?? 0) * dt;
+          if (mi.x < ARENA.x + 7 || mi.x > ARENA.x + ARENA.w - 7) mi.vx = -(mi.vx ?? 0);
+          if (mi.y < ARENA.y + 7 || mi.y > ARENA.y + ARENA.h - 7) mi.vy = -(mi.vy ?? 0);
+          mi.x = Phaser.Math.Clamp(mi.x, ARENA.x + 7, ARENA.x + ARENA.w - 7);
+          mi.y = Phaser.Math.Clamp(mi.y, ARENA.y + 7, ARENA.y + ARENA.h - 7);
+          mi.ang += 10 * dt;
+          if (toO < 9 + 6 * o.scale && !mi.cd) {
+            mi.cd = 0.5;
+            this.hit(mi.owner, o, mi.dmg ?? 8, null);
+            const sp = Math.hypot(mi.vx ?? 0, mi.vy ?? 0) || 1;
+            o.kx += ((mi.vx ?? 0) / sp) * 220;
+            o.ky += ((mi.vy ?? 0) / sp) * 220;
+            this.fx.push({ kind: 'boom', x: o.x, y: o.y, r: 9, t: 0, life: 0.25, col: ELEMENTS[mi.owner.c.element].light });
+          }
+          break;
+        }
         case 'lure':
           // close enough to it, and you are reeled in
           if (Math.hypot(o.x - mi.x, o.y - mi.y) < 15 + 4 * o.scale) {
@@ -3286,6 +3363,345 @@ export class CreatureArena extends Phaser.Scene {
         f.haste = Math.max(f.haste, e.t);
         this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 10 * f.scale, t: 0, life: 0.4, col: 0xf0fff4 });
         break;
+      // ================================ THE REST OF THE ULTIMATES' OWN EFFECTS
+      // (user, 4 Nov: every ultimate its own -- game/ultimates SPEC)
+      case 'multiblink':
+        // in at them from one side, then another, then another
+        for (let k = 0; k < e.n; k++) {
+          this.time.delayedCall(k * 260, () => {
+            if (this.over || f.hp <= 0 || o.hp <= 0) return;
+            const ang = Math.random() * Math.PI * 2;
+            this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 10 * f.scale, t: 0, life: 0.3, col: 0x101018 });
+            const [bx, by] = inArena(o.x + Math.cos(ang) * 18, o.y + Math.sin(ang) * 14);
+            f.x = bx;
+            f.y = by;
+            f.face = o.x >= f.x ? 1 : -1;
+            this.fx.push({ kind: 'boom', x: o.x, y: o.y, r: 11, t: 0, life: 0.25, col: light });
+            this.hit(f, o, e.dmg, null);
+            audio.sfx('whack', 0.6);
+          });
+        }
+        break;
+      case 'leap': {
+        // up and out of reach, then down on where they stood
+        const [tx, ty] = inArena(o.x, o.y);
+        f.invuln = Math.max(f.invuln, 0.5);
+        f.st.air = Math.max(f.st.air ?? 0, 0.5);
+        this.fx.push({ kind: 'warn', x: tx, y: ty, r: e.r, t: 0, life: 0.45, col });
+        this.time.delayedCall(450, () => {
+          if (this.over || f.hp <= 0) return;
+          f.x = tx;
+          f.y = ty;
+          this.fx.push({ kind: 'boom', x: tx, y: ty, r: e.r, t: 0, life: 0.4, col: light }, { kind: 'ring', x: tx, y: ty, r: e.r * 1.3, t: 0, life: 0.4, col });
+          this.cameras.main.shake(140, 0.005);
+          const dd = Math.hypot(o.x - tx, o.y - ty);
+          if (dd < e.r + 7 * o.scale) {
+            this.hit(f, o, e.dmg, null);
+            o.kx += ((o.x - tx) / (dd || 1)) * 200;
+            o.ky += ((o.y - ty) / (dd || 1)) * 200;
+          }
+          audio.sfx('boom', 0.6);
+        });
+        break;
+      }
+      case 'shockwaves':
+        // rings, one after another, each wider: be between them
+        for (let k = 0; k < e.n; k++) {
+          this.time.delayedCall(k * 320, () => {
+            if (this.over || f.hp <= 0) return;
+            const r = 26 + k * 24;
+            this.fx.push({ kind: 'ring', x: f.x, y: f.y, r, t: 0, life: 0.35, col: light });
+            const dd = Math.hypot(o.x - f.x, o.y - f.y);
+            if (dd > r - 14 && dd < r + 8 * o.scale) this.hit(f, o, e.dmg, null);
+            audio.sfx('item_thud', 0.4);
+          });
+        }
+        break;
+      case 'swap': {
+        // in a flash, each where the other was
+        const [ax, ay] = [f.x, f.y];
+        this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: o.x, y2: o.y, r: 1.5, t: 0, life: 0.3, col: light });
+        f.x = o.x;
+        f.y = o.y;
+        o.x = ax;
+        o.y = ay;
+        f.face = o.x >= f.x ? 1 : -1;
+        o.stun = Math.max(o.stun, 0.5);
+        this.hit(f, o, e.dmg, null);
+        audio.sfx('chime', 0.5);
+        break;
+      }
+      case 'volley': {
+        // one after another, each aimed again
+        const a = { ...f.c.attacks[0], kind: 'bolt' as const, sp: undefined };
+        for (let k = 0; k < e.n; k++) {
+          this.time.delayedCall(k * 110, () => {
+            if (this.over || f.hp <= 0) return;
+            const ang = Math.atan2(o.y - f.y, o.x - f.x);
+            this.shots.push({ owner: f, x: f.x + Math.cos(ang) * 8, y: f.y + Math.sin(ang) * 8, vx: Math.cos(ang) * 230, vy: Math.sin(ang) * 230, life: 1.1, dmg: e.dmg, a, pierce: false, t: 0, ang });
+            audio.sfx('throw_whoosh', 0.25);
+          });
+        }
+        break;
+      }
+      case 'spiral': {
+        const a = { ...f.c.attacks[0], kind: 'bolt' as const, sp: undefined };
+        const base = Math.atan2(uy, ux);
+        for (let k = 0; k < e.n; k++) {
+          this.time.delayedCall(k * 45, () => {
+            if (this.over || f.hp <= 0) return;
+            const ang = base + k * 0.55;
+            this.shots.push({ owner: f, x: f.x + Math.cos(ang) * 8, y: f.y + Math.sin(ang) * 8, vx: Math.cos(ang) * 170, vy: Math.sin(ang) * 170, life: 1.0, dmg: e.dmg, a, pierce: false, t: 0, ang });
+          });
+        }
+        audio.sfx('throw_whoosh', 0.6);
+        break;
+      }
+      case 'ring': {
+        const a = { ...f.c.attacks[0], kind: 'bolt' as const, sp: undefined };
+        const base = Math.atan2(uy, ux);
+        for (let k = 0; k < e.n; k++) {
+          const ang = base + (k / e.n) * Math.PI * 2;
+          this.shots.push({ owner: f, x: f.x + Math.cos(ang) * 8, y: f.y + Math.sin(ang) * 8, vx: Math.cos(ang) * 190, vy: Math.sin(ang) * 190, life: 1.1, dmg: e.dmg, a, pierce: false, t: 0, ang });
+        }
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 16 * f.scale, t: 0, life: 0.35, col: light });
+        audio.sfx('arcane_blast', 0.5);
+        break;
+      }
+      case 'homing': {
+        const a = { ...f.c.attacks[0], kind: 'bolt' as const, sp: undefined, mod: 'homing' as const };
+        const base = Math.atan2(uy, ux);
+        for (let k = 0; k < e.n; k++) {
+          this.time.delayedCall(k * 90, () => {
+            if (this.over || f.hp <= 0) return;
+            const ang = base + (e.n > 1 ? (k / (e.n - 1) - 0.5) * 2.2 : 0);
+            this.shots.push({ owner: f, x: f.x + Math.cos(ang) * 8, y: f.y + Math.sin(ang) * 8, vx: Math.cos(ang) * 150, vy: Math.sin(ang) * 150, life: 1.8, dmg: e.dmg, a, pierce: false, t: 0, ang });
+          });
+        }
+        audio.sfx('throw_whoosh', 0.5);
+        break;
+      }
+      case 'sweep': {
+        // a beam swung across a wide arc in front of it
+        const base = Math.atan2(uy, ux);
+        let done = false;
+        for (let k = 0; k <= 6; k++) {
+          this.time.delayedCall(k * 80, () => {
+            if (this.over || f.hp <= 0) return;
+            const ang = base - 0.8 + (k / 6) * 1.6;
+            const x2 = f.x + Math.cos(ang) * e.len;
+            const y2 = f.y + Math.sin(ang) * e.len;
+            this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 4, t: 0, life: 0.16, col: light });
+            if (!done && this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 8 + 6 * o.scale) {
+              done = true;
+              this.hit(f, o, e.dmg, null);
+            }
+          });
+        }
+        audio.sfx('arcane_blast', 0.6);
+        break;
+      }
+      case 'cross': {
+        const base = Math.atan2(uy, ux);
+        let done = false;
+        for (let k = 0; k < 4; k++) {
+          const ang = base + (k * Math.PI) / 2;
+          const x2 = f.x + Math.cos(ang) * e.len;
+          const y2 = f.y + Math.sin(ang) * e.len;
+          this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 5, t: 0, life: 0.4, col: light }, { kind: 'beam', x: f.x, y: f.y, x2, y2, r: 2, t: 0, life: 0.4, col: 0xffffff });
+          if (!done && this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 7 + 6 * o.scale) {
+            done = true;
+            this.hit(f, o, e.dmg, null);
+          }
+        }
+        audio.sfx('arcane_blast', 0.6);
+        break;
+      }
+      case 'chain':
+        // bolt after bolt from above, wherever they have got to
+        for (let k = 0; k < e.n; k++) {
+          this.time.delayedCall(k * 300, () => {
+            if (this.over || f.hp <= 0 || o.hp <= 0) return;
+            this.fx.push({ kind: 'beam', x: o.x + 3, y: ARENA.y, x2: o.x, y2: o.y, r: 2, t: 0, life: 0.2, col: 0xfff4a0 }, { kind: 'boom', x: o.x, y: o.y, r: 9, t: 0, life: 0.25, col: light });
+            this.hit(f, o, e.dmg, null);
+            audio.sfx('spot_slam', 0.35);
+          });
+        }
+        break;
+      case 'quakeline': {
+        // eruptions racing across the ground towards where they stood
+        const [lx, ly] = [ux, uy];
+        for (let k = 0; k < e.n; k++) {
+          this.time.delayedCall(k * 110, () => {
+            if (this.over || f.hp <= 0) return;
+            const [px, py] = inArena(f.x + lx * (22 + k * 18), f.y + ly * (22 + k * 18));
+            this.fx.push({ kind: 'boom', x: px, y: py, r: 12, t: 0, life: 0.35, col: light });
+            if (Math.hypot(o.x - px, o.y - py) < 12 + 6 * o.scale) this.hit(f, o, e.dmg, null);
+            audio.sfx('item_thud', 0.3);
+          });
+        }
+        break;
+      }
+      case 'spikes': {
+        // a mark under them, then spikes up through it
+        const [sx, sy] = inArena(o.x, o.y);
+        this.fx.push({ kind: 'warn', x: sx, y: sy, r: 14, t: 0, life: 0.55, col });
+        this.time.delayedCall(550, () => {
+          if (this.over || f.hp <= 0) return;
+          this.fx.push({ kind: 'boom', x: sx, y: sy, r: 14, t: 0, life: 0.4, col: light });
+          if (Math.hypot(o.x - sx, o.y - sy) < 14 + 6 * o.scale) {
+            this.hit(f, o, e.dmg, null);
+            if (!o.st.unstop) o.root = Math.max(o.root, e.t);
+          }
+          audio.sfx('boom', 0.5);
+        });
+        break;
+      }
+      case 'minefield': {
+        const a = { ...f.c.attacks[0], kind: 'mine' as const, sp: undefined, mod: 'none' as const };
+        for (let k = 0; k < e.n; k++) {
+          const ang = (k / e.n) * Math.PI * 2 + 0.4;
+          const [mx, my] = inArena(o.x + Math.cos(ang) * 24, o.y + Math.sin(ang) * 18);
+          this.mines.push({ owner: f, x: mx, y: my, arm: 0.35, life: 8, dmg: e.dmg, a });
+        }
+        audio.sfx('item_thud', 0.5);
+        break;
+      }
+      case 'trail': {
+        // fast, and burning ground behind it the whole way
+        f.haste = Math.max(f.haste, e.t);
+        const n = Math.round(e.t * 5);
+        this.time.addEvent({ delay: 200, repeat: n - 1, callback: () => !this.over && f.hp > 0 && this.pool(f, f.x, f.y, 7) });
+        break;
+      }
+      case 'blackhole': {
+        const [hx, hy] = inArena(o.x, o.y);
+        this.pools.push({ owner: f, kind: 'hole', x: hx, y: hy, r: 26, t: e.t, tick: 0, dps: e.dps });
+        audio.sfx('arcane_blast', 0.6);
+        break;
+      }
+      case 'tornado':
+        this.minions.push({ owner: f, kind: 'twister', x: f.x + ux * 12, y: f.y + uy * 12, ang: 0, life: e.t, hp: 0, cd: 0, dmg: Math.max(1, Math.round(e.dps / 2)) });
+        audio.sfx('throw_whoosh', 0.6);
+        break;
+      case 'bouncer':
+        this.minions.push({ owner: f, kind: 'ball', x: f.x + ux * 12, y: f.y + uy * 12, ang: 0, life: e.t, hp: 0, cd: 0, dmg: e.dmg, vx: ux * 150, vy: uy * 150 });
+        audio.sfx('item_thud', 0.6);
+        break;
+      case 'orbit':
+        for (let k = 0; k < e.n; k++) this.minions.push({ owner: f, kind: 'blade', x: f.x, y: f.y, ang: (k / e.n) * Math.PI * 2, life: e.t, hp: 0, cd: 0, dmg: e.dmg });
+        audio.sfx('throw_whoosh', 0.5);
+        break;
+      case 'pack':
+        for (let k = 0; k < e.n; k++) {
+          const [px, py] = inArena(f.x + Math.cos(k * 2.1) * 14, f.y + Math.sin(k * 2.1) * 10);
+          this.minions.push({ owner: f, kind: 'biter', x: px, y: py, ang: 1, life: PACK_LIFE, hp: 8, cd: 0.3 + k * 0.1, dmg: e.dmg });
+        }
+        audio.sfx('stinger', 0.5);
+        break;
+      case 'turret': {
+        const [px, py] = inArena(f.x - uy * 16, f.y + ux * 16);
+        this.minions.push({ owner: f, kind: 'turret', x: px, y: py, ang: 0, life: e.t, hp: 14, cd: 0.4, dmg: e.dmg });
+        audio.sfx('item_thud', 0.5);
+        break;
+      }
+      case 'totem':
+        this.minions.push({ owner: f, kind: 'totem', x: f.x, y: f.y + 4, ang: 0, life: e.t, hp: 0, cd: 0, hps: e.hps });
+        audio.sfx('heal_up', 0.5);
+        break;
+      case 'bombers':
+        for (let k = 0; k < e.n; k++) {
+          const [px, py] = inArena(f.x + (k - (e.n - 1) / 2) * 18, f.y + 14);
+          this.minions.push({ owner: f, kind: 'husk', x: px, y: py, ang: 0, life: 9, hp: 10, cd: 0, dmg: e.dmg });
+        }
+        break;
+      case 'crows':
+        for (let k = 0; k < e.n; k++) this.minions.push({ owner: f, kind: 'crow', x: o.x, y: o.y, ang: (k / e.n) * Math.PI * 2, life: CROW_LIFE, hp: 0, cd: 0.2 + k * 0.09, dmg: e.dmg });
+        break;
+      case 'spiders':
+        for (let k = 0; k < e.n; k++) this.minions.push({ owner: f, kind: 'spiderling', x: f.x + (k - 1) * 10, y: f.y + 8, ang: 0, life: 6, hp: 0, cd: 0 });
+        break;
+      case 'prison': {
+        // a ring of walls round them: they stop the enemy, not their maker
+        const parts: Prop[] = [];
+        for (let k = 0; k < 9; k++) {
+          const ang = (k / 9) * Math.PI * 2;
+          const q = { x: Phaser.Math.Clamp(o.x + Math.cos(ang) * 22, ARENA.x + 6, ARENA.x + ARENA.w - 6), y: Phaser.Math.Clamp(o.y + Math.sin(ang) * 20, ARENA.y + 6, ARENA.y + ARENA.h - 6), r: 6, hp: 14, maxHp: 14, owner: f };
+          if (Math.hypot(q.x - f.x, q.y - f.y) > q.r + BODY_R * f.scale + 2) parts.push(q);
+        }
+        if (parts.length) {
+          this.barriers.push({ kind: wallLook(undefined, f.c.element), parts, seed: 1, life: e.t, max: e.t, owner: f });
+          this.props.push(...parts);
+          this.repaintCover();
+        }
+        audio.sfx('item_thud', 0.6);
+        break;
+      }
+      case 'rootfield':
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: e.r, t: 0, life: 0.5, col: 0xb0e080 });
+        if (d < e.r && !o.st.unstop) {
+          o.root = Math.max(o.root, e.t);
+          this.fx.push({ kind: 'spark', x: o.x, y: o.y + 4, r: 7, t: 0, life: 0.5, col: 0xb0e080 });
+        }
+        audio.sfx('item_thud', 0.4);
+        break;
+      case 'blind':
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 24, t: 0, life: 0.4, col: 0x101018 });
+        if (d < BLIND_R) o.blind = Math.max(o.blind, e.t);
+        break;
+      case 'silence':
+        for (let k = 0; k < 3; k++) o.cds[k] += e.t;
+        this.fx.push({ kind: 'spark', x: o.x, y: o.y - 8, r: 8, t: 0, life: 0.5, col: light });
+        this.floatNum(o, 0, light, 'JAMMED ');
+        break;
+      case 'weaken':
+        o.weak = Math.max(o.weak, e.t);
+        this.floatNum(o, 0, light, 'WEAKENED ');
+        break;
+      case 'shred':
+        o.shred = Math.max(o.shred, e.t);
+        this.floatNum(o, 0, light, 'SHREDDED ');
+        break;
+      case 'reflect':
+      case 'thorns':
+        f.shield = Math.max(f.shield, e.t);
+        f.shieldMod = e.k;
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 14 * f.scale, t: 0, life: 0.6, col: e.k === 'reflect' ? 0x9ad0ff : 0xffa040 });
+        audio.sfx('heal_up', 0.4);
+        break;
+      case 'regen': {
+        let n = Math.round(e.t);
+        this.time.addEvent({ delay: 1000, repeat: n - 1, callback: () => !this.over && --n >= 0 && (this.heal(f, e.hps), this.floatNum(f, e.hps, 0x8ae88a, '+')) });
+        break;
+      }
+      case 'lifesteal':
+        f.st.u_steal = e.t;
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 14 * f.scale, t: 0, life: 0.5, col: 0xc03050 });
+        break;
+      case 'giant': {
+        // bigger, and harder to hurt or move, for a while
+        const s0 = f.scale;
+        f.scale = s0 * 1.3;
+        f.st.u_giant = e.t;
+        f.st.anchor = Math.max(f.st.anchor ?? 0, e.t);
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 20 * s0, t: 0, life: 0.6, col: light });
+        this.time.delayedCall(e.t * 1000, () => (f.scale = s0));
+        audio.sfx('stinger', 0.5);
+        break;
+      }
+      case 'stealth':
+        f.st.invis = Math.max(f.st.invis ?? 0, e.t);
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 12 * f.scale, t: 0, life: 0.35, col: 0x101018 });
+        break;
+      case 'reset':
+        f.cds[0] = f.cds[1] = f.cds[2] = 0;
+        this.floatNum(f, 0, light, 'READY ');
+        break;
+      case 'cleanse':
+        f.burn = f.slow = f.chill = f.root = f.blind = f.poison = f.weak = f.shred = f.stun = 0;
+        for (const k of ['sleep', 'cage', 'knock', 'stone', 'slick', 'mired', 'confused', 'omen', 'pollen', 'leash', 'rain', 'n_stacks', 'n_quills']) delete f.st[k];
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 14 * f.scale, t: 0, life: 0.4, col: 0xffffff });
+        break;
     }
   }
 
@@ -3461,6 +3877,8 @@ export class CreatureArena extends Phaser.Scene {
     if ((m === 'execute' || a?.sp === 'heat_lance') && to.hp < to.max * 0.4) d *= EXECUTE_MUL;
     if (to.st.armour) d *= 0.6;
     if (to.st.stone) d *= 0.5;
+    // a giant shrugs off part of every hit
+    if ((to.st.u_giant ?? 0) > 0) d *= GIANT_TAKEN;
     // a shadow step's next hit, and a coil's stored shots
     if (from.st.crit2 && a) {
       d *= 2;
@@ -3507,6 +3925,8 @@ export class CreatureArena extends Phaser.Scene {
     d = dmg > 0 ? Math.max(1, Math.round(d)) : 0;
     to.hp = Math.max(0, to.hp - d);
     to.flash = 0.12;
+    // an ultimate's lifesteal: its hits feed it
+    if ((from.st.u_steal ?? 0) > 0 && d > 0) this.heal(from, Math.round(d * LIFESTEAL_FRAC));
     if (d > 0) {
       // any hit wakes a sleeper; a capacitor counts it
       to.st.sleep = 0;
@@ -4238,6 +4658,19 @@ export class CreatureArena extends Phaser.Scene {
           }
           break;
         }
+        case 'hole': {
+          // a black hole: it drags them to its middle, and hurts while they are in it
+          const d = Math.hypot(pl.x - o.x, pl.y - o.y) || 1;
+          if (d < pl.r * 2.2 && !o.st.anchor) {
+            o.kx += ((pl.x - o.x) / d) * 260 * dt;
+            o.ky += ((pl.y - o.y) / d) * 260 * dt;
+          }
+          if (d < pl.r && pl.tick <= 0) {
+            pl.tick = 0.5;
+            this.hit(pl.owner, o, Math.max(1, Math.round((pl.dps ?? 4) / 2)), null);
+          }
+          break;
+        }
         case 'halo': {
           // the ring hurts to cross, either way
           const inside = Math.hypot(o.x - pl.x, o.y - pl.y) < pl.r;
@@ -4745,6 +5178,19 @@ export class CreatureArena extends Phaser.Scene {
         case 'halo':
           g.lineStyle(2, 0xffe060, 0.6 + Math.sin(t * 8) * 0.3).strokeCircle(pl.x, pl.y, pl.r);
           break;
+        case 'hole': {
+          // dark in the middle, its rim and the dust it swallows turning in
+          const fade = Math.min(1, pl.t * 2);
+          g.fillStyle(0x07040e, 0.75 * fade).fillCircle(pl.x, pl.y, pl.r * 0.55);
+          g.lineStyle(1, c.light, 0.7 * fade).strokeCircle(pl.x, pl.y, pl.r * 0.55);
+          for (let k = 0; k < 6; k++) {
+            const q = ((t * 0.9 + k / 6) % 1);
+            const ang = k * 1.05 + t * 3;
+            g.fillStyle(c.light, 0.7 * fade).fillCircle(pl.x + Math.cos(ang) * pl.r * (1 - q) * 1.4, pl.y + Math.sin(ang) * pl.r * (1 - q), 1.2);
+          }
+          g.lineStyle(1, c.col, 0.3 * fade).strokeCircle(pl.x, pl.y, pl.r * 1.4);
+          break;
+        }
         default:
           g.fillStyle(c.col, a).fillCircle(pl.x, pl.y, pl.r);
           g.lineStyle(1, c.light, a).strokeCircle(pl.x, pl.y, pl.r);
@@ -4900,6 +5346,35 @@ export class CreatureArena extends Phaser.Scene {
         case 'copy':
           drawCreature(g, mi.owner.c, mi.x, mi.y, mi.owner.scale, -1, t);
           g.fillStyle(0xd8e8f0, 0.3 + Math.sin(t * 6) * 0.1).fillCircle(mi.x, mi.y, 9 * mi.owner.scale);
+          break;
+        case 'biter':
+          // a small fanged hunter in its maker's colours
+          g.fillStyle(c.dark, 1).fillEllipse(mi.x, mi.y, 8, 6);
+          g.fillStyle(c.col, 1).fillEllipse(mi.x + mi.ang * 2, mi.y - 1, 5, 4);
+          g.fillStyle(0xffffff, 1).fillRect(mi.x + mi.ang * 3.5, mi.y, 0.8, 1.2);
+          g.fillStyle(0x000000, 1).fillCircle(mi.x + mi.ang * 2.5, mi.y - 2, 0.6);
+          break;
+        case 'turret':
+          g.fillStyle(0x3a3a48, 1).fillRect(mi.x - 4, mi.y - 1, 8, 5);
+          g.fillStyle(c.col, 1).fillCircle(mi.x, mi.y - 2, 3);
+          g.lineStyle(1.5, c.light, 1).lineBetween(mi.x, mi.y - 2, mi.x + Math.cos(Math.atan2(this.other(mi.owner).y - mi.y, this.other(mi.owner).x - mi.x)) * 6, mi.y - 2 + Math.sin(Math.atan2(this.other(mi.owner).y - mi.y, this.other(mi.owner).x - mi.x)) * 6);
+          break;
+        case 'totem':
+          g.fillStyle(0x6a4a2a, 1).fillRect(mi.x - 2, mi.y - 10, 4, 10);
+          g.fillStyle(c.light, 0.9).fillCircle(mi.x, mi.y - 11, 2.5);
+          g.lineStyle(1, 0x8ae88a, 0.25 + Math.sin(t * 4) * 0.1).strokeCircle(mi.x, mi.y, 50);
+          break;
+        case 'blade':
+          g.lineStyle(1.5, c.light, 1).lineBetween(mi.x - Math.cos(mi.ang * 3) * 4, mi.y - Math.sin(mi.ang * 3) * 4, mi.x + Math.cos(mi.ang * 3) * 4, mi.y + Math.sin(mi.ang * 3) * 4);
+          g.fillStyle(0xffffff, 0.8).fillCircle(mi.x, mi.y, 1);
+          break;
+        case 'twister':
+          for (let k = 0; k < 5; k++) g.lineStyle(1, c.light, 0.75 - k * 0.1).strokeEllipse(mi.x + Math.sin(mi.ang + k) * 1.5, mi.y - k * 4, 16 - k * 2.5, 4);
+          break;
+        case 'ball':
+          g.fillStyle(c.dark, 1).fillCircle(mi.x, mi.y, 7);
+          g.lineStyle(1, c.light, 1).strokeCircle(mi.x, mi.y, 7);
+          g.lineStyle(1, c.col, 1).lineBetween(mi.x + Math.cos(mi.ang) * 6, mi.y + Math.sin(mi.ang) * 6, mi.x - Math.cos(mi.ang) * 6, mi.y - Math.sin(mi.ang) * 6);
           break;
         case 'lure':
           g.lineStyle(0.6, c.light, 0.8).lineBetween(mi.owner.x, mi.owner.y - 6, mi.x, mi.y);
