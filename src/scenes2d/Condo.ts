@@ -395,7 +395,7 @@ export class Condo extends WalkRoom {
     const f = piece.def;
     switch (useOf(f)) {
       case 'sit':
-        this.sitOn(piece.x, piece.y + 1, 'chair', piece.flip ? -1 : 1, this.seatLift(f));
+        this.sitOn(piece.x, piece.y + 1, this.seatKindOf(f), piece.flip ? -1 : 1, this.seatLift(f));
         this.say('YOU SIT DOWN. MOVE TO GET UP.');
         break;
       case 'lie':

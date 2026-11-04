@@ -668,6 +668,15 @@ export abstract class WalkRoom extends Phaser.Scene {
   }
 
   /**
+   * How you sit on it: side-on, the thigh forward to the knee and the shin
+   * down -- on a sofa raised to its cushion (`seatLift`), the lap drawn in
+   * front of the body so the leg joins it (user, 4 Nov).
+   */
+  protected seatKindOf(_def: FurnitureDef): SeatKind {
+    return 'chair';
+  }
+
+  /**
    * Draw the player again -- in what they now have on, or in `look` (a
    * preview: the barber's mirror, a fitting) -- where they are, sat or not.
    */

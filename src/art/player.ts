@@ -557,11 +557,14 @@ export class Player {
       // facing you: the thighs foreshortened to a short block across the lap,
       // lit along its top, a shadow between the knees; then both shins
       // straight down from the edge of the seat, and the boots on the floor
-      block(-4, -6, 8, 2, this.colOf('J'));
-      lap.add(scene.add.rectangle(-4, -6, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
-      lap.add(scene.add.rectangle(0, -5, 1, 1, c(this.colOf('j'))).setOrigin(0, 0));
-      block(-3, -4, 2, 3, this.colOf('j'));
-      block(1, -4, 2, 3, this.colOf('J'));
+      // (up on a high seat -- a sofa's cushion -- the lap goes up with the
+      // body and the shins are longer, down to the floor)
+      const up = s.lift;
+      block(-4, -6 - up, 8, up > 0 ? 3 : 2, this.colOf('J'));
+      lap.add(scene.add.rectangle(-4, -6 - up, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
+      lap.add(scene.add.rectangle(0, -5 - up, 1, 1, c(this.colOf('j'))).setOrigin(0, 0));
+      block(-3, -4 - up, 2, 3 + up, this.colOf('j'));
+      block(1, -4 - up, 2, 3 + up, this.colOf('J'));
       block(-4, -1, 3, 1, this.colOf('K'));
       block(1, -1, 3, 1, this.colOf('K'));
       lap.add(scene.add.rectangle(d > 0 ? -4 : -1, -1, 1, 1, c(this.colOf('k'))).setOrigin(0, 0));
@@ -576,7 +579,11 @@ export class Player {
       block(5, -1, 4, 1, this.colOf('K'));
     }
     // (the legs go behind the body, as the old man's do -- the can alone in front of it)
-    this.sprite.addAt(lap, 0);
+    // (sat up on a sofa's cushion, the thigh comes forward over the jacket's
+    // hem to the knee, so it is drawn in front of the body: behind it, the
+    // shin hung on its own off the cushion, joined to nothing -- user, 4 Nov)
+    if (s.lift > 0) this.sprite.add(lap);
+    else this.sprite.addAt(lap, 0);
     this.lap = lap;
     if (s.can) {
       // a dented tin held out on the knee, open end up
