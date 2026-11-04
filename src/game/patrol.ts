@@ -44,7 +44,7 @@ import Phaser from 'phaser';
 import { store } from '../core/state';
 import { audio } from '../core/audio';
 import { centerText, fadeToScene, pinToScreen } from '../core/ui';
-import { LOOKS, Player } from '../art/player';
+import { LOOKS, PLAYER_SPEED, Player } from '../art/player';
 import { PALETTE } from '../render/palette';
 import { openTalkPanel } from '../ui/talkPanel';
 import { earnBadge } from './badges';
@@ -88,6 +88,10 @@ let nextPatrolAt = 0;
 let pursuit: { until: number; edge: 'left' | 'right'; alley: boolean; from?: Place } | null = null;
 /** Talked your way out: that officer leaves you be for a while. */
 let clearedUntil = 0;
+/** The officers walking each street when you last left it (see Patrol's constructor). */
+const memory = new Map<string, { at: number; walkers: Array<{ x: number; dir: number }> }>();
+/** Back within this long, and they are where they were. */
+const MEMORY_MS = 90_000;
 
 /** Patrols are only out after the night, and never on a run already over. */
 export const patrolsOut = (): boolean => store.get().arc === 'live' && !store.get().jailed && store.get().route === 'normal';
@@ -196,7 +200,95 @@ export function caughtByPolice(scene: Phaser.Scene, why: 'seen' | 'sleep'): void
  * Every so often while the hunt is on, and soon after you duck in if one
  * was on your heels.
  */
-export function alleyWatch(scene: Phaser.Scene): void {
+/** A side alley's open end, for an officer to walk past it (SideAlley). */
+export interface AlleyMouth {
+  /** How wide the opening is, from the left edge. */
+  w: number;
+  /** The alley's walk line. */
+  y: number;
+  dark: boolean;
+  player: () => Player;
+  /** Seen stood at the mouth: they come in after you. */
+  spotted: () => void;
+}
+
+/**
+ * ONE GOING BY, out on the street, across the alley's open end: down the
+ * pavement out of the distance (small, high) and on past the mouth close to
+ * (big, low) -- or the other way -- with the lights on their shoulders going
+ * round and throwing red and blue in at the mouth.  Only seen through the
+ * opening: masked to it, never over the alley's wall.  Stood near the mouth
+ * as they pass, and they see you.
+ */
+function walkPast(scene: Phaser.Scene, m: AlleyMouth): void {
+  if (!scene.sys.isActive()) return;
+  const toward = Math.random() < 0.6;
+  const far = { x: m.w * 0.62, y: m.y - 20, k: 0.55 };
+  const near = { x: m.w * 0.38, y: m.y + 16, k: 1.2 };
+  const [a, b] = toward ? [far, near] : [near, far];
+  const cop = new Player(scene, a.x, a.y, m.dark, LOOKS.officer).noSprint();
+  cop.sprite.add(scene.add.rectangle(2, -16, 2, 3, 0x14141a));
+  cop.sprite.add(scene.add.rectangle(-3, -9, 2, 6, 0x0e0e12));
+  cop.face(toward ? -1 : 1);
+  const shape = scene.make.graphics({}, false).fillRect(0, 0, m.w - 4, 180);
+  const mask = shape.createGeometryMask();
+  cop.sprite.setMask(mask).setDepth(40).setScale(a.k).setAlpha(0);
+  // the lights, on the shoulders, and their glow in at the mouth
+  const red = scene.add.ellipse(0, 0, 6, 4, 0xff2a3a, 1).setDepth(41).setMask(mask);
+  const blue = scene.add.ellipse(0, 0, 6, 4, 0x2a5aff, 1).setDepth(41).setMask(mask);
+  const glowR = scene.add.ellipse(0, 0, 30, 34, 0xff2a3a, 0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(39);
+  const glowB = scene.add.ellipse(0, 0, 30, 34, 0x2a5aff, 0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(39);
+  // (soft: the siren band's falloff, in at the mouth along the wall and floor)
+  const spill = scene.add.image(m.w - 4, m.y - 24, 'siren_band').setOrigin(0, 0.5).setScale(1.6, 1.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(38).setAlpha(0);
+  const mark = centerText(scene, 0, 0, '!', 0xff5050).setDepth(42).setVisible(false);
+  const T = 3600;
+  let t = 0;
+  let seen = false;
+  let stepT = 0;
+  audio.sfx('footstep_concrete', 0.15);
+  const tick = (_now: number, delta: number): void => {
+    if (!cop.sprite.active) return;
+    t += delta;
+    const u = Math.min(1, t / T);
+    const x = a.x + (b.x - a.x) * u;
+    const y = a.y + (b.y - a.y) * u;
+    const k = a.k + (b.k - a.k) * u;
+    cop.sprite.setPosition(x, y).setScale(k).setAlpha(Math.min(1, u * 6, (1 - u) * 6));
+    cop.stride(toward ? -1 : 1, delta * (0.5 + k * 0.4));
+    // the lights going round: red, then blue
+    const ph = (Math.sin(t / 140) + 1) / 2;
+    const top = y - 24 * k;
+    red.setPosition(x - 3 * k, top).setScale(k).setAlpha(0.4 + 0.6 * ph);
+    blue.setPosition(x + 3 * k, top).setScale(k).setAlpha(0.4 + 0.6 * (1 - ph));
+    const fade = cop.sprite.alpha;
+    glowR.setPosition(x, y - 12 * k).setScale(k).setAlpha(0.32 * ph * fade);
+    glowB.setPosition(x, y - 12 * k).setScale(k).setAlpha(0.32 * (1 - ph) * fade);
+    spill.setTint(ph > 0.5 ? 0xff2a3a : 0x2a5aff).setAlpha(0.45 * fade * k);
+    stepT += delta * k;
+    if (stepT > 420) {
+      stepT = 0;
+      audio.sfx('footstep_concrete', 0.08 + 0.2 * k);
+    }
+    // the near part of the pass: stood by the mouth, and they see you
+    const p = m.player();
+    if (!seen && k > 0.85 && p.sprite.visible && p.x < m.w + 34 && !store.get().disguised) {
+      seen = true;
+      mark.setVisible(true);
+      audio.sfx('stinger', 0.45);
+      scene.time.delayedCall(700, () => scene.sys.isActive() && m.spotted());
+    }
+    mark.setPosition(x, top - 10 * k);
+    if (u >= 1) done();
+  };
+  const done = (): void => {
+    scene.events.off(Phaser.Scenes.Events.UPDATE, tick);
+    for (const o of [cop.sprite, red, blue, glowR, glowB, spill, mark, shape]) o.destroy();
+  };
+  scene.events.on(Phaser.Scenes.Events.UPDATE, tick);
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.events.off(Phaser.Scenes.Events.UPDATE, tick));
+}
+
+export function alleyWatch(scene: Phaser.Scene, mouth?: AlleyMouth): void {
   // (seen going in: they are not going past, they are coming down -- see Patrol)
   if (pursuit?.alley && performance.now() < pursuit.until) return;
   if (!stealthPhase() && !(pursuit && performance.now() < pursuit.until)) return;
@@ -219,6 +311,7 @@ export function alleyWatch(scene: Phaser.Scene): void {
   }
   const pass = (): void => {
     if (!scene.sys.isActive()) return;
+    if (mouth) return walkPast(scene, mouth);
     const red = scene.add.image(0, -60, key).setOrigin(0, 0.5).setTint(0xff2a3a).setBlendMode(Phaser.BlendModes.ADD).setDepth(3500).setScrollFactor(0);
     const blue = scene.add.image(0, -110, key).setOrigin(0, 0.5).setTint(0x2a5aff).setBlendMode(Phaser.BlendModes.ADD).setDepth(3500).setScrollFactor(0);
     for (const [img, delay] of [[red, 0], [blue, 260]] as const) {
@@ -295,6 +388,19 @@ class Unit {
     u.dir = dir;
     u.doorCool = 4 + Math.random() * 6;
     return u;
+  }
+
+  /** Back where they were (`Patrol` memory): walking, at `x`, at once. */
+  static at(host: PatrolHost, squad: { busy: (u: Unit) => boolean }, x: number, dir: number): Unit {
+    const u = new Unit(host, squad);
+    u.spawn(x, dir);
+    u.doorCool = 4 + Math.random() * 6;
+    return u;
+  }
+
+  /** Which way they are walking (for `Patrol` memory). */
+  get heading(): number {
+    return this.dir;
   }
 
   /** After you, in at `edge`, a beat behind. */
@@ -725,13 +831,17 @@ class Unit {
  */
 export class Patrol {
   private units: Unit[] = [];
+  private host: PatrolHost;
+  private squad: { busy: (u: Unit) => boolean };
 
   constructor(host: PatrolHost) {
+    this.host = host;
+    const squad = { busy: (u: Unit) => this.units.some((o) => o !== u && o.holding) };
+    this.squad = squad;
     if (!patrolsOut()) return;
     const now = performance.now();
     const chased = pursuit && now < pursuit.until ? pursuit : null;
     pursuit = null;
-    const squad = { busy: (u: Unit) => this.units.some((o) => o !== u && o.holding) };
     if (host.alley) {
       // they saw you duck in here: in after you, from the street end
       if (chased?.alley) this.units.push(Unit.chaser(host, squad, 'left'));
@@ -742,16 +852,45 @@ export class Patrol {
       const door = chased.from ? host.doors?.find((d) => d.place === chased.from) : undefined;
       this.units.push(door ? Unit.fromDoor(host, squad, door.x) : Unit.chaser(host, squad, chased.edge));
     }
+    // ---- THEY WERE STILL THERE.  Back on a street you were on a moment
+    // ago (down an alley and out, say): the officers walking it then are
+    // walking it now, on from where they were by however long you were gone
+    // -- not a fresh lot from the ends.  (A moment's grace to see them.)
+    const key = host.scene.scene.key;
+    host.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.remember(key));
+    const mem = memory.get(key);
+    memory.delete(key);
+    const back: Array<{ x: number; dir: number }> = [];
+    if (mem && now - mem.at < MEMORY_MS) {
+      const gone = ((now - mem.at) / 1000) * PLAYER_SPEED * PACE.walk * 0.8;
+      for (const w of mem.walkers) {
+        let x = w.x + w.dir * gone;
+        let dir = w.dir;
+        if (stealthPhase()) {
+          // (up and down the street: off one end is back along it)
+          const lo = 0;
+          const hi = host.worldW;
+          for (let k = 0; k < 4 && (x < lo || x > hi); k++) {
+            if (x > hi) (x = hi - (x - hi)), (dir = -1);
+            if (x < lo) (x = lo + (lo - x)), (dir = 1);
+          }
+          x = Phaser.Math.Clamp(x, lo, hi);
+        } else if (x < -20 || x > host.worldW + 20) continue;
+        back.push({ x, dir });
+      }
+      if (back.length) clearedUntil = Math.max(clearedUntil, now + 1200);
+    }
+    for (const b of back) this.units.push(Unit.at(host, squad, b.x, b.dir));
     if (stealthPhase()) {
       const n = host.worldW > 400 ? 3 : 2;
       const first = Math.random() < 0.5 ? 1 : -1;
-      for (let i = 0; i < n; i++) {
+      for (let i = back.length; i < n; i++) {
         const delay = (host.grace ?? 0) + 2 + i * 6 + Math.random() * 3;
         this.units.push(Unit.walker(host, squad, delay, i % 2 ? -first : first));
       }
       return;
     }
-    if (chased) return;
+    if (chased || back.length) return;
     if (!forced() && (now < nextPatrolAt || Math.random() > 0.45)) return;
     nextPatrolAt = now + (75 + Math.random() * 65) * 1000;
     this.units.push(Unit.walker(host, squad, forced() ? 0.3 : 2 + Math.random() * 6, Math.random() < 0.5 ? 1 : -1));
@@ -783,6 +922,22 @@ export class Patrol {
 
   update(delta: number): void {
     for (const u of this.units) u.update(delta);
+  }
+
+  /** Leaving: where the officers out walking are, to be put back if you come straight back. */
+  private remember(key: string): void {
+    if (this.host.alley) return;
+    const walkers = this.units.filter((u) => u.present && !u.chasing && !u.holding && u.x !== null).map((u) => ({ x: u.x as number, dir: u.heading }));
+    if (walkers.length) memory.set(key, { at: performance.now(), walkers });
+  }
+
+  /**
+   * SEEN AT THE MOUTH: one going by out on the street caught you stood by the
+   * alley's opening.  In they come after you, off the street end.
+   */
+  comeIn(): void {
+    if (this.chasing) return;
+    this.units.push(Unit.chaser(this.host, this.squad, 'left'));
   }
 
   /**
