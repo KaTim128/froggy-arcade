@@ -5153,21 +5153,31 @@ function dressAnimal(scene: Phaser.Scene, animal: Animal, c: {
       skullH = 8;
       neckTo(8, 7, skin);
       const ink = 0x1a1a1e;
-      // the mane, banded black and white, standing up behind the neck
-      for (let i = 0; i < 7; i++) headBack.push(R(HX - 4.6 - i * 0.8, HY - 4 + i * 2.2, 2.2, 3.2, i % 2 ? ink : 0xf8f8f4, -22));
+      // (redrawn, user 4 Nov: "make zebra look better")
+      // the mane: tall and stiff, in tight black and white bands
+      for (let i = 0; i < 10; i++) headBack.push(R(HX - 4.6 - i * 0.55, HY - 6.4 + i * 1.7, 2.6, 2.2, i % 2 ? ink : 0xf8f8f4, -22));
       // tall ears, black-tipped
       headBack.push(T(HX - 3.6, HY - 3, HX - 0.8, HY - 3.4, HX - 2.4, HY - 10.6, skin), T(HX - 2.9, HY - 8.6, HX - 1.9, HY - 8.8, HX - 2.4, HY - 10.6, ink));
-      headBack.push(T(HX - 0.4, HY - 3.2, HX + 2.4, HY - 3.4, HX + 1, HY - 10, down(skin, 0.1)));
+      headBack.push(T(HX - 3, HY - 4, HX - 1.6, HY - 4.2, HX - 2.4, HY - 8, 0xd8d0d0));
+      headBack.push(T(HX - 0.4, HY - 3.2, HX + 2.4, HY - 3.4, HX + 1, HY - 10, down(skin, 0.1)), T(HX + 0.5, HY - 8.6, HX + 1.4, HY - 8.8, HX + 1, HY - 10, ink));
       // the long muzzle and its dark nose
       face.push(E(HX + 6, HY + 2, 11, 6, skin).setStrokeStyle(1, outline));
-      face.push(E(HX + 10, HY + 2.8, 5.2, 4.4, 0x34343a), C(HX + 11.2, HY + 2, 0.7, 0x0e0e12));
-      face.push(R(HX + 8.6, HY + 5, 4, 0.7, ink));
-      // stripes over the brow and down the muzzle
-      for (const [x, y, a] of [[-2.2, -3.4, 20], [0.4, -3.8, 10], [3.2, -0.4, 72], [5.2, -0.2, 76], [7.2, 0.2, 80]] as const) face.push(R(HX + x, HY + y, 1.1, 4.4, ink, a));
+      // a soft grey muzzle at the end of it, a nostril and a mouth line --
+      // not a dark blob over the face
+      face.push(E(HX + 10.6, HY + 2.8, 4.4, 3.6, 0x5a5a64), C(HX + 12, HY + 2, 0.7, 0x0e0e12));
+      face.push(R(HX + 10, HY + 5, 3.6, 0.7, 0x202026));
+      // thin arcs over the brow, close together, and down the bridge of the nose
+      for (let k = 0; k < 5; k++) face.push(R(HX - 2.4 + k * 1.8, HY - 3.2 + k * 0.5, 0.75, 4.2 - k * 0.3, ink, 18 - k * 4));
+      for (let k = 0; k < 3; k++) face.push(R(HX + 6.2 + k * 1.3, HY - 1.6 + k * 0.4, 0.7, 2.6, ink, 74));
       face.push(C(HX + 1.4, HY - 1, 1.3, 0x1a1208), C(HX + 1, HY - 1.4, 0.4, 0xffffff));
       // the body's stripes, curving round it, and a pale belly
-      for (let i = 0; i < 6; i++) body.push(R(-1, torsoTop + 2 + (i * torsoH) / 6, torsoW * 1.05, 1.4, ink, i % 2 ? 14 : -14).setAlpha(0.9));
+      // the body: a pale belly, and thin even stripes curving round it --
+      // each in two strokes, a gentle chevron
       body.push(E(3, torsoCY + 2, torsoW * 0.42, torsoH * 0.5, 0xffffff, 0.5));
+      for (let i = 0; i < 9; i++) {
+        const y = torsoTop + 2 + (i * (torsoH - 3)) / 8;
+        body.push(R(-torsoW * 0.22, y, torsoW * 0.5, 1, ink, 12), R(torsoW * 0.22, y + 0.6, torsoW * 0.45, 1, ink, -10));
+      }
       // a tail with a black tuft on the end
       const path = bez([0, 0], [-3, 3], [-5, 7], [-6, 11], 10);
       tailBits.push(tube(path, 1.8, 1.2, skin), E(-6.2, 12.4, 3, 4.6, ink));

@@ -91,8 +91,19 @@ export function isAdminName(name: string | null | undefined): boolean {
   return v;
 }
 
-/** Whether `pw` is the admin password (exactly as typed). */
-export const isAdminPassword = (pw: string): boolean => sha256(`froggy-admin-pass:${pw}`) === PASS_HASH;
+/**
+ * The password as it is stored, if `pw` is it -- in any case (a phone's
+ * keyboard capitalises the first letter, and the profile box's SHIFT does the
+ * rest) -- or null.  The stored form is what the settings server checks.
+ */
+export function canonicalPassword(pw: string): string | null {
+  const t = pw.trim();
+  for (const v of [t, t.toLowerCase(), t.toUpperCase()]) if (sha256(`froggy-admin-pass:${v}`) === PASS_HASH) return v;
+  return null;
+}
+
+/** Whether `pw` is the admin password (any case). */
+export const isAdminPassword = (pw: string): boolean => canonicalPassword(pw) !== null;
 
 const unlockMark = (slotId: string): string => sha256(`froggy-unlock:${slotId}:${PASS_HASH}`);
 
@@ -102,8 +113,9 @@ let sessionPassword: string | null = null;
 export const adminPassword = (): string | null => sessionPassword;
 
 /** The right password for profile `slotId`: it is the admin's on this device from now on. */
-export function unlockAdmin(slotId: string, pw: string): boolean {
-  if (!isAdminPassword(pw)) return false;
+export function unlockAdmin(slotId: string, typed: string): boolean {
+  const pw = canonicalPassword(typed);
+  if (!pw) return false;
   sessionPassword = pw;
   try {
     localStorage.setItem(UNLOCK_PREFIX + slotId, unlockMark(slotId));
@@ -115,8 +127,9 @@ export function unlockAdmin(slotId: string, pw: string): boolean {
 }
 
 /** Just keep the password for this session (asked again before a publish). */
-export function rememberPassword(pw: string): boolean {
-  if (!isAdminPassword(pw)) return false;
+export function rememberPassword(typed: string): boolean {
+  const pw = canonicalPassword(typed);
+  if (!pw) return false;
   sessionPassword = pw;
   return true;
 }

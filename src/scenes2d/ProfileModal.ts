@@ -27,6 +27,9 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 
 const ROW_Y = [56, 86, 116];
 
+/** What the admin account made from the password is called in the profile list. */
+const ADMIN_SLOT_NAME = 'ADMIN';
+
 export class ProfileModal extends Phaser.Scene {
   private from = 'StartScreen';
   private body!: Phaser.GameObjects.Container;
@@ -314,6 +317,27 @@ export class ProfileModal extends Phaser.Scene {
   private commitName(): void {
     // THE ADMIN PROFILE asks for its password before it is made (core/adminAuth)
     if (this.pwFor) return this.commitPassword();
+    // ---- THE PASSWORD TYPED AS THE NAME (user, 4 Nov): that is the admin
+    // account, straight away -- made, unlocked on this device, with the admin
+    // panel.  Its name shows as ADMIN, so the password is never on screen
+    // in the list.
+    if (isAdminPassword(this.draft)) {
+      const typed = this.draft;
+      // (one admin account: typed again, it opens the one already made)
+      const id = store.listSlots().find((x) => x.name === ADMIN_SLOT_NAME)?.id ?? store.createSlot(ADMIN_SLOT_NAME);
+      this.naming = false;
+      this.draft = '';
+      if (!id) {
+        this.render();
+        return;
+      }
+      unlockAdmin(id, typed);
+      store.selectSlot(id);
+      store.flush();
+      audio.sfx('coin_spin');
+      this.close();
+      return;
+    }
     if (isAdminName(this.draft)) {
       this.pwFor = { name: this.draft };
       this.pwWrong = false;
