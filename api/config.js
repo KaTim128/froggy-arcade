@@ -30,7 +30,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 
 const URL_ = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
 const TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
-const PASS_HASH = (process.env.ADMIN_PASSWORD_HASH || '1028e9cec7f1433e11f907cf92bfb3f91e494b755c4a06d25ecba96d54e38955').toLowerCase();
+const PASS_HASH = (process.env.ADMIN_PASSWORD_HASH || '8322e6039d2ac6043165c1efa1b34f60bfd22e237f015be8285077f9153145d9').toLowerCase();
 const LIVE_KEY = 'froggy:config:live';
 const LOG_KEY = 'froggy:config:log';
 const KEY_RE = /^[a-z0-9]+\.[a-zA-Z0-9]+$/;
