@@ -93,7 +93,67 @@ export type UltFx =
   | { k: 'giant'; t: number }
   | { k: 'stealth'; t: number }
   | { k: 'reset' }
-  | { k: 'cleanse' };
+  | { k: 'cleanse' }
+  // ---- each of these is one creature's signature, and appears nowhere else
+  | { k: 'geyser'; n: number; dmg: number }
+  | { k: 'tidalwave'; dmg: number }
+  | { k: 'iceblock'; t: number }
+  | { k: 'icicles'; n: number; dmg: number }
+  | { k: 'avalanche'; dmg: number }
+  | { k: 'blizzard'; t: number; dps: number }
+  | { k: 'absorb'; t: number; dmg: number }
+  | { k: 'laserfence'; t: number; dps: number }
+  | { k: 'staticfield'; t: number; dps: number }
+  | { k: 'railgun'; dmg: number }
+  | { k: 'boomerang'; dmg: number }
+  | { k: 'firebreath'; t: number; dmg: number }
+  | { k: 'fireworks'; n: number; dmg: number }
+  | { k: 'phoenix'; t: number; frac: number }
+  | { k: 'solarflare'; t: number; dmg: number }
+  | { k: 'lighthouse'; t: number; dmg: number }
+  | { k: 'mirrorimage'; n: number; dmg: number }
+  | { k: 'echo'; t: number }
+  | { k: 'timewarp' }
+  | { k: 'timestop'; t: number }
+  | { k: 'doom'; dmg: number }
+  | { k: 'soullink'; t: number }
+  | { k: 'fear'; t: number }
+  | { k: 'polymorph'; t: number }
+  | { k: 'shrink'; t: number }
+  | { k: 'quicksand'; t: number; dps: number }
+  | { k: 'bunker'; t: number }
+  | { k: 'stoneskin'; amt: number }
+  | { k: 'earthquake'; t: number; dmg: number }
+  | { k: 'rockthrow'; dmg: number }
+  | { k: 'pylons'; n: number; t: number; dmg: number }
+  | { k: 'windwall'; t: number }
+  | { k: 'gale'; t: number; dmg: number }
+  | { k: 'liftoff'; t: number; dmg: number }
+  | { k: 'blossoms'; n: number; hps: number }
+  | { k: 'bubble'; t: number; dmg: number }
+  | { k: 'tentacles'; n: number; t: number; dmg: number }
+  | { k: 'riptide'; t: number; dps: number }
+  | { k: 'counter'; t: number; dmg: number }
+  | { k: 'execute'; dmg: number }
+  | { k: 'bleed'; t: number; dps: number }
+  | { k: 'hunt'; t: number }
+  | { k: 'overload'; dmg: number; r: number }
+  | { k: 'balllightning'; t: number; dmg: number }
+  | { k: 'rot'; t: number }
+  | { k: 'miasma'; t: number; dps: number }
+  | { k: 'carrionmark'; t: number; dmg: number }
+  | { k: 'radiance'; n: number; dmg: number; hps: number }
+  | { k: 'prismfan'; n: number; dmg: number }
+  | { k: 'steal'; dmg: number }
+  | { k: 'leash'; t: number; dmg: number }
+  | { k: 'confuse'; t: number }
+  | { k: 'firewall'; t: number }
+  | { k: 'nightmare'; t: number; dmg: number }
+  | { k: 'net'; t: number; dmg: number }
+  | { k: 'trapdoll'; dmg: number }
+  | { k: 'duel'; t: number }
+  | { k: 'banish'; t: number }
+  | { k: 'snowball'; dmg: number };
 
 type K = UltFx['k'];
 
@@ -114,6 +174,20 @@ export const LIFESTEAL_FRAC = 0.5;
 export const BLIND_R = 140;
 export const PACK_LIFE = 4.5;
 export const CROW_LIFE = 4;
+/** The rest of the arena's numbers for them. */
+export const DUEL_MUL = 1.3;
+export const HUNT_MUL = 1.4;
+export const ICE_SHATTER = 2;
+export const BANISH_HEAL = 3;
+
+/**
+ * THE PLAIN SUPPORTS: the only effects more than one ultimate may have, and
+ * never as the signature.  Everything else -- every summon, every field,
+ * every beam, every trick -- belongs to one creature alone (user, 4 Nov:
+ * "do not have two similar ultimates ... they should be unique in styling
+ * as well").
+ */
+export const GENERIC: ReadonlySet<UltFx['k']> = new Set<UltFx['k']>(['haste', 'shield', 'heal', 'regen', 'invuln', 'cleanse', 'reset', 'slowfield', 'stun', 'blind', 'weaken', 'shred', 'silence', 'rootfield', 'rage']);
 
 // shorthand for the table
 const F = <T extends K>(k: T, o: Omit<Extract<UltFx, { k: T }>, 'k'>): UltFx => ({ k, ...o }) as UltFx;
@@ -173,6 +247,65 @@ const giant = (t = 5) => F('giant', { t });
 const stealth = (t = 2) => F('stealth', { t });
 const reset = () => F('reset', {});
 const cleanse = () => F('cleanse', {});
+const geyser = (n = 4, dmg = 9) => F('geyser', { n, dmg });
+const tidalwave = (dmg = 20) => F('tidalwave', { dmg });
+const iceblock = (t = 1.5) => F('iceblock', { t });
+const icicles = (n = 9, dmg = 14) => F('icicles', { n, dmg });
+const avalanche = (dmg = 18) => F('avalanche', { dmg });
+const blizzard = (t = 4, dps = 6) => F('blizzard', { t, dps });
+const absorb = (t = 2.5, dmg = 6) => F('absorb', { t, dmg });
+const laserfence = (t = 4, dps = 10) => F('laserfence', { t, dps });
+const staticfield = (t = 4, dps = 8) => F('staticfield', { t, dps });
+const railgun = (dmg = 30) => F('railgun', { dmg });
+const boomerang = (dmg = 16) => F('boomerang', { dmg });
+const firebreath = (t = 1.5, dmg = 3) => F('firebreath', { t, dmg });
+const fireworks = (n = 3, dmg = 10) => F('fireworks', { n, dmg });
+const phoenix = (t = 8, frac = 0.35) => F('phoenix', { t, frac });
+const solarflare = (t = 3, dmg = 12) => F('solarflare', { t, dmg });
+const lighthouse = (t = 4, dmg = 7) => F('lighthouse', { t, dmg });
+const mirrorimage = (n = 2, dmg = 4) => F('mirrorimage', { n, dmg });
+const echo = (t = 5) => F('echo', { t });
+const timewarp = () => F('timewarp', {});
+const timestop = (t = 1.5) => F('timestop', { t });
+const doom = (dmg = 40) => F('doom', { dmg });
+const soullink = (t = 4) => F('soullink', { t });
+const fear = (t = 2) => F('fear', { t });
+const polymorph = (t = 2.5) => F('polymorph', { t });
+const shrink = (t = 5) => F('shrink', { t });
+const quicksand = (t = 4, dps = 6) => F('quicksand', { t, dps });
+const bunker = (t = 4) => F('bunker', { t });
+const stoneskin = (amt = 40) => F('stoneskin', { amt });
+const earthquake = (t = 3, dmg = 5) => F('earthquake', { t, dmg });
+const rockthrow = (dmg = 24) => F('rockthrow', { dmg });
+const pylons = (n = 3, t = 5, dmg = 6) => F('pylons', { n, t, dmg });
+const windwall = (t = 4) => F('windwall', { t });
+const gale = (t = 3, dmg = 10) => F('gale', { t, dmg });
+const liftoff = (t = 1.5, dmg = 16) => F('liftoff', { t, dmg });
+const blossoms = (n = 4, hps = 10) => F('blossoms', { n, hps });
+const bubble = (t = 1.8, dmg = 16) => F('bubble', { t, dmg });
+const tentacles = (n = 4, t = 4, dmg = 5) => F('tentacles', { n, t, dmg });
+const riptide = (t = 4, dps = 6) => F('riptide', { t, dps });
+const counter = (t = 3, dmg = 30) => F('counter', { t, dmg });
+const execute = (dmg = 16) => F('execute', { dmg });
+const bleed = (t = 5, dps = 5) => F('bleed', { t, dps });
+const hunt = (t = 6) => F('hunt', { t });
+const overload = (dmg = 50, r = 50) => F('overload', { dmg, r });
+const balllightning = (t = 5, dmg = 6) => F('balllightning', { t, dmg });
+const rot = (t = 6) => F('rot', { t });
+const miasma = (t = 5, dps = 7) => F('miasma', { t, dps });
+const carrionmark = (t = 6, dmg = 22) => F('carrionmark', { t, dmg });
+const radiance = (n = 3, dmg = 8, hps = 5) => F('radiance', { n, dmg, hps });
+const prismfan = (n = 5, dmg = 7) => F('prismfan', { n, dmg });
+const steal = (dmg = 12) => F('steal', { dmg });
+const leash = (t = 4, dmg = 6) => F('leash', { t, dmg });
+const confuse = (t = 2.5) => F('confuse', { t });
+const firewall = (t = 5) => F('firewall', { t });
+const nightmare = (t = 5, dmg = 5) => F('nightmare', { t, dmg });
+const net = (t = 2, dmg = 12) => F('net', { t, dmg });
+const trapdoll = (dmg = 35) => F('trapdoll', { dmg });
+const duel = (t = 5) => F('duel', { t });
+const banish = (t = 2.5) => F('banish', { t });
+const snowball = (dmg = 22) => F('snowball', { dmg });
 
 /**
  * THE TABLE: every creature's and boss's own ultimate, its signature first.
@@ -181,115 +314,115 @@ const cleanse = () => F('cleanse', {});
  */
 const SPEC: Record<string, [string, UltFx[]]> = {
   // ------------------------------------------------------------------ ember
-  mole: ['MAGMA ERUPTION', [spikes(16, 1), quakeline(6, 8), zone(3, 12)]],
+  mole: ['MAGMA ERUPTION', [spikes(16, 1), slowfield(2, 60)]],
   wisp: ['SOLAR SPIRAL', [spiral(18, 4), haste(3)]],
-  slug: ['LAVA TIDE', [trail(5), slowfield(2.5, 70), regen(4, 3)]],
-  scorpion: ['VENOM AMBUSH', [stealth(2), multiblink(2, 10), weaken(3)]],
-  boar: ['FORGE STAMPEDE', [charge(20, 120), shockwaves(2, 8), giant(4)]],
-  heron: ['PYRE SWEEP', [sweep(20, 200), blind(2)]],
-  salamander: ['CINDER WHIRL', [orbit(3, 4, 4), haste(3), zone(3, 12)]],
-  chick: ['PHOENIX BURST', [ring(12, 6), heal(0.15), invuln(1)]],
-  camel: ['DUNE STORM', [tornado(4, 5), regen(5, 2), cleanse()]],
-  flamingo: ['BLAZE DUEL', [reflect(2), volley(5, 4), lifesteal(4)]],
+  slug: ['LAVA TIDE', [trail(5), regen(4, 3)]],
+  scorpion: ['DEEP VENOM', [bleed(5, 5), weaken(3)]],
+  boar: ['FORGE STAMPEDE', [charge(20, 120), stun(0.6, 40)]],
+  heron: ['PYRE RAILGUN', [railgun(30), haste(2)]],
+  salamander: ['DRAGON BREATH', [firebreath(1.5, 3), shield(1)]],
+  chick: ['PHOENIX REBIRTH', [phoenix(8, 0.35), heal(0.08)]],
+  camel: ['DUNE QUICKSAND', [quicksand(4, 6), regen(4, 2)]],
+  flamingo: ['BLAZING DUEL', [duel(5), rage(3)]],
   // ------------------------------------------------------------------- tide
-  toad: ['TOAD GULP', [pull(14, 110), bombers(2, 10)]],
-  ray: ['RIPTIDE SWAP', [swap(10), shred(4), haste(3)]],
-  puffer: ['NEEDLE BLOOM', [thorns(3), ring(10, 5), slowfield(2, 60)]],
+  toad: ['TONGUE GULP', [pull(16, 110), regen(3, 3)]],
+  ray: ['RIPTIDE LANES', [riptide(4, 6), haste(3)]],
+  puffer: ['SPONGE PUFF', [absorb(2.5, 6), shield(1)]],
   urchin: ['REEF MINEFIELD', [minefield(5, 10), rootfield(1, 60)]],
-  newt: ['SPRING TOTEM', [totem(6, 4), cleanse(), shield(1.5)]],
-  seahorse: ['TIDAL VOLLEY', [volley(7, 4), nova(8, 40)]],
-  otter: ['OTTER BRAWL', [lifesteal(5), rage(4), charge(14, 90)]],
-  octopus: ['INK MAZE', [blind(3), clones(2), stealth(1.5)]],
-  shark: ['FRENZY BITE', [leap(18, 24), lifesteal(4), shred(3)]],
-  lobster: ['CLAW CRUSH', [prison(2.5), cross(12, 60)]],
+  newt: ['SPRING TOTEM', [totem(6, 4), cleanse()]],
+  seahorse: ['TIDAL WAVE', [tidalwave(20), slowfield(2, 80)]],
+  otter: ['GEYSER SPLASH', [geyser(4, 9), haste(2)]],
+  octopus: ['KRAKEN ARMS', [tentacles(4, 4, 5), blind(2)]],
+  shark: ['BLOOD FINISHER', [execute(16), haste(2)]],
+  lobster: ['CLAW COUNTER', [counter(3, 30), shield(1)]],
   // ------------------------------------------------------------------- moss
-  crab: ['KELP FORTRESS', [shield(2.5), spikes(10, 0.8), regen(4, 3)]],
-  sprout: ['OVERGROWTH', [rootfield(1.2, 80), zone(4, 12), totem(4, 3)]],
-  stag: ['THORN PRISON', [prison(3), beam(16, 200)]],
-  bear: ['IVY GIANT', [giant(5), heal(0.15), nova(12, 40)]],
-  sloth: ['AGE OF MOSS', [slowfield(3, 110), regen(6, 3), shield(1.5)]],
-  bee: ['HIVE SWARM', [pack(3, 3), homing(4, 3)]],
-  badger: ['BURROW SLAM', [shockwaves(3, 7), rage(4), shield(1.5)]],
-  caterpillar: ['LEAF STORM', [zone(5, 14), rootfield(1, 60), regen(4, 2)]],
-  porcupine: ['QUILL CROSS', [cross(12, 70), rootfield(1, 50), regen(3, 3)]],
-  koala: ['GUM GROVE', [heal(0.2), regen(4, 3), slowfield(2, 70)]],
-  ladybug: ['SPOT SWARM', [homing(6, 4), haste(3)]],
-  beaver: ['DAM BUILDER', [turret(6, 4), shield(2)]],
+  crab: ['KELP BUNKER', [bunker(4), regen(4, 3)]],
+  sprout: ['VINE LEASH', [leash(4, 6), rootfield(0.8, 50)]],
+  stag: ['THORN PRISON', [prison(3), shred(3)]],
+  bear: ['IVY GIANT', [giant(5), heal(0.12)]],
+  sloth: ['STILL TIME', [timestop(1.5), regen(4, 3)]],
+  bee: ['STINGER SWARM', [homing(6, 4), haste(2)]],
+  badger: ['BURROW SLAM', [shockwaves(3, 7), shield(1.5)]],
+  caterpillar: ['LEAF STORM', [zone(5, 14), slowfield(2, 60)]],
+  porcupine: ['QUILL BLOOM', [ring(14, 6), rootfield(0.8, 50)]],
+  koala: ['GUM BLOSSOMS', [blossoms(4, 10), slowfield(2, 60)]],
+  ladybug: ['DIZZY SPOTS', [confuse(2.5), shred(3)]],
+  beaver: ['DAM TURRET', [turret(6, 4), shield(1.5)]],
   // ------------------------------------------------------------------ frost
-  golem: ['GLACIER WALL', [invuln(1.5), quakeline(6, 8), stun(0.8, 70)]],
-  jelly: ['STASIS BLOOM', [stun(1.2, 90), drain(3, 5)]],
-  ram: ['AVALANCHE', [leap(16, 26), stun(0.8, 60)]],
-  penguin: ['ICE BOWLING', [bouncer(4, 8), slowfield(2, 70)]],
-  yeti: ['BLIZZARD', [meteor(5, 10, 20), weaken(3), rage(3)]],
-  walrus: ['TUSK QUAKE', [quakeline(7, 9), giant(4)]],
-  ermine: ['WHITEOUT', [stealth(2.5), blink(16), slowfield(2, 60)]],
-  moose: ['ANTLER STORM', [charge(18, 110), stun(0.8, 60), shockwaves(2, 7)]],
+  golem: ['RIME SKIN', [stoneskin(40), stun(0.6, 50)]],
+  jelly: ['FLASH FREEZE', [iceblock(1.5), slowfield(2, 70)]],
+  ram: ['AVALANCHE LEAP', [leap(18, 26), stun(0.6, 50)]],
+  penguin: ['GIANT SNOWBALL', [snowball(22), slowfield(2, 70)]],
+  yeti: ['BLIZZARD', [blizzard(4, 6), weaken(3)]],
+  walrus: ['TUSK QUAKE', [quakeline(7, 9), shield(1)]],
+  ermine: ['WHITEOUT', [stealth(2.5), slowfield(2, 60)]],
+  moose: ['ROLLING AVALANCHE', [avalanche(18), stun(0.6, 50)]],
   narwhal: ['NARHORN LANCE', [beam(22, 240), shred(3)]],
   // ------------------------------------------------------------------- volt
-  hound: ['THUNDER PACK', [pack(3, 3), haste(4)]],
-  spider: ['STORM WEB', [spiders(3), rootfield(1, 60), chain(3, 5)]],
+  hound: ['THUNDER PACK', [pack(3, 3), haste(3)]],
+  spider: ['STORM BROOD', [spiders(3), rootfield(1, 60), slowfield(2, 60)]],
   gecko: ['CHAIN STRIKE', [chain(4, 6), haste(3)]],
-  ferret: ['GRAND HEIST', [silence(3), reset(), haste(3)]],
-  rhino: ['THUNDER RAMPAGE', [rage(5), charge(16, 100), invuln(1)]],
-  eel: ['DEEP CURRENT', [drain(3, 6), chain(3, 5)]],
-  wasp: ['STINGER STORM', [spiral(14, 4), shred(3)]],
-  mouse: ['SPARK SCAMPER', [haste(5), ring(10, 5)]],
-  zebra: ['ZAP STAMPEDE', [trail(4), stun(0.8, 70)]],
-  lemur: ['MIRROR TRICK', [clones(3), swap(8)]],
-  cricket: ['CHIRP STORM', [ring(12, 5), silence(2)]],
+  ferret: ['GRAND HEIST', [steal(12), reset()]],
+  rhino: ['THUNDER QUAKE', [earthquake(3, 5), rage(3)]],
+  eel: ['BALL LIGHTNING', [balllightning(5, 6), slowfield(2, 60)]],
+  wasp: ['STATIC FIELD', [staticfield(4, 8), haste(2)]],
+  mouse: ['DOUBLE SPARK', [echo(5), haste(3)]],
+  zebra: ['THUNDER LIFT', [liftoff(1.5, 16), shred(2)]],
+  lemur: ['MIRROR TROOP', [mirrorimage(2, 4), blind(1.5)]],
+  cricket: ['RESONANT PYLONS', [pylons(3, 5, 6), silence(2)]],
   // ------------------------------------------------------------------ stone
   beetle: ['BOULDER BARRAGE', [barrage(7, 5), shield(1.5)]],
-  roller: ['ROCKSLIDE ROLL', [orbit(4, 4, 4), haste(3)]],
-  tortoise: ['MIRROR SHELL', [reflect(3), regen(5, 3)]],
-  obelisk: ['GRAVITY WELL', [blackhole(3, 5), beam(14, 200)]],
-  hedgehog: ['GEODE BURST', [thorns(3), cross(10, 60)]],
-  armadillo: ['RUBBLE SHELL', [shield(2.5), shockwaves(2, 7)]],
-  crocodile: ['DEATH ROLL', [pull(14, 100), rootfield(1, 50), lifesteal(4)]],
+  roller: ['ROCKSLIDE ORBIT', [orbit(4, 4, 4), haste(3)]],
+  tortoise: ['MIRROR SHELL', [reflect(3), regen(4, 3)]],
+  obelisk: ['GRAVITY WELL', [blackhole(3, 5), silence(2)]],
+  hedgehog: ['GEODE SPINES', [thorns(3), stun(0.5, 40)]],
+  armadillo: ['RUBBLE BLAST', [nova(16, 44), shield(2)]],
+  crocodile: ['DEATH ROLL', [banish(2.5), shred(3)]],
   pangolin: ['SCALE BOULDER', [bouncer(4, 8), shield(1.5)]],
-  goat: ['ROCKFALL', [meteor(5, 10, 20), stun(0.8, 60)]],
+  goat: ['CRAG THROW', [rockthrow(24), stun(0.6, 50)]],
   // ------------------------------------------------------------------- gale
   moth: ['TEMPEST', [tornado(4, 5), blind(2)]],
-  mantis: ['BLADE DANCE', [multiblink(3, 9), lifesteal(3)]],
-  hare: ['GALE SPRINT', [haste(5), leap(14, 24), nova(8, 36)]],
-  fox: ['KITE TRICK', [clones(2), blink(14), blind(2)]],
-  falcon: ['STORM DIVE', [blink(18), volley(4, 4)]],
+  mantis: ['BLADE DANCE', [multiblink(3, 9), haste(2)]],
+  hare: ['GALE FORCE', [gale(3, 10), haste(3)]],
+  fox: ['KITE TRICK', [clones(2), blind(2)]],
+  falcon: ['STORM DIVE', [blink(22), shred(3)]],
   dragonfly: ['SKIM STRAFE', [volley(8, 4), haste(3)]],
-  parrot: ['PARROT ENCORE', [reset(), blind(2), haste(3)]],
-  squirrel: ['ACORN CACHE', [minefield(5, 9), haste(3)]],
+  parrot: ['POLLY-MORPH', [polymorph(2.5), haste(2)]],
+  squirrel: ['NUT DOLL', [trapdoll(35), haste(2)]],
   swan: ['STORM WING', [sweep(18, 180), slowfield(2, 70)]],
   // ------------------------------------------------------------------- murk
-  serpent: ['VIPER COIL', [weaken(4), drain(3, 5), stealth(1.5)]],
-  bat: ['DUSK FEAST', [lifesteal(5), blind(2), haste(3)]],
-  shroom: ['SPORE WORLD', [zone(5, 14), weaken(3), slowfield(2, 70)]],
+  serpent: ['VIPER ROT', [rot(6), weaken(3)]],
+  bat: ['DUSK FEAST', [lifesteal(5), blind(2)]],
+  shroom: ['SPORE CLOUD', [miasma(5, 7), weaken(3)]],
   crow: ['MURDER STORM', [crows(4, 3), blind(2)]],
-  lynx: ['SHADOW EXECUTION', [shred(4), blink(16), stealth(1.5)]],
+  lynx: ['NIGHT HUNT', [hunt(6), haste(3)]],
   wraith: ['HAUNTING', [bombers(3, 10), slowfield(2, 70)]],
-  leech: ['BLOOD FEAST', [drain(4, 6), lifesteal(4)]],
-  possum: ['PLAY DEAD', [invuln(1.5), heal(0.15), stealth(1.5)]],
-  raccoon: ['SHADOW HEIST', [swap(10), blind(2), silence(2)]],
-  vulture: ['CARRION CIRCLE', [crows(3, 3), heal(0.12)]],
-  skunk: ['STINK STORM', [weaken(4), minefield(4, 8)]],
+  leech: ['BLOOD FEAST', [drain(4, 6), weaken(3)]],
+  possum: ['REWIND', [timewarp(), invuln(1)]],
+  raccoon: ['SHADOW SWAP', [swap(10), silence(2)]],
+  vulture: ['CARRION CIRCLE', [carrionmark(6, 22), heal(0.08)]],
+  skunk: ['STINK SCARE', [fear(2), weaken(3)]],
   // ------------------------------------------------------------------- glow
-  owl: ['STAR LANCE', [beam(20, 240), blind(2)]],
-  centipede: ['LUMEN CHAIN', [chain(5, 5), slowfield(2, 70)]],
-  angler: ['ABYSS LURE', [blackhole(3, 5), nova(12, 40)]],
-  firefly: ['LANTERN WATCH', [turret(6, 4), blind(2)]],
-  snail: ['STARSHELL CROSS', [cross(12, 70), invuln(1), regen(4, 3)]],
-  worm: ['GLIM SEEKERS', [homing(5, 6), slowfield(2, 70)]],
-  starfish: ['DAWN RENEWAL', [heal(0.2), totem(5, 3), invuln(1)]],
-  axolotl: ['REGROWTH', [regen(6, 4), cleanse(), haste(3)]],
-  peacock: ['PRISM FAN', [barrage(9, 4), blind(2)]],
+  owl: ['SOLAR FLARE', [solarflare(3, 12), haste(2)]],
+  centipede: ['LUMEN NET', [net(2, 12), shred(3)]],
+  angler: ['ABYSS BUBBLE', [bubble(1.8, 16), regen(3, 3)]],
+  firefly: ['LIGHTHOUSE', [lighthouse(4, 7), shield(1)]],
+  snail: ['STAR OVERLOAD', [overload(50, 50), shield(1.2)]],
+  worm: ['GLIM FENCE', [laserfence(4, 10), slowfield(2, 60)]],
+  starfish: ['STARCROSS', [cross(14, 80), heal(0.1)]],
+  axolotl: ['RADIANCE', [radiance(3, 8, 5), cleanse()]],
+  peacock: ['PRISM FAN', [prismfan(5, 7), blind(2)]],
   // ----------------------------------------------------------------- bosses
-  b_lich: ['LANTERN OF SOULS', [bombers(4, 10), blackhole(3, 5), drain(3, 5), stun(0.8, 70)]],
-  b_seraph: ['STARFALL', [meteor(7, 10, 20), ring(14, 5), invuln(1)]],
-  b_hydra: ['HYDRA FURY', [cross(14, 120), spiral(16, 4), regen(5, 4)]],
-  b_queen: ['BRASS BROOD', [spiders(4), pack(3, 4), prison(2.5)]],
-  b_maw: ['DEVOURING MAW', [pull(16, 130), rootfield(1.2, 60), lifesteal(5), nova(12, 40)]],
-  b_cloud: ['STORM KING', [chain(6, 6), tornado(4, 5), blind(2)]],
-  b_wyrm: ['WORLD SERPENT', [spikes(16, 1), quakeline(8, 8), stealth(1.5), shockwaves(3, 7)]],
-  b_kraken: ['KRAKEN DEEP', [sweep(18, 200), slowfield(2.5, 90), turret(6, 4), blind(2)]],
-  b_mammoth: ['MAMMOTH QUAKE', [charge(20, 120), shockwaves(3, 8), giant(5), stun(0.8, 70)]],
-  b_sphinx: ['RIDDLE OF SANDS', [silence(3), clones(3), beam(18, 220), reset()]],
+  b_lich: ['LANTERN DOOM', [doom(40), weaken(4), stun(0.8, 70)]],
+  b_seraph: ['STARFALL', [meteor(7, 10, 20), invuln(1), haste(3)]],
+  b_hydra: ['HYDRA FIREWALL', [firewall(5), regen(5, 4), weaken(3)]],
+  b_queen: ['BRASS SHRINK', [shrink(5), rootfield(1.2, 70), shield(2)]],
+  b_maw: ['SOUL MAW', [soullink(4), rage(4), rootfield(1.2, 60)]],
+  b_cloud: ['STORM FIREWORKS', [fireworks(3, 10), blind(2), slowfield(2.5, 90)]],
+  b_wyrm: ['WORLD NIGHTMARE', [nightmare(5, 5), blind(2.5), stun(0.8, 70)]],
+  b_kraken: ['KRAKEN GLAIVE', [boomerang(16), slowfield(2.5, 90), shred(3)]],
+  b_mammoth: ['MAMMOTH ICICLES', [icicles(9, 14), shield(2.5), stun(0.8, 70)]],
+  b_sphinx: ['RIDDLE WALL', [windwall(4), silence(3), blind(2.5)]],
 };
 
 /** What an enemy deals in a second when it is free to (the plain attacks average 16; not every one lands). */
@@ -355,6 +488,65 @@ function words(f: UltFx): string {
     case 'stealth': return `INVISIBLE FOR ${f.t}S`;
     case 'reset': return 'ITS MOVES READY AT ONCE';
     case 'cleanse': return 'SHAKES OFF EVERY HARMFUL EFFECT';
+    case 'geyser': return `${f.n} GEYSERS UNDER THEM, ${f.dmg} EACH`;
+    case 'tidalwave': return `A TIDAL WAVE ACROSS THE ARENA FOR ${f.dmg}`;
+    case 'iceblock': return `FROZEN IN ICE ${f.t}S`;
+    case 'icicles': return `A ROW OF ${f.n} ICICLES, ${f.dmg} EACH`;
+    case 'avalanche': return `3 ROLLING BOULDERS, ${f.dmg} EACH`;
+    case 'blizzard': return `A BLIZZARD ${f.t}S, ${f.dps} A SECOND`;
+    case 'absorb': return `SOAKS UP SHOTS ${f.t}S, FIRES THEM BACK`;
+    case 'laserfence': return `A LASER FENCE ${f.t}S, ${f.dps} A SECOND`;
+    case 'staticfield': return `A STATIC FIELD ${f.t}S, ${f.dps} A SECOND`;
+    case 'railgun': return `A WALL-BOUNCING RAILGUN FOR ${f.dmg}`;
+    case 'boomerang': return `A GLAIVE OUT AND BACK, ${f.dmg} A PASS`;
+    case 'firebreath': return `FIRE BREATH ${f.t}S`;
+    case 'fireworks': return `${f.n} FIREWORKS OVER THEM, ${f.dmg} A BURST`;
+    case 'phoenix': return `RISES AGAIN IF BEATEN IN ${f.t}S`;
+    case 'solarflare': return `A SOLAR FLARE: BLIND ${f.t}S, ${f.dmg} AND BURNING`;
+    case 'lighthouse': return `3 TURNING BEAMS ${f.t}S, ${f.dmg} A HIT`;
+    case 'mirrorimage': return `${f.n} FIGHTING COPIES, ${f.dmg} A SHOT`;
+    case 'echo': return `EVERY MOVE TWICE FOR ${f.t}S`;
+    case 'timewarp': return 'REWINDS 3 SEC';
+    case 'timestop': return `STOPS TIME FOR THEM ${f.t}S`;
+    case 'doom': return `DOOM: ${f.dmg} IN 3 SEC`;
+    case 'soullink': return `SHARES ITS PAIN WITH THEM ${f.t}S`;
+    case 'fear': return `THEY FLEE IN FEAR ${f.t}S`;
+    case 'polymorph': return `TURNS THEM INTO A SHEEP ${f.t}S`;
+    case 'shrink': return `SHRINKS THEM ${f.t}S`;
+    case 'quicksand': return `A QUICKSAND PIT ${f.t}S`;
+    case 'bunker': return `WALLS ITSELF IN ${f.t}S`;
+    case 'stoneskin': return `ARMOUR THAT SOAKS ${f.amt}`;
+    case 'earthquake': return `AN EARTHQUAKE ${f.t}S`;
+    case 'rockthrow': return `A BOULDER THAT BURSTS INTO ROCKS, ${f.dmg}`;
+    case 'pylons': return `${f.n} PULSING PYLONS ${f.t}S`;
+    case 'windwall': return `A WALL OF WIND ${f.t}S`;
+    case 'gale': return `A GALE BLOWS THEM AWAY ${f.t}S`;
+    case 'liftoff': return `LIFTS THEM UP ${f.t}S, DROPS FOR ${f.dmg}`;
+    case 'blossoms': return `${f.n} HEALING BLOSSOMS, ${f.hps} EACH`;
+    case 'bubble': return `BUBBLES THEM ${f.t}S, POPS FOR ${f.dmg}`;
+    case 'tentacles': return `${f.n} TENTACLES GRAB AT THEM`;
+    case 'riptide': return `3 CURRENTS DRAG THEM ${f.t}S`;
+    case 'counter': return `COUNTERS THE NEXT HIT FOR ${f.dmg}`;
+    case 'execute': return `A FINISHER: ${f.dmg}, TRIPLE IF THEY ARE LOW`;
+    case 'bleed': return `A DEEP WOUND ${f.t}S`;
+    case 'hunt': return `THE HUNT: +40% ON THEM ${f.t}S`;
+    case 'overload': return `OVERLOADS: ${f.dmg} ALL AROUND`;
+    case 'balllightning': return `A BALL OF LIGHTNING ${f.t}S`;
+    case 'rot': return `ROTS THEIR HEALTH ${f.t}S`;
+    case 'miasma': return `A SPREADING POISON CLOUD ${f.t}S`;
+    case 'carrionmark': return `MARKED FOR THE KILL ${f.t}S`;
+    case 'radiance': return `${f.n} PULSES: HEAL ${f.hps}, HURT ${f.dmg}`;
+    case 'prismfan': return `${f.n} CONVERGING BEAMS, ${f.dmg} EACH`;
+    case 'steal': return 'STEALS THEIR BOOSTS';
+    case 'leash': return `LEASHES THEM ${f.t}S`;
+    case 'confuse': return `SCRAMBLES THEIR CONTROLS ${f.t}S`;
+    case 'firewall': return `A WALL OF FIRE ${f.t}S`;
+    case 'nightmare': return `THEIR OWN SHADOW HUNTS THEM ${f.t}S`;
+    case 'net': return `A NET: ${f.dmg} AND HELD ${f.t}S`;
+    case 'trapdoll': return `A DOLL THAT BLOWS UP FOR ${f.dmg}`;
+    case 'duel': return `A DUEL RING ${f.t}S`;
+    case 'banish': return `BANISHES THEM ${f.t}S`;
+    case 'snowball': return `A GROWING SNOWBALL, UP TO ${f.dmg * 2}`;
   }
 }
 
@@ -420,6 +612,65 @@ function fullWords(f: UltFx): string {
     case 'stealth': return `TURNS INVISIBLE FOR ${f.t}S. THE ENEMY CANNOT AIM AT IT, AND ITS NEXT HIT COMES OUT OF NOWHERE.`;
     case 'reset': return 'ALL ITS OWN MOVES ARE READY AGAIN AT ONCE, WITH NO COOLDOWN LEFT.';
     case 'cleanse': return 'SHAKES OFF EVERY HARMFUL EFFECT ON IT: BURNS, POISON, SLOWS, HOLDS AND THE REST.';
+    case 'geyser': return `${f.n} GEYSERS BURST UP ONE AFTER ANOTHER, EACH WHERE THE ENEMY IS STANDING, WITH A RIPPLE A MOMENT BEFORE. EACH ONE THAT CATCHES THEM DEALS ${f.dmg} DAMAGE AND THROWS THEM OFF BALANCE FOR 0.4S.`;
+    case 'tidalwave': return `A TALL WAVE RISES BEHIND IT AND SWEEPS ACROSS THE WHOLE ARENA. IT DEALS ${f.dmg} DAMAGE TO THE ENEMY AND CARRIES THEM A LONG WAY WITH IT. ONLY A WALL STOPS IT.`;
+    case 'iceblock': return `FREEZES THE ENEMY SOLID IN A BLOCK OF ICE FOR ${f.t}S: THEY CANNOT MOVE OR ATTACK. THE FIRST HIT ON THE ICE SHATTERS IT AND DEALS DOUBLE DAMAGE.`;
+    case 'icicles': return `A ROW OF ${f.n} ICICLES HANGS RIGHT ACROSS THE ARENA AT THE ENEMY, MARKED ON THE FLOOR, THEN FALLS ONE AFTER ANOTHER. ONE THAT LANDS ON THEM DEALS ${f.dmg} DAMAGE.`;
+    case 'avalanche': return `3 BOULDERS ROLL ACROSS THE ARENA FROM ITS SIDE, ONE IN EACH OF 3 LANES AROUND THE ENEMY. EACH ONE THAT RUNS INTO THEM DEALS ${f.dmg} DAMAGE AND KNOCKS THEM FLAT.`;
+    case 'blizzard': return `A BLIZZARD FILLS THE ARENA FOR ${f.t}S. THE ENEMY IS SLOWED THE WHOLE TIME, AND HAIL STRIKES THEM FOR ${f.dps} DAMAGE A SECOND WHEREVER THEY GO.`;
+    case 'absorb': return `PUFFS UP FOR ${f.t}S, SOAKING UP EVERY SHOT THAT HITS IT WITHOUT TAKING DAMAGE (SHOTS ALREADY FLYING AT IT ARE SOAKED TOO). WHEN IT ENDS, IT FIRES THEM ALL BACK AT THE ENEMY, ${f.dmg} DAMAGE EACH.`;
+    case 'laserfence': return `PLANTS 2 POSTS, ONE EACH SIDE OF THE ENEMY, WITH A LASER BETWEEN THEM FOR ${f.t}S. TOUCHING THE LASER DEALS ${f.dps} DAMAGE A SECOND.`;
+    case 'staticfield': return `CRACKLES WITH STATIC FOR ${f.t}S: AN ENEMY WITHIN 45PX OF IT TAKES ${f.dps} DAMAGE A SECOND. THE FIELD GOES WHERE IT GOES.`;
+    case 'railgun': return `CHARGES FOR 0.7S WITH A LINE SHOWING ITS AIM, THEN FIRES A RAIL SHOT THAT GOES THROUGH COVER AND BOUNCES OFF THE ARENA WALL ONCE. IT DEALS ${f.dmg} DAMAGE.`;
+    case 'boomerang': return `THROWS A GREAT GLAIVE THAT FLIES OUT PAST THE ENEMY AND CURVES BACK TO IT. IT CAN HIT ON THE WAY OUT AND AGAIN ON THE WAY BACK, ${f.dmg} DAMAGE EACH TIME.`;
+    case 'firebreath': return `BREATHES A CONE OF FIRE FOR ${f.t}S, TURNING TO FOLLOW THE ENEMY. WHILE THEY ARE IN THE FLAMES (UP TO 90PX AWAY) THEY TAKE ${f.dmg} DAMAGE ABOUT 6 TIMES A SECOND.`;
+    case 'fireworks': return `LAUNCHES ${f.n} ROCKETS THAT BURST HIGH OVER THE ENEMY INTO RINGS OF SPARKS, MARKED ON THE FLOOR. EACH BURST THAT CATCHES THEM DEALS ${f.dmg} DAMAGE.`;
+    case 'phoenix': return `FOR ${f.t}S, IF IT WOULD BE BEATEN, IT RISES AGAIN FROM ITS ASHES WITH ${Math.round(f.frac * 100)}% OF ITS HEALTH. ONCE.`;
+    case 'solarflare': return `A BLINDING SOLAR FLARE: THE ENEMY TAKES ${f.dmg} DAMAGE, IS SET ALIGHT, AND IS BLINDED FOR ${f.t}S WHEREVER THEY ARE.`;
+    case 'lighthouse': return `3 BEAMS OF LIGHT TURN AROUND IT LIKE A LIGHTHOUSE FOR ${f.t}S, EACH 70PX LONG. AN ENEMY A BEAM PASSES OVER TAKES ${f.dmg} DAMAGE.`;
+    case 'mirrorimage': return `SPLITS OFF ${f.n} MIRROR COPIES OF ITSELF FOR 5S. THEY STAY NEAR IT AND SHOOT AT THE ENEMY, ${f.dmg} DAMAGE A SHOT, ONE SHOT A SECOND EACH. EACH COPY CAN BE SHOT DOWN.`;
+    case 'echo': return `FOR ${f.t}S, EVERY MOVE IT MAKES IS REPEATED BY ITS ECHO A MOMENT LATER, SO EACH ONE HITS TWICE.`;
+    case 'timewarp': return 'REWINDS ITSELF 3 SEC: IT JUMPS BACK TO WHERE IT WAS, AND IF IT HAD MORE HEALTH THEN, IT GETS THAT HEALTH BACK.';
+    case 'timestop': return `STOPS TIME FOR THE ENEMY FOR ${f.t}S: THEY ARE FROZEN IN PLACE, AND THEIR SHOTS HANG IN THE AIR UNTIL TIME STARTS AGAIN.`;
+    case 'doom': return `MARKS THE ENEMY WITH DOOM. A COUNTDOWN APPEARS OVER THEM, AND IN 3S THEY TAKE ${f.dmg} DAMAGE, WHEREVER THEY ARE.`;
+    case 'soullink': return `LINKS ITS SOUL TO THE ENEMY FOR ${f.t}S: IT TAKES ONLY HALF OF EVERY HIT, AND THE OTHER HALF IS DEALT TO THEM INSTEAD.`;
+    case 'fear': return `TERRIFIES THE ENEMY FOR ${f.t}S: THEY RUN AWAY FROM IT AND CANNOT ATTACK.`;
+    case 'polymorph': return `TURNS THE ENEMY INTO A HARMLESS SHEEP FOR ${f.t}S: THEY CANNOT ATTACK AND MOVE SLOWER.`;
+    case 'shrink': return `SHRINKS THE ENEMY FOR ${f.t}S: THEY BECOME SMALL AND EVERY HIT THEY LAND DEALS 30% LESS DAMAGE.`;
+    case 'quicksand': return `OPENS A PIT OF QUICKSAND UNDER THE ENEMY FOR ${f.t}S. IN IT THEY ARE SLOWED AND TAKE ${f.dps} DAMAGE A SECOND, AND IN ITS MIDDLE THEY SINK AND CANNOT MOVE.`;
+    case 'bunker': return `RAISES A RING OF WALLS AROUND ITSELF FOR ${f.t}S. THEY BLOCK THE ENEMY AND THEIR SHOTS, BUT NOT ITS OWN.`;
+    case 'stoneskin': return `HARDENS INTO ARMOUR THAT SOAKS UP THE NEXT ${f.amt} DAMAGE IT WOULD TAKE.`;
+    case 'earthquake': return `SHAKES THE WHOLE ARENA FOR ${f.t}S. EVERY 0.6S THE GROUND HEAVES UNDER THE ENEMY: ${f.dmg} DAMAGE, AND IT STOPS WHATEVER THEY WERE DOING.`;
+    case 'rockthrow': return `HURLS A GIANT BOULDER OVER COVER AT THE ENEMY, MARKED WHERE IT WILL LAND. IT DEALS ${f.dmg} DAMAGE, THEN BURSTS INTO 6 ROCKS THAT FLY OUTWARD.`;
+    case 'pylons': return `RAISES ${f.n} CRYSTAL PYLONS AROUND THE ENEMY FOR ${f.t}S. EACH ONE PULSES A RING EVERY SECOND, DEALING ${f.dmg} DAMAGE TO THEM IF THEY ARE IN IT. PYLONS CAN BE SHOT DOWN.`;
+    case 'windwall': return `RAISES A WALL OF WIND BETWEEN ITSELF AND THE ENEMY FOR ${f.t}S. EVERY SHOT THE ENEMY FIRES INTO IT IS BLOWN AWAY.`;
+    case 'gale': return `A GALE BLOWS THE ENEMY AWAY FROM IT FOR ${f.t}S. EVERY TIME THE WIND SLAMS THEM INTO A WALL THEY TAKE ${f.dmg} DAMAGE.`;
+    case 'liftoff': return `LIFTS THE ENEMY HIGH INTO THE AIR, HELPLESS, FOR ${f.t}S, THEN DROPS THEM FOR ${f.dmg} DAMAGE.`;
+    case 'blossoms': return `GROWS ${f.n} BLOSSOMS AROUND ITSELF. WALKING OVER ONE HEALS IT ${f.hps} HEALTH.`;
+    case 'bubble': return `TRAPS THE ENEMY IN A BUBBLE FOR ${f.t}S: THEY CANNOT MOVE OR ATTACK, AND THE BUBBLE DRIFTS TOWARD IT. THEN IT POPS FOR ${f.dmg} DAMAGE.`;
+    case 'tentacles': return `${f.n} TENTACLES RISE FROM THE FLOOR AROUND THE ENEMY FOR ${f.t}S. ONE THAT REACHES THEM GRABS, HOLDING THEM IN PLACE AND SQUEEZING FOR ${f.dmg} DAMAGE.`;
+    case 'riptide': return `3 STRONG CURRENTS RUN ACROSS THE ARENA FOR ${f.t}S, ONE THROUGH THE ENEMY AND ONE EACH SIDE. IN ONE, THEY ARE DRAGGED SIDEWAYS AND TAKE ${f.dps} DAMAGE A SECOND.`;
+    case 'counter': return `TAKES A GUARD STANCE FOR ${f.t}S. THE NEXT HIT ON IT IS BLOCKED, AND IT INSTANTLY APPEARS BEHIND THE ATTACKER AND STRIKES BACK FOR ${f.dmg} DAMAGE.`;
+    case 'execute': return `LUNGES AT THE ENEMY FOR ${f.dmg} DAMAGE. IF THEY ARE BELOW 40% HEALTH, IT DEALS TRIPLE: ${f.dmg * 3}.`;
+    case 'bleed': return `OPENS A DEEP WOUND ON THE ENEMY FOR ${f.t}S: THEY LOSE ${f.dps} HEALTH A SECOND, AND TWICE AS MUCH WHILE THEY ARE MOVING.`;
+    case 'hunt': return `MARKS THE ENEMY AS ITS PREY FOR ${f.t}S: EVERY HIT IT LANDS ON THEM DEALS ${pct(HUNT_MUL)}% MORE, AND THEY CANNOT HIDE FROM IT.`;
+    case 'overload': return `OVERLOADS: A RING GROWS AROUND IT FOR 1.2S, THEN IT EXPLODES, DEALING ${f.dmg} DAMAGE TO AN ENEMY WITHIN ${f.r}PX. GET AWAY BEFORE IT GOES.`;
+    case 'balllightning': return `RELEASES A BALL OF LIGHTNING THAT DRIFTS AFTER THE ENEMY FOR ${f.t}S, ZAPPING THEM FOR ${f.dmg} DAMAGE EVERY 0.6S WHILE THEY ARE WITHIN 70PX OF IT.`;
+    case 'rot': return `ROTS THE ENEMY FROM WITHIN FOR ${f.t}S: EVERY SECOND THEY LOSE 5% OF THE HEALTH THEY HAVE LEFT, AND ALL HEALING ON THEM IS HALVED.`;
+    case 'miasma': return `RELEASES A POISON CLOUD THAT SPREADS OUT FROM IT FOR ${f.t}S, GROWING UP TO 70PX WIDE. AN ENEMY INSIDE IT TAKES ${f.dps} DAMAGE A SECOND.`;
+    case 'carrionmark': return `MARKS THE ENEMY FOR ${f.t}S. IF THEIR HEALTH DROPS BELOW 35% WHILE MARKED, IT SWOOPS DOWN ON THEM FOR ${f.dmg * 2} DAMAGE. IF NOT, THE MARK FADES WITH A PECK OF ${Math.round(f.dmg / 2)}.`;
+    case 'radiance': return `GLOWS OUT IN ${f.n} PULSES OF LIGHT, ONE EVERY 0.6S. EACH ONE HEALS IT ${f.hps} HEALTH AND DEALS ${f.dmg} DAMAGE TO AN ENEMY WITHIN 50PX.`;
+    case 'prismfan': return `FANS OUT ${f.n} PRISMS AROUND ITSELF, AND EACH FIRES A BEAM THAT CONVERGES ON THE ENEMY, ONE AFTER ANOTHER. EACH BEAM THAT HITS DEALS ${f.dmg} DAMAGE.`;
+    case 'steal': return `STEALS FROM THE ENEMY: ${f.dmg} DAMAGE, AND EVERY BOOST THEY HAVE (SHIELD, GUARD, POWER-UP, SPEED) IS TAKEN OFF THEM AND GIVEN TO IT.`;
+    case 'leash': return `TIES THE ENEMY TO IT WITH A LEASH FOR ${f.t}S. IF THEY GET MORE THAN 50PX AWAY, THE LEASH YANKS THEM BACK FOR ${f.dmg} DAMAGE.`;
+    case 'confuse': return `SCRAMBLES THE ENEMY FOR ${f.t}S: THEIR MOVEMENT IS FLIPPED, LEFT FOR RIGHT AND UP FOR DOWN.`;
+    case 'firewall': return `RAISES A WALL OF FIRE BETWEEN ITSELF AND THE ENEMY FOR ${f.t}S. IT BLOCKS THE ENEMY AND THEIR SHOTS, AND THE GROUND ALONG IT BURNS ANYONE WHO STANDS THERE.`;
+    case 'nightmare': return `A SHADOW OF THE ENEMY TEARS LOOSE AND HUNTS THEM FOR ${f.t}S, CLAWING FOR ${f.dmg} DAMAGE WHENEVER IT CATCHES THEM.`;
+    case 'net': return `THROWS A WIDE NET AT THE ENEMY. IF IT CATCHES THEM IT DEALS ${f.dmg} DAMAGE AND HOLDS THEM TANGLED IN PLACE FOR ${f.t}S.`;
+    case 'trapdoll': return `LEAVES A DOLL OF ITSELF THAT WALKS AT THE ENEMY. WHEN IT REACHES THEM IT BLOWS UP FOR ${f.dmg} DAMAGE. IT CAN BE SHOT DOWN FIRST.`;
+    case 'duel': return `CALLS A DUEL: A RING OF WALLS CLOSES AROUND THEM BOTH FOR ${f.t}S, AND WHILE IT STANDS EVERY HIT IT LANDS DEALS ${pct(DUEL_MUL)}% MORE.`;
+    case 'banish': return `BANISHES THE ENEMY OUT OF THE FIGHT FOR ${f.t}S: THEY VANISH, CANNOT ACT OR BE HIT, WHILE IT HEALS ${BANISH_HEAL} HEALTH A SECOND. THEY COME BACK WHERE THEY LEFT.`;
+    case 'snowball': return `ROLLS A SNOWBALL STRAIGHT AT THE ENEMY THAT GROWS AS IT GOES. IT DEALS ${f.dmg} DAMAGE, UP TO ${f.dmg * 2} IF IT HAS ROLLED A LONG WAY, AND KNOCKS THEM BACK.`;
   }
 }
 
@@ -431,6 +682,13 @@ const RANGE: Partial<Record<K, number>> = {
   totem: 999, bombers: 220, crows: 220, spiders: 220, clones: 120, prison: 220, stun: 75, slowfield: 75, rootfield: 65, blind: 130,
   silence: 220, weaken: 200, shred: 200, shield: 60, invuln: 50, reflect: 140, thorns: 50, heal: 999, regen: 999, rage: 70,
   haste: 150, lifesteal: 60, giant: 60, stealth: 120, reset: 999, cleanse: 999,
+  geyser: 220, tidalwave: 999, iceblock: 220, icicles: 999, avalanche: 999, blizzard: 999, absorb: 200, laserfence: 220, staticfield: 45,
+  railgun: 260, boomerang: 180, firebreath: 80, fireworks: 220, phoenix: 999, solarflare: 999, lighthouse: 60, mirrorimage: 200,
+  echo: 100, timewarp: 999, timestop: 220, doom: 999, soullink: 120, fear: 120, polymorph: 220, shrink: 220, quicksand: 220,
+  bunker: 120, stoneskin: 120, earthquake: 999, rockthrow: 200, pylons: 220, windwall: 220, gale: 120, liftoff: 220, blossoms: 999,
+  bubble: 220, tentacles: 220, riptide: 999, counter: 80, execute: 200, bleed: 200, hunt: 200, overload: 45, balllightning: 220,
+  rot: 220, miasma: 50, carrionmark: 220, radiance: 50, prismfan: 220, steal: 220, leash: 120, confuse: 220, firewall: 220,
+  nightmare: 220, net: 160, trapdoll: 200, duel: 80, banish: 220, snowball: 220,
 };
 
 /**
@@ -493,6 +751,65 @@ function worth(f: UltFx, hp: number): number {
     case 'stealth': return f.t * ENEMY_DPS * 0.6;
     case 'reset': return 15;
     case 'cleanse': return 5;
+    case 'geyser': return f.n * f.dmg * 0.55 + f.n * 2;
+    case 'tidalwave': return f.dmg * 0.9 + 4;
+    case 'iceblock': return f.t * ENEMY_DPS * 1.6 + 6;
+    case 'icicles': return f.dmg * 1.3;
+    case 'avalanche': return f.dmg * 1.2;
+    case 'blizzard': return f.t * f.dps * 0.9 + f.t * 2;
+    case 'absorb': return f.t * ENEMY_DPS * 0.6 + f.dmg * 1.5;
+    case 'laserfence': return f.t * f.dps * 0.5;
+    case 'staticfield': return f.t * f.dps * 0.6;
+    case 'railgun': return f.dmg * 0.8;
+    case 'boomerang': return f.dmg * 1.3;
+    case 'firebreath': return (f.t / 0.15) * f.dmg * 0.4;
+    case 'fireworks': return f.n * f.dmg * 0.7;
+    case 'phoenix': return f.frac * hp * 0.5;
+    case 'solarflare': return f.t * 6 + f.dmg + f.t * 2;
+    case 'lighthouse': return f.t * f.dmg * 0.8;
+    case 'mirrorimage': return f.n * f.dmg * 2.5;
+    case 'echo': return f.t * ENEMY_DPS * 0.6;
+    case 'timewarp': return 18;
+    case 'timestop': return f.t * ENEMY_DPS * 1.8;
+    case 'doom': return f.dmg * 0.9;
+    case 'soullink': return f.t * ENEMY_DPS * 0.6;
+    case 'fear': return f.t * ENEMY_DPS * 1.1;
+    case 'polymorph': return f.t * ENEMY_DPS * 1.2;
+    case 'shrink': return f.t * ENEMY_DPS * 0.45;
+    case 'quicksand': return f.t * f.dps * 0.5 + f.t * 3;
+    case 'bunker': return f.t * ENEMY_DPS * 0.6;
+    case 'stoneskin': return f.amt * 0.9;
+    case 'earthquake': return (f.t / 0.6) * (f.dmg + 0.15 * ENEMY_DPS);
+    case 'rockthrow': return f.dmg * 1.2;
+    case 'pylons': return f.n * f.t * f.dmg * 0.3;
+    case 'windwall': return f.t * ENEMY_DPS * 0.6;
+    case 'gale': return f.t * f.dmg * 0.4 + f.t * 3;
+    case 'liftoff': return f.t * ENEMY_DPS * 1.5 + f.dmg;
+    case 'blossoms': return f.n * f.hps * 0.7;
+    case 'bubble': return f.t * ENEMY_DPS * 1.4 + f.dmg;
+    case 'tentacles': return f.n * f.t * f.dmg * 0.25;
+    case 'riptide': return f.t * f.dps * 0.6 + f.t * 2;
+    case 'counter': return f.dmg * 0.8 + 8;
+    case 'execute': return f.dmg * 1.6;
+    case 'bleed': return f.t * f.dps * 1.2;
+    case 'hunt': return f.t * ENEMY_DPS * 0.4 + f.t * 2;
+    case 'overload': return f.dmg * 0.75;
+    case 'balllightning': return (f.t / 0.6) * f.dmg * 0.6;
+    case 'rot': return f.t * 6;
+    case 'miasma': return f.t * f.dps * 0.5;
+    case 'carrionmark': return f.dmg * 1.4;
+    case 'radiance': return f.n * (f.dmg * 0.7 + f.hps);
+    case 'prismfan': return f.n * f.dmg * 0.8;
+    case 'steal': return f.dmg + 12;
+    case 'leash': return f.t * ENEMY_DPS * 0.5 + f.dmg * 2;
+    case 'confuse': return f.t * ENEMY_DPS * 0.9;
+    case 'firewall': return f.t * 5;
+    case 'nightmare': return (f.t / 0.6) * f.dmg * 0.5;
+    case 'net': return f.dmg + f.t * ENEMY_DPS * 0.8;
+    case 'trapdoll': return f.dmg * 0.8;
+    case 'duel': return f.t * ENEMY_DPS * 0.6;
+    case 'banish': return f.t * ENEMY_DPS * 0.9 + f.t * BANISH_HEAL;
+    case 'snowball': return f.dmg * 1.1;
   }
 }
 const lim = (v: number, lo: number, hi: number, step: number): number => Number((Math.round(Math.min(hi, Math.max(lo, v)) / step) * step).toFixed(2));
@@ -519,7 +836,26 @@ function scaled(f: UltFx, k: number): UltFx {
     case 'slowfield': case 'blind': case 'weaken': case 'shred': case 'silence': return { ...f, t: lim(f.t * k, 1, 7, 0.1) };
     case 'haste': case 'rage': case 'trail': case 'lifesteal': case 'giant': return { ...f, t: lim(f.t * k, 1.5, 10, 0.1) };
     case 'stealth': return { ...f, t: lim(f.t * k, 1, 4, 0.1) };
-    case 'spiders': case 'clones': case 'reset': case 'cleanse': return f;
+    case 'spiders': case 'clones': return { ...f, n: lim(f.n * k, 2, 8, 1) };
+    case 'reset': case 'cleanse': case 'timewarp': return f;
+    case 'tidalwave': case 'avalanche': case 'railgun': case 'boomerang': case 'doom': case 'rockthrow': case 'execute':
+    case 'carrionmark': case 'steal': case 'trapdoll': case 'snowball': case 'overload':
+      return { ...f, dmg: lim(f.dmg * k, 3, 90, 1) };
+    case 'geyser': case 'icicles': case 'fireworks': case 'solarflare': case 'lighthouse': case 'mirrorimage': case 'earthquake':
+    case 'pylons': case 'gale': case 'liftoff': case 'bubble': case 'tentacles': case 'counter': case 'balllightning': case 'prismfan':
+    case 'leash': case 'nightmare': case 'net': case 'firebreath':
+      return { ...f, dmg: lim(f.dmg * k, 1, 60, 1) };
+    case 'blizzard': case 'laserfence': case 'staticfield': case 'quicksand': case 'riptide': case 'bleed': case 'miasma':
+      return { ...f, dps: lim(f.dps * k, 2, 30, 1) };
+    case 'absorb': return { ...f, dmg: lim(f.dmg * k, 2, 20, 1) };
+    case 'radiance': return { ...f, dmg: lim(f.dmg * k, 2, 30, 1), hps: lim(f.hps * k, 1, 20, 1) };
+    case 'blossoms': return { ...f, hps: lim(f.hps * k, 2, 30, 1) };
+    case 'stoneskin': return { ...f, amt: lim(f.amt * k, 10, 120, 1) };
+    case 'phoenix': return { ...f, frac: lim(f.frac * k, 0.1, 0.7, 0.01) };
+    case 'iceblock': case 'timestop': case 'polymorph': case 'fear': case 'banish': return { ...f, t: lim(f.t * k, 0.6, 3.5, 0.1) };
+    case 'echo': case 'soullink': case 'shrink': case 'bunker': case 'windwall': case 'hunt': case 'confuse': case 'firewall':
+    case 'duel': case 'rot':
+      return { ...f, t: lim(f.t * k, 1.5, 9, 0.1) };
   }
 }
 /** Its total worth, in health. */
@@ -530,7 +866,7 @@ export function ultWorth(fx: UltFx[], hp: number): number {
 // doing some impact as an ultimate compared to other abilities")
 const BUDGET = 56;
 const BOSS_BUDGET = 84;
-const FIXED: ReadonlySet<K> = new Set<K>(['spiders', 'clones', 'reset', 'cleanse']);
+const FIXED: ReadonlySet<K> = new Set<K>(['reset', 'cleanse', 'timewarp']);
 function balance(fx: UltFx[], boss: boolean, hp: number): UltFx[] {
   const want = boss ? BOSS_BUDGET : BUDGET;
   // the fixed parts stay as designed; the rest is scaled, a few rounds so
@@ -554,6 +890,7 @@ function build(): Map<string, Ultimate> {
   const out = new Map<string, Ultimate>();
   const makeups = new Map<string, string>();
   const leads = new Map<K, number>();
+  const owner = new Map<K, string>();
   const clash: string[] = [];
   const all = [...CREATURES.map((c) => ({ id: c.id, hp: c.hp, boss: false })), ...BOSSES.map((b) => ({ id: b.id, hp: b.hp, boss: true }))];
   for (const { id, hp, boss } of all) {
@@ -564,8 +901,15 @@ function build(): Map<string, Ultimate> {
     const makeup = parts.map((p) => p.k).sort().join('+');
     if (makeups.has(makeup)) clash.push(`${id} is made like ${makeups.get(makeup)} (${makeup})`);
     makeups.set(makeup, id);
-    leads.set(parts[0].k, (leads.get(parts[0].k) ?? 0) + 1);
-    if ((leads.get(parts[0].k) ?? 0) > 3) clash.push(`too many lead with ${parts[0].k}`);
+    // ---- AND NOTHING DISTINCTIVE TWICE: its signature is its own, and none
+    // of its effects but the plain supports turns up in anyone else's
+    if (GENERIC.has(parts[0].k)) clash.push(`${id} leads with a plain support (${parts[0].k})`);
+    for (const k of new Set(parts.map((q) => q.k))) {
+      if (GENERIC.has(k)) continue;
+      if (leads.has(k)) clash.push(`${id} and ${owner.get(k)} both use ${k}`);
+      leads.set(k, 1);
+      owner.set(k, id);
+    }
     const fx = balance(parts, boss, hp);
     const desc = plainWords(fx.map(words).join('. ') + '.');
     const steps = fx.map((f) => plainWords(fullWords(f)));
