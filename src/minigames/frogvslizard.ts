@@ -452,7 +452,8 @@ export const frogVsLizard: MinigameModule = {
     charging = false;
     powerFill?.setSize(0, 3);
     refreshHud();
-    banner(turn === 'frog' ? 'YOUR THROW' : 'THE LIZARD THROWS', turn === 'frog' ? PALETTE.tealLight : PALETTE.neon);
+    // (no "YOUR THROW" plate: whose go it is shows on the frog, user 4 Nov)
+    banner('');
     if (turn === 'lizard') lizardTurn();
   },
 
@@ -734,12 +735,13 @@ function buildHud(scene: Phaser.Scene): void {
   windFill = scene.add.rectangle(GAME_W / 2, 28, 0, 4, PALETTE.tealLight).setOrigin(0, 0);
 
   // the keys, small, along the strip's foot
-  const keys = smallText(scene, GAME_W / 2, 42, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-6 ITEM', PALETTE.fog);
+  const keys = smallText(scene, GAME_W / 2, 41, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-6 ITEM', PALETTE.fog);
   keys.setOrigin(0.5, 0);
 
   // what is happening, under the strip, on a plate of its own that fits it
-  bannerPlate = scene.add.rectangle(GAME_W / 2, 58, 10, 11, 0x000000, 0.6).setVisible(false);
-  bannerText = centerText(scene, GAME_W / 2, 56, '', PALETTE.cream);
+  // (small, and sat in the middle of its plate: it used to hang off the top of it)
+  bannerPlate = scene.add.rectangle(GAME_W / 2, 52, 10, 9, 0x000000, 0.55).setVisible(false);
+  bannerText = smallText(scene, GAME_W / 2, 54, '', PALETTE.cream).setOrigin(0.5, 0);
 
   // THE THROW, WHERE YOU ARE LOOKING: the power bar and the thing you are
   // about to throw, over the frog's head rather than off at the screen's edge
@@ -766,7 +768,8 @@ function buildHud(scene: Phaser.Scene): void {
     slots.push({ box, label, icon });
   });
   // what the chosen item does, in a line of its own under the bar
-  descText = centerText(scene, GAME_W / 2, 173, '', PALETTE.cream).setDepth(51);
+  // (the small font: the longer item lines ran out past the bar)
+  descText = smallText(scene, GAME_W / 2, 170, '', PALETTE.cream).setOrigin(0.5, 0).setDepth(51);
 }
 
 function refreshHud(): void {
@@ -847,7 +850,7 @@ function drawItemIcon(g: Phaser.GameObjects.Graphics, id: ItemId, x: number, y: 
 
 function banner(str: string, colour: number = PALETTE.cream): void {
   bannerText?.setText(str).setTint(noYellow(colour)).setAlpha(1);
-  if (bannerPlate && bannerText) bannerPlate.setSize(Math.ceil(bannerText.width) + 10, 11).setPosition(GAME_W / 2 - (Math.ceil(bannerText.width) + 10) / 2, 54).setOrigin(0, 0).setVisible(!!str).setAlpha(1);
+  if (bannerPlate && bannerText) bannerPlate.setSize(Math.ceil(bannerText.width) + 8, 9).setPosition(GAME_W / 2 - (Math.ceil(bannerText.width) + 8) / 2, 52).setOrigin(0, 0).setVisible(!!str).setAlpha(1);
 }
 
 /** A number that floats off whoever it just happened to. */
@@ -943,7 +946,7 @@ function beginTurn(who: Who, first = false): void {
   if (who === 'frog' && sides.frog.stock[sel] <= 0) sel = 'rock';
 
   refreshHud();
-  banner(who === 'frog' ? 'YOUR THROW' : 'THE LIZARD THROWS', who === 'frog' ? PALETTE.tealLight : PALETTE.neon);
+  banner('');
   if (who === 'lizard') lizardTurn();
 }
 

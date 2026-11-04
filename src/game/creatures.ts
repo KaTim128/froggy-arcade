@@ -474,7 +474,10 @@ export function rollPack(rng: () => number = Math.random): string[] {
  *  scatter  singly, anywhere
  *  ring     round the edges, leaving the middle open
  */
-export type CoverShape = 'rock' | 'tuft' | 'tree' | 'ice' | 'reed' | 'pillar' | 'shell' | 'cactus' | 'vent';
+export type CoverShape =
+  | 'rock' | 'tuft' | 'tree' | 'ice' | 'reed' | 'pillar' | 'shell' | 'cactus' | 'vent'
+  // the extras each world scatters beside its main cover (CreatureArena WORLD_EXTRAS)
+  | 'log' | 'bush' | 'table' | 'fence' | 'stump' | 'mushroom' | 'crystal' | 'snowdrift' | 'driftwood' | 'rubble' | 'urn' | 'bones';
 export type CoverPlan = 'line' | 'grove' | 'scatter' | 'ring';
 
 export interface Biome {

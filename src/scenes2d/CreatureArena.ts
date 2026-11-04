@@ -62,6 +62,41 @@ const TIME_LIMIT = 120;
  * the biggest creature to walk round the end of a ridge in plain sight.
  */
 const COVER_LANE = 24;
+
+/**
+ * ---- EVERY WORLD HAS MORE THAN ONE KIND OF COVER (user, 3 Nov), and each
+ * world's are its own: a picnic table and a fence in the fields, stumps and
+ * toadstools in the deep wood, drifts in the pass, driftwood on the shore.
+ * Each entry is a kind and how many pieces long it lies.
+ */
+const WORLD_EXTRAS: Record<string, Array<[CoverShape, number]>> = {
+  caves: [['crystal', 1], ['rubble', 1], ['crystal', 1]],
+  fields: [['bush', 1], ['log', 2], ['table', 2], ['fence', 3]],
+  forests: [['stump', 1], ['log', 2], ['mushroom', 1], ['bush', 1]],
+  frozen: [['snowdrift', 2], ['rock', 1], ['snowdrift', 1]],
+  swamps: [['log', 2], ['stump', 1], ['mushroom', 1]],
+  ruins: [['rubble', 1], ['urn', 1], ['rubble', 2]],
+  shore: [['driftwood', 2], ['rock', 1], ['driftwood', 1]],
+  desert: [['bones', 1], ['rock', 1], ['bones', 2]],
+  void: [['crystal', 1], ['urn', 1], ['crystal', 2]],
+  volcano: [['rock', 1], ['bones', 1], ['rubble', 1]],
+};
+
+/**
+ * What a piece of the place takes to knock down, by what it is; missing
+ * means it does not break (stone, a column, a lava crust).  A wooden fence
+ * goes in a few shots, a tree takes a while.
+ */
+const COVER_HP: Partial<Record<CoverShape, number>> = {
+  tree: 60, tuft: 12, ice: 45, reed: 18, shell: 40, cactus: 30,
+  log: 40, bush: 18, table: 30, fence: 24, stump: 45, mushroom: 16, crystal: 35, snowdrift: 22, driftwood: 30, rubble: 30, urn: 14, bones: 20,
+};
+/** The bits that fly off it when it goes. */
+const DEBRIS: Partial<Record<CoverShape, number[]>> = {
+  tree: [0x2a5a1c, 0x4a3018], tuft: [0x6aa83a], ice: [0xbfe8f6, 0x6ab4d6], reed: [0x5a7a32, 0x8a6a2a], shell: [0xf0dcc4, 0xb08a70], cactus: [0x2f7a3a, 0xe8f0b0],
+  log: [0x6a4424, 0xa07040], bush: [0x3a7a2a, 0x6aa83a], table: [0xa07040, 0x6a4424], fence: [0xc8a070, 0x6a4a2a], stump: [0x6a4424, 0xc89a60], mushroom: [0xd04040, 0xf0e8d8],
+  crystal: [0xb88aff, 0xe8d8ff], snowdrift: [0xffffff, 0xd8ecf4], driftwood: [0xc8b090, 0x8a7458], rubble: [0xb8ae90, 0x6a6048], urn: [0xc07040, 0x7a4020], bones: [0xf0e8d0, 0xc8bca0],
+};
 /** The strip a move's line runs along: under the health bars, over the arena. */
 const INFO_X = 8;
 const INFO_R = GAME_W - 8;
@@ -95,7 +130,7 @@ interface Fighter {
   aura: number;
   /** Held where you stand, by a snare or by roots. */
   root: number;
-  dash: { vx: number; vy: number; t: number; dmg: number; hit: boolean; a: Attack; bounced?: boolean; back?: boolean } | null;
+  dash: { vx: number; vy: number; t: number; dmg: number; hit: boolean; a: Attack; bounced?: boolean; back?: boolean; flee?: boolean } | null;
   /** The specials' own effects on it (see creatures `Mod`): seconds left of each. */
   poison: number;
   marked: number;
@@ -951,12 +986,45 @@ export class CreatureArena extends Phaser.Scene {
       Math.hypot(x - this.me.x, y - this.me.y) > r + 26 &&
       Math.hypot(x - this.foe.x, y - this.foe.y) > r + 26 * this.foe.scale &&
       x > ARENA.x + COVER_LANE && x < ARENA.x + ARENA.w - COVER_LANE && y > ARENA.y + COVER_LANE - 4 && y < ARENA.y + ARENA.h - COVER_LANE + 4 &&
-      (!apart || !this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + 10));
-    const add = (parts: Prop[]): void => {
+      // (wide apart: a creature always fits between two barriers, so melee
+      // can be walked round and not funnelled -- user, 3 Nov)
+      (!apart || !this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + 22));
+    const add = (parts: Prop[], kind: CoverShape = b.prop): void => {
       if (!parts.length) return;
-      this.barriers.push({ kind: b.prop, parts, seed: rnd.between(1, 9999), life: -1, owner: null });
+      // the place's own pieces break when they are the breaking kind
+      const hp = COVER_HP[kind];
+      if (hp) for (const q of parts) Object.assign(q, { hp, maxHp: hp });
+      this.barriers.push({ kind, parts, seed: rnd.between(1, 9999), life: -1, owner: null });
       this.props.push(...parts);
     };
+    // ---- the world's other cover first, so the long pieces (a table, a
+    // fence, a log) always find room; the main cover fills in round them
+    const extras = WORLD_EXTRAS[b.id] ?? [];
+    const want = this.boss ? 2 : 3;
+    let placed = 0;
+    // (each kind gets its tries before the next: the long ones -- a table,
+    // a fence -- would otherwise always lose out to the small ones)
+    const start = rnd.between(0, Math.max(0, extras.length - 1));
+    let slot = 0;
+    for (let guard = 0; placed < want && slot < extras.length * 2 && guard < 240; guard++) {
+      if (guard > 0 && guard % 20 === 0) slot++;
+      const [kind, len] = extras[(start + slot) % extras.length] ?? ['rock', 1];
+      const x = ARENA.x + rnd.between(44, ARENA.w - 44);
+      const y = ARENA.y + rnd.between(COVER_LANE + 2, ARENA.h - COVER_LANE - 2);
+      const r = kind === 'mushroom' || kind === 'urn' ? 5 : 6;
+      // lying along the floor, a piece every 10px
+      const horiz = rnd.frac() < 0.6;
+      const parts: Prop[] = [];
+      for (let k = 0; k < len; k++) {
+        const off = (k - (len - 1) / 2) * 10;
+        parts.push({ x: x + (horiz ? off : 0), y: y + (horiz ? 0 : off * 0.8), r });
+      }
+      if (!parts.every((q) => clear(q.x, q.y, q.r + 4))) continue;
+      add(parts, kind);
+      placed++;
+      slot++;
+      guard = Math.ceil(guard / 20) * 20;
+    }
     const n = this.boss ? 3 : 4;
     switch (b.cover) {
       case 'line': {
@@ -969,9 +1037,10 @@ export class CreatureArena extends Phaser.Scene {
           const gap = rnd.between(-10, 10);
           const parts: Prop[] = [];
           for (let y = ARENA.y + COVER_LANE; y < ARENA.y + ARENA.h - COVER_LANE; y += 7) {
-            if (Math.abs(y - (midY + gap)) < 15) continue;
+            if (Math.abs(y - (midY + gap)) < 20) continue;
             const x = cx + rnd.between(-2, 2);
-            if (!clear(x, y, 5, false)) continue;
+            // (the ridge's own pieces touch; anything else keeps its distance)
+            if (!clear(x, y, 5, true)) continue;
             parts.push({ x, y, r: 5 });
           }
           add(parts);
@@ -979,7 +1048,8 @@ export class CreatureArena extends Phaser.Scene {
         break;
       }
       case 'grove': {
-        // clumps, the way trees grow -- real cover you can stand inside
+        // clumps, the way trees grow -- packed tight, so a clump is one solid
+        // stand to hide behind and never a ring of trunks to get stuck in
         let guard = 0;
         while (this.barriers.length < n && guard++ < 200) {
           const cx = ARENA.x + rnd.between(46, ARENA.w - 46);
@@ -988,7 +1058,7 @@ export class CreatureArena extends Phaser.Scene {
           const parts: Prop[] = [];
           for (let i = 0; i < rnd.between(4, 6); i++) {
             const a = rnd.rotation();
-            const d = rnd.between(0, 11);
+            const d = rnd.between(0, 6);
             const p = { x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d * 0.7, r: rnd.between(5, 7) };
             if (clear(p.x, p.y, p.r, false)) parts.push(p);
           }
@@ -1018,6 +1088,72 @@ export class CreatureArena extends Phaser.Scene {
         break;
       }
     }
+    // ---- NOBODY IS EVER BOXED IN: every open patch of floor joins up with
+    // both starts.  A barrier that closes a pocket off is taken out again.
+    for (let tries = 0; tries < 12; tries++) {
+      const r = this.pathCheck();
+      if (r.ok) break;
+      const near = this.barriers
+        .filter((bar) => bar.life < 0)
+        .map((bar) => ({ bar, d: Math.min(...bar.parts.map((q) => Math.hypot(q.x - r.at!.x, q.y - r.at!.y))) }))
+        .sort((p1, p2) => p1.d - p2.d)[0];
+      if (!near) break;
+      this.barriers = this.barriers.filter((bar) => bar !== near.bar);
+      this.props = this.props.filter((q) => !near.bar.parts.includes(q));
+    }
+  }
+
+  /**
+   * Can a creature get everywhere?  The floor on a 4px grid, each cell open
+   * if the biggest body in the fight fits there; flooded from your start.
+   * ok when the other start is reached and no open cell is left cut off;
+   * otherwise `at` is one of the cut-off cells.
+   */
+  pathCheck(): { ok: boolean; reached: boolean; pockets: number; at: { x: number; y: number } | null } {
+    const C = 4;
+    const cols = Math.floor(ARENA.w / C);
+    const rows = Math.floor(ARENA.h / C);
+    const body = BODY_R * Math.max(this.me.scale, this.foe.scale) * 0.85;
+    const open = new Uint8Array(cols * rows);
+    const cx = (i: number): number => ARENA.x + (i + 0.5) * C;
+    const cy = (j: number): number => ARENA.y + (j + 0.5) * C;
+    for (let j = 0; j < rows; j++)
+      for (let i = 0; i < cols; i++) {
+        const x = cx(i);
+        const y = cy(j);
+        if (x < ARENA.x + body || x > ARENA.x + ARENA.w - body || y < ARENA.y + body || y > ARENA.y + ARENA.h - body) continue;
+        if (this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + body)) continue;
+        open[j * cols + i] = 1;
+      }
+    const cellOf = (x: number, y: number): number => Phaser.Math.Clamp(Math.floor((y - ARENA.y) / C), 0, rows - 1) * cols + Phaser.Math.Clamp(Math.floor((x - ARENA.x) / C), 0, cols - 1);
+    const seen = new Uint8Array(cols * rows);
+    const start = cellOf(this.me.x, this.me.y);
+    const q: number[] = [start];
+    seen[start] = 1;
+    while (q.length) {
+      const c = q.pop()!;
+      const i = c % cols;
+      const j = (c - i) / cols;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+        const n = nj * cols + ni;
+        if (seen[n] || !open[n]) continue;
+        seen[n] = 1;
+        q.push(n);
+      }
+    }
+    const reached = seen[cellOf(this.foe.x, this.foe.y)] === 1;
+    let pockets = 0;
+    let at: { x: number; y: number } | null = null;
+    for (let c = 0; c < open.length; c++)
+      if (open[c] && !seen[c]) {
+        pockets++;
+        if (!at) at = { x: cx(c % cols), y: cy(Math.floor(c / cols)) };
+      }
+    if (!reached && !at) at = { x: this.foe.x, y: this.foe.y };
+    return { ok: reached && pockets === 0, reached, pockets, at };
   }
 
   /** A shot into a breakable piece of wall: it cracks, and at nothing it falls. */
@@ -1028,11 +1164,20 @@ export class CreatureArena extends Phaser.Scene {
       this.repaintCover();
       return;
     }
+    const bar = this.barriers.find((b) => b.parts.includes(p));
     this.props = this.props.filter((q) => q !== p);
     for (const b of this.barriers) b.parts = b.parts.filter((q) => q !== p);
     this.barriers = this.barriers.filter((b) => b.parts.length || b.max === undefined);
     this.fx.push({ kind: 'boom', x: p.x, y: p.y, r: 10, t: 0, life: 0.3, col: 0xd8d0c0 });
-    audio.sfx('item_thud', 0.4);
+    // it comes apart in its own colours
+    const cols = (bar && DEBRIS[bar.kind]) || [0xd8d0c0];
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5;
+      const d = p.r + 4 + Math.random() * 8;
+      const bit = this.add.rectangle(p.x, p.y, 2, 2, cols[i % cols.length]).setDepth(30);
+      this.tweens.add({ targets: bit, x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d * 0.7, alpha: 0, angle: 180, duration: 420 + Math.random() * 260, ease: 'Quad.easeOut', onComplete: () => bit.destroy() });
+    }
+    audio.sfx('item_thud', 0.55);
     this.repaintCover();
   }
 
@@ -1064,7 +1209,11 @@ export class CreatureArena extends Phaser.Scene {
       const fade = bar.max !== undefined ? Math.max(0, Math.min(1, bar.life / 1.2)) : 1;
       g.setAlpha(fade);
       for (const p of bar.parts) {
-        this.paintProp(g, p, bar);
+        // worn down: drawn a size smaller at each stage (it still blocks at
+        // its full size until it goes)
+        const k = p.hp !== undefined && p.maxHp ? p.hp / p.maxHp : 1;
+        const stage = k > 0.66 ? 1 : k > 0.33 ? 0.88 : 0.76;
+        this.paintProp(g, stage < 1 ? { ...p, r: p.r * stage } : p, bar);
         // cracks across a piece that has been shot, more the worse it is
         if (p.hp !== undefined && p.maxHp && p.hp < p.maxHp) {
           const dmg = 1 - p.hp / p.maxHp;
@@ -1226,6 +1375,92 @@ export class CreatureArena extends Phaser.Scene {
         g.lineBetween(p.x, p.y - p.r * 0.2, p.x + p.r * 0.6, p.y + p.r * 0.4);
         g.lineBetween(p.x, p.y - p.r * 0.2, p.x + p.r * 0.2, p.y - p.r * 0.8);
         g.fillStyle(0xffd060, 0.9).fillCircle(p.x, p.y - p.r * 0.2, 1.2);
+        break;
+      case 'log':
+      case 'driftwood': {
+        // a length of trunk on its side, bark and a cut end
+        const drift = kind === 'driftwood';
+        g.fillStyle(drift ? 0x8a7458 : 0x4a2e16, 1).fillRoundedRect(p.x - p.r - 1, p.y - p.r * 0.6, p.r * 2 + 2, p.r * 1.2, 2);
+        g.fillStyle(drift ? 0xc8b090 : 0x6a4424, 1).fillRoundedRect(p.x - p.r, p.y - p.r * 0.55, p.r * 2, p.r * 0.8, 2);
+        g.lineStyle(1, drift ? 0x9a8468 : 0x3a2412, 0.8);
+        for (let i = -1; i <= 1; i++) g.lineBetween(p.x - p.r * 0.8, p.y + i * 1.6, p.x + p.r * 0.8, p.y + i * 1.6 + 0.5);
+        g.fillStyle(drift ? 0xe0d0b0 : 0xc89a60, 1).fillEllipse(p.x + p.r, p.y, 3, p.r * 1.1);
+        break;
+      }
+      case 'stump':
+        g.fillStyle(0x4a2e16, 1).fillRect(p.x - p.r * 0.8, p.y - p.r * 0.4, p.r * 1.6, p.r * 1.1);
+        g.fillStyle(0x6a4424, 1).fillRect(p.x - p.r * 0.8 + 1, p.y - p.r * 0.4, p.r * 0.6, p.r * 1.1);
+        g.fillStyle(0xc89a60, 1).fillEllipse(p.x, p.y - p.r * 0.4, p.r * 1.6, p.r * 0.8);
+        g.lineStyle(1, 0x8a6030, 0.9).strokeEllipse(p.x, p.y - p.r * 0.4, p.r * 0.9, p.r * 0.45);
+        g.fillStyle(0x4a2e16, 1).fillRect(p.x - p.r, p.y + p.r * 0.6, 3, 1.5).fillRect(p.x + p.r - 3, p.y + p.r * 0.6, 3, 1.5);
+        break;
+      case 'bush':
+        g.fillStyle(0x1e4a16, 1);
+        this.blob(g, p.x, p.y, p.r * 1.15, seed, 0.75, 10);
+        g.fillStyle(0x3a7a2a, 1);
+        this.blob(g, p.x - 0.5, p.y - 1, p.r * 0.95, seed + 3, 0.75, 10);
+        g.fillStyle(0x6aa83a, 0.9);
+        this.blob(g, p.x - p.r * 0.35, p.y - p.r * 0.45, p.r * 0.45, seed + 6, 0.8, 7);
+        g.fillStyle(0xd84a4a, 1).fillCircle(p.x + p.r * 0.4, p.y - 1, 0.9).fillCircle(p.x - p.r * 0.1, p.y + 1.5, 0.9);
+        break;
+      case 'table':
+        // a picnic table: the top, its planks and the bench in front
+        g.fillStyle(0x6a4424, 1).fillRect(p.x - p.r - 1, p.y - p.r * 0.7, p.r * 2 + 2, p.r * 0.9);
+        g.fillStyle(0xa07040, 1).fillRect(p.x - p.r, p.y - p.r * 0.7, p.r * 2, p.r * 0.7);
+        g.lineStyle(1, 0x6a4424, 1).lineBetween(p.x - p.r, p.y - p.r * 0.35, p.x + p.r, p.y - p.r * 0.35);
+        g.fillStyle(0x6a4424, 1).fillRect(p.x - p.r + 1, p.y + p.r * 0.2, 2, p.r * 0.6).fillRect(p.x + p.r - 3, p.y + p.r * 0.2, 2, p.r * 0.6);
+        g.fillStyle(0x8a5a30, 1).fillRect(p.x - p.r, p.y + p.r * 0.45, p.r * 2, 2);
+        break;
+      case 'fence':
+        g.fillStyle(0x6a4a2a, 1).fillRect(p.x - p.r - 1, p.y - p.r * 0.5, p.r * 2 + 2, 2).fillRect(p.x - p.r - 1, p.y + p.r * 0.2, p.r * 2 + 2, 2);
+        for (const dx of [-p.r * 0.6, p.r * 0.6]) {
+          g.fillStyle(0xc8a070, 1).fillRect(p.x + dx - 1.5, p.y - p.r * 1.1, 3, p.r * 1.9);
+          g.fillStyle(0xe0c090, 1).fillTriangle(p.x + dx - 1.5, p.y - p.r * 1.1, p.x + dx + 1.5, p.y - p.r * 1.1, p.x + dx, p.y - p.r * 1.4);
+        }
+        break;
+      case 'mushroom':
+        g.fillStyle(0xf0e8d8, 1).fillRect(p.x - 1.5, p.y - p.r * 0.3, 3, p.r * 1.1);
+        g.fillStyle(0xa02828, 1).fillEllipse(p.x, p.y - p.r * 0.4, p.r * 2.2, p.r * 1.3);
+        g.fillStyle(0xd04040, 1).fillEllipse(p.x - 0.5, p.y - p.r * 0.55, p.r * 1.9, p.r * 1);
+        g.fillStyle(0xffffff, 1).fillCircle(p.x - p.r * 0.4, p.y - p.r * 0.7, 1).fillCircle(p.x + p.r * 0.35, p.y - p.r * 0.5, 0.9).fillCircle(p.x, p.y - p.r * 0.85, 0.8);
+        break;
+      case 'crystal': {
+        const c1 = this.biome.id === 'void' ? 0x6a3ab8 : 0x3a6a9a;
+        const c2 = this.biome.id === 'void' ? 0xb88aff : 0x8ac8f0;
+        g.fillStyle(c1, 1).fillTriangle(p.x - p.r, p.y + p.r * 0.7, p.x - p.r * 0.2, p.y + p.r * 0.7, p.x - p.r * 0.7, p.y - p.r * 1.2);
+        g.fillStyle(c2, 1).fillTriangle(p.x - p.r * 0.5, p.y + p.r * 0.8, p.x + p.r * 0.5, p.y + p.r * 0.8, p.x, p.y - p.r * 1.7);
+        g.fillStyle(c1, 1).fillTriangle(p.x + p.r * 0.2, p.y + p.r * 0.7, p.x + p.r, p.y + p.r * 0.7, p.x + p.r * 0.7, p.y - p.r * 0.8);
+        g.fillStyle(0xffffff, 0.8).fillTriangle(p.x - p.r * 0.1, p.y + p.r * 0.3, p.x + p.r * 0.1, p.y + p.r * 0.3, p.x, p.y - p.r * 1.3);
+        break;
+      }
+      case 'snowdrift':
+        g.fillStyle(0xa0c4d4, 1);
+        this.blob(g, p.x, p.y + 1, p.r * 1.2, seed, 0.6, 9);
+        g.fillStyle(0xf4fbff, 1);
+        this.blob(g, p.x - 0.5, p.y - 0.5, p.r * 1.05, seed + 2, 0.55, 9);
+        g.fillStyle(0xffffff, 1).fillEllipse(p.x - p.r * 0.3, p.y - p.r * 0.35, p.r * 0.9, p.r * 0.3);
+        break;
+      case 'rubble':
+        for (let i = 0; i < 4; i++) {
+          const ox = [-0.5, 0.45, -0.1, 0.3][i] * p.r;
+          const oy = [0.25, 0.3, -0.35, -0.1][i] * p.r;
+          g.fillStyle(0x6a6048, 1).fillRect(p.x + ox - p.r * 0.42, p.y + oy - p.r * 0.3, p.r * 0.84, p.r * 0.6);
+          g.fillStyle(0xb8ae90, 1).fillRect(p.x + ox - p.r * 0.42, p.y + oy - p.r * 0.3, p.r * 0.84, p.r * 0.35);
+        }
+        break;
+      case 'urn':
+        g.fillStyle(0x7a4020, 1).fillEllipse(p.x, p.y, p.r * 1.7, p.r * 1.9);
+        g.fillStyle(0xc07040, 1).fillEllipse(p.x - 0.5, p.y - 0.5, p.r * 1.4, p.r * 1.6);
+        g.fillStyle(0x7a4020, 1).fillRect(p.x - p.r * 0.45, p.y - p.r * 1.1, p.r * 0.9, 2);
+        g.lineStyle(1, 0xf0c060, 0.9).lineBetween(p.x - p.r * 0.7, p.y, p.x + p.r * 0.7, p.y);
+        break;
+      case 'bones':
+        // a big old skull and a rib or two, half in the sand
+        g.fillStyle(0xc8bca0, 1).fillEllipse(p.x, p.y, p.r * 1.8, p.r * 1.3);
+        g.fillStyle(0xf0e8d0, 1).fillEllipse(p.x - 0.5, p.y - 0.5, p.r * 1.5, p.r * 1.05);
+        g.fillStyle(0x3a2a1a, 1).fillCircle(p.x - p.r * 0.35, p.y - p.r * 0.1, 1.3).fillCircle(p.x + p.r * 0.3, p.y - p.r * 0.1, 1.3);
+        g.lineStyle(1, 0xf0e8d0, 1);
+        for (const dx of [-p.r * 0.9, p.r * 0.9]) g.lineBetween(p.x + dx, p.y + p.r * 0.6, p.x + dx * 1.2, p.y - p.r * 0.4);
         break;
     }
     if (tint) {
@@ -1524,15 +1759,36 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('arcane_blast', 0.4);
         break;
       }
-      case 'dash':
-        f.dash = { vx: ux * a.reach * mired, vy: uy * a.reach * mired, t: 0.28, dmg, hit: false, a };
-        if (a.sp === 'thunder_charge') f.st.unstop = 0.3;
-        if (a.sp === 'hit_and_run' || a.sp === 'sucker_punch') {
-          f.ref.retX = f.x;
-          f.ref.retY = f.y;
+      case 'dash': {
+        // ---- TOWARD THEM IS A CHARGE, AWAY IS A GETAWAY (user, 3 Nov).
+        // No aiming: the way it is already moving decides.  Walking away
+        // from the other one, the dash carries it off that way and hurts
+        // nobody; anything else is a charge straight at them.  The AI's
+        // dashes follow the same rule off its own movement.
+        const o = this.other(f);
+        const tx = o.x - f.x;
+        const ty = o.y - f.y;
+        const tl = Math.hypot(tx, ty) || 1;
+        const mvx = f.ref.vx ?? 0;
+        const mvy = f.ref.vy ?? 0;
+        const mv = Math.hypot(mvx, mvy);
+        const flee = mv > 4 && (mvx * tx + mvy * ty) / (mv * tl) < -0.25;
+        const dx = flee ? mvx / mv : tx / tl;
+        const dy = flee ? mvy / mv : ty / tl;
+        f.face = dx >= 0 ? 1 : -1;
+        f.dash = { vx: dx * a.reach * mired, vy: dy * a.reach * mired, t: 0.28, dmg: flee ? 0 : dmg, hit: flee, a, flee };
+        if (flee) {
+          this.floatNum(f, 0, 0xcfe8ff, 'DODGE ');
+        } else {
+          if (a.sp === 'thunder_charge') f.st.unstop = 0.3;
+          if (a.sp === 'hit_and_run' || a.sp === 'sucker_punch') {
+            f.ref.retX = f.x;
+            f.ref.retY = f.y;
+          }
         }
         audio.sfx('throw_whoosh', 0.4);
         break;
+      }
       case 'beam': {
         const len = a.reach * f.scale;
         const x2 = f.x + ux * len;
@@ -3030,7 +3286,7 @@ export class CreatureArena extends Phaser.Scene {
       }
       this.step(f, f.dash.vx, f.dash.vy, dt);
       // a burning trail behind a lingering charge
-      if (f.dash.a.mod === 'linger' && Math.random() < dt * 14) this.pool(f, f.x, f.y, 9);
+      if (f.dash.a.mod === 'linger' && !f.dash.flee && Math.random() < dt * 14) this.pool(f, f.x, f.y, 9);
       const o = this.other(f);
       if (!f.dash.hit && Math.hypot(o.x - f.x, o.y - f.y) < 7 * (o.scale + f.scale)) {
         f.dash.hit = true;
@@ -3038,7 +3294,7 @@ export class CreatureArena extends Phaser.Scene {
       }
       if (f.dash && f.dash.t <= 0) {
         // an echoing charge: a shockwave where it stopped
-        if (f.dash.a.mod === 'echo') this.burst(f, f.x, f.y, 24, Math.round(f.dash.dmg * 0.5), f.dash.a, 'ring', false);
+        if (f.dash.a.mod === 'echo' && !f.dash.flee) this.burst(f, f.x, f.y, 24, Math.round(f.dash.dmg * 0.5), f.dash.a, 'ring', false);
         // hit and run: back where it came from
         const back = f.dash.back && f.ref.retX !== undefined;
         const a = f.dash.a;
@@ -3190,6 +3446,13 @@ export class CreatureArena extends Phaser.Scene {
       : a.kind === 'arc' ? a.reach * 0.75
       : a.kind === 'mine' ? 90
       : a.reach * 0.9;
+    // a dash on the way out: hurt, crowded, and already backing off -- the
+    // same getaway the player gets by dashing while walking away
+    if (a.kind === 'dash' && f.hp < f.max * 0.35 && dist < 55) {
+      const o = this.other(f);
+      const away = (f.ref.vx ?? 0) * (o.x - f.x) + (f.ref.vy ?? 0) * (o.y - f.y) < 0;
+      if (away) return true;
+    }
     switch (use) {
       case 'poke':
         return clear && dist < range;
