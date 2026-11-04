@@ -988,7 +988,7 @@ export class CreatureArena extends Phaser.Scene {
       x > ARENA.x + COVER_LANE && x < ARENA.x + ARENA.w - COVER_LANE && y > ARENA.y + COVER_LANE - 4 && y < ARENA.y + ARENA.h - COVER_LANE + 4 &&
       // (wide apart: a creature always fits between two barriers, so melee
       // can be walked round and not funnelled -- user, 3 Nov)
-      (!apart || !this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + 22));
+      (!apart || !this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + 19));
     const add = (parts: Prop[], kind: CoverShape = b.prop): void => {
       if (!parts.length) return;
       // the place's own pieces break when they are the breaking kind
@@ -1000,8 +1000,23 @@ export class CreatureArena extends Phaser.Scene {
     // ---- the world's other cover first, so the long pieces (a table, a
     // fence, a log) always find room; the main cover fills in round them
     const extras = WORLD_EXTRAS[b.id] ?? [];
-    const want = this.boss ? 2 : 3;
+    // (more of it than there was -- user, 4 Nov: "place more barriers")
+    const want = this.boss ? 3 : 4;
     let placed = 0;
+    // ---- THE LANE BETWEEN THE TWO STARTS IS NEVER BARE: a piece or two
+    // across the middle of it first, so a straight run at each other always
+    // has something to go round or duck behind
+    for (const k of [-1, 1]) {
+      for (let tries = 0; tries < 30; tries++) {
+        const x = ARENA.x + ARENA.w / 2 + k * rnd.between(12, 44);
+        const y = midY + rnd.between(-14, 14);
+        const [kind] = extras.length ? extras[rnd.between(0, extras.length - 1)] : [b.prop];
+        const r = kind === 'mushroom' || kind === 'urn' ? 5 : 6;
+        if (!clear(x, y, r + 4)) continue;
+        add([{ x, y, r }], kind);
+        break;
+      }
+    }
     // (each kind gets its tries before the next: the long ones -- a table,
     // a fence -- would otherwise always lose out to the small ones)
     const start = rnd.between(0, Math.max(0, extras.length - 1));
@@ -1025,7 +1040,10 @@ export class CreatureArena extends Phaser.Scene {
       slot++;
       guard = Math.ceil(guard / 20) * 20;
     }
-    const n = this.boss ? 3 : 4;
+    const n = this.boss ? 4 : 6;
+    // (the main cover counts on its own: the extras above are not its share)
+    const base0 = this.barriers.length;
+    const mine = (): number => this.barriers.length - base0;
     switch (b.cover) {
       case 'line': {
         // two ridges across the middle of the floor, each with a gap you can
@@ -1051,7 +1069,7 @@ export class CreatureArena extends Phaser.Scene {
         // clumps, the way trees grow -- packed tight, so a clump is one solid
         // stand to hide behind and never a ring of trunks to get stuck in
         let guard = 0;
-        while (this.barriers.length < n && guard++ < 200) {
+        while (mine() < n && guard++ < 300) {
           const cx = ARENA.x + rnd.between(46, ARENA.w - 46);
           const cy = ARENA.y + rnd.between(COVER_LANE + 4, ARENA.h - COVER_LANE - 4);
           if (!clear(cx, cy, 16)) continue;
@@ -1079,7 +1097,7 @@ export class CreatureArena extends Phaser.Scene {
       }
       default: {
         let guard = 0;
-        while (this.barriers.length < n + 2 && guard++ < 200) {
+        while (mine() < n + 2 && guard++ < 300) {
           const x = ARENA.x + rnd.between(50, ARENA.w - 50);
           const y = ARENA.y + rnd.between(COVER_LANE, ARENA.h - COVER_LANE);
           if (!clear(x, y, 9)) continue;
