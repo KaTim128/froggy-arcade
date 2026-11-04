@@ -664,16 +664,16 @@ export abstract class WalkRoom extends Phaser.Scene {
    * to its base (user, 4 Nov).  Chairs are what the pose is drawn for: 0.
    */
   protected seatLift(def: FurnitureDef): number {
-    return def.cat === 'sofa' ? Math.max(0, Math.round(def.h * 0.42) - 2) : 0;
+    return def.cat === 'sofa' ? Math.max(0, Math.round(def.h * 0.42) - 5) : 0;
   }
 
   /**
-   * How you sit on it: side-on, the thigh forward to the knee and the shin
-   * down -- on a sofa raised to its cushion (`seatLift`), the lap drawn in
-   * front of the body so the leg joins it (user, 4 Nov).
+   * How you sit on it: a sofa you sit back on facing out into the room --
+   * the lap across, both shins straight down to the floor (the user's pick,
+   * 4 Nov) -- a chair side-on.
    */
-  protected seatKindOf(_def: FurnitureDef): SeatKind {
-    return 'chair';
+  protected seatKindOf(def: FurnitureDef): SeatKind {
+    return def.cat === 'sofa' ? 'front' : 'chair';
   }
 
   /**
