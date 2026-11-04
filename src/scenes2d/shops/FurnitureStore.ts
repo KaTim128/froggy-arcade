@@ -254,7 +254,7 @@ export class FurnitureStore extends WalkRoom {
     const verb = useOf(def);
     if (verb === 'sit') {
       // on the seat, facing out into the shop
-      this.sitOn(piece.x, piece.y + 1, 'chair', 1);
+      this.sitOn(piece.x, piece.y + 1, 'chair', 1, this.seatLift(def));
       this.say(`YOU TRY THE ${def.name}. COMFY. MOVE TO GET UP.`);
     } else if (verb === 'lie') {
       // laid out along it, head on the (left-hand) pillow, eyes shut, breathing

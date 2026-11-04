@@ -395,7 +395,7 @@ export class Condo extends WalkRoom {
     const f = piece.def;
     switch (useOf(f)) {
       case 'sit':
-        this.sitOn(piece.x, piece.y + 1, 'chair', piece.flip ? -1 : 1);
+        this.sitOn(piece.x, piece.y + 1, 'chair', piece.flip ? -1 : 1, this.seatLift(f));
         this.say('YOU SIT DOWN. MOVE TO GET UP.');
         break;
       case 'lie':
@@ -660,7 +660,7 @@ export class Condo extends WalkRoom {
     const uid = store.get().life.placed[store.get().life.placed.length - 1]?.uid ?? null;
     this.placing = uid;
     this.picked = uid;
-    this.say(`${f.name}: DRAG IT WHERE YOU WANT IT, TURN IT ROUND, THEN PUT IT DOWN.`);
+    // (no line here: over the TURN / PUT IT DOWN / CANCEL row it hid them -- user, 4 Nov)
     this.buildButtons();
     this.placePieces();
   }

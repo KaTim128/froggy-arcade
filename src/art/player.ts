@@ -380,7 +380,7 @@ export class Player {
   private dir = 1;
   private blinkT = 2.5;
   /** Sitting: how, and the folded legs (and the can) drawn for it. */
-  private seat: { kind: SeatKind; can: boolean } | null = null;
+  private seat: { kind: SeatKind; can: boolean; lift: number } | null = null;
   private lap: Phaser.GameObjects.Container | null = null;
   /** What the lap holds out in front of the body (the can). */
   private lapFront: Phaser.GameObjects.Container | null = null;
@@ -482,7 +482,8 @@ export class Player {
     // seated: the body comes down onto the seat, the legs are folded
     // forward and drawn separately (see `sit`)
     // (facing out of a chair you sit taller: the thighs come towards you, not down)
-    const drop = this.seat ? (this.seat.kind === 'floor' ? 8 : this.seat.kind === 'front' ? 2 : 5) : 0;
+    // (`lift`: a seat higher than a chair's -- a sofa's deep cushion -- sits the body up on it)
+    const drop = this.seat ? (this.seat.kind === 'floor' ? 8 : this.seat.kind === 'front' ? 2 : 5) - this.seat.lift : 0;
     for (const [name, p] of this.parts) {
       const [ox, oy] = off[name];
       const leg = name === 'backLeg' || name === 'frontLeg';
@@ -502,9 +503,9 @@ export class Player {
    * With `can`, a tin held out in the front hand.  Any walk or `stand` gets
    * back up.
    */
-  sit(kind: SeatKind, opts: { can?: boolean; facing?: number } = {}): void {
+  sit(kind: SeatKind, opts: { can?: boolean; facing?: number; lift?: number } = {}): void {
     if (opts.facing) this.dir = opts.facing > 0 ? 1 : -1;
-    this.seat = { kind, can: !!opts.can };
+    this.seat = { kind, can: !!opts.can, lift: Math.max(0, Math.round(opts.lift ?? 0)) };
     this.bobT = 0;
     this.pose(0, 0);
   }
@@ -518,10 +519,15 @@ export class Player {
     return this.seat?.kind ?? null;
   }
 
+  /** How far up a high seat sits them (see `sit`). */
+  get seatRaise(): number {
+    return this.seat?.lift ?? 0;
+  }
+
   private drawLap(): void {
     const s = this.seat;
     if (!s) return;
-    const key = `${s.kind}${s.can}${this.dir}`;
+    const key = `${s.kind}${s.can}${this.dir}${s.lift}`;
     if (this.lap && this.lapKey === key) return;
     this.lapKey = key;
     const scene = this.sprite.scene;
@@ -561,10 +567,12 @@ export class Player {
       lap.add(scene.add.rectangle(d > 0 ? -4 : -1, -1, 1, 1, c(this.colOf('k'))).setOrigin(0, 0));
       lap.add(scene.add.rectangle(d > 0 ? 1 : 3, -1, 1, 1, c(this.colOf('k'))).setOrigin(0, 0));
     } else {
-      // knees forward at seat height, shins straight down
-      block(-1, -9, 8, 3, this.colOf('J'));
-      lap.add(scene.add.rectangle(d > 0 ? -1 : -7, -9, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
-      block(5, -6, 3, 5, this.colOf('j'));
+      // knees forward at seat height, shins straight down (to the floor,
+      // however high the seat)
+      const up = s.lift;
+      block(-1, -9 - up, 8, 3, this.colOf('J'));
+      lap.add(scene.add.rectangle(d > 0 ? -1 : -7, -9 - up, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
+      block(5, -6 - up, 3, 5 + up, this.colOf('j'));
       block(5, -1, 4, 1, this.colOf('K'));
     }
     // (the legs go behind the body, as the old man's do -- the can alone in front of it)

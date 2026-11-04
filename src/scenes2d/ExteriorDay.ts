@@ -579,7 +579,9 @@ export class ExteriorDay extends Phaser.Scene {
     this.errand = null;
     this.prompt.setVisible(false);
     this.promptPlate.setVisible(false);
-    this.player.setPosition(BEG_X - 3, BEG_Y);
+    // (laid out along the card, the head on it too: at BEG_X - 3 the head
+    // hung a dozen pixels off its left end, on the bare slabs)
+    this.player.setPosition(BEG_X + 13, BEG_Y);
     this.player.lie(1);
     this.cup?.setVisible(false);
     // (over the mat, clear of the sleeper)
