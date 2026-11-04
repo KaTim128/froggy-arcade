@@ -42,7 +42,7 @@ import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, retreat, setActive, startLadder } from '../game/creatureClash';
+import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
 type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick';
 const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls', 'minis'];
@@ -377,7 +377,7 @@ export class CreatureHub extends Phaser.Scene {
    * Its level is in a chip on the picture; with `xp` (one you own), the
    * experience towards the next level as a bar, or MAX at the top level.
    */
-  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number, tall = false): void {
+  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number, tall = false, uid?: number): void {
     const L = this.layer;
     const el = ELEMENTS[c.element];
     const artH = big ? 36 : 26;
@@ -429,7 +429,7 @@ export class CreatureHub extends Phaser.Scene {
     const glow = this.add.rectangle(x + 2, y + 2, w - 4, artH + 21, 0xffffff, 0).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold, 0);
     hit.on('pointerover', () => (glow.setFillStyle(0xffffff, 0.06), glow.setStrokeStyle(1, PALETTE.gold, 1), audio.sfx('ui_hover')));
     hit.on('pointerout', () => (glow.setFillStyle(0xffffff, 0), glow.setStrokeStyle(1, PALETTE.gold, 0)));
-    hit.on('pointerdown', () => (audio.sfx('ui_blip'), this.showStats(c, xp)));
+    hit.on('pointerdown', () => (audio.sfx('ui_blip'), this.showStats(c, xp, uid)));
     L.add(glow);
     L.add(hit);
     const tagX = x + w - 4;
@@ -516,39 +516,14 @@ export class CreatureHub extends Phaser.Scene {
   private showUlt(c: Creature): void {
     const ult = ultimateOf(c.id);
     if (!ult) return;
-    this.modal?.destroy(true);
-    const M = this.add.container(0, 0).setDepth(600);
-    this.modal = M;
-    const el = ELEMENTS[c.element];
-    const w = 300;
-    const close = (): void => this.draw();
-    const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
-    veil.setInteractive().on('pointerdown', close);
-    M.add(veil);
-    const per = Math.floor((w - 20) / 4);
-    const rows: Array<{ s: string; col: number; gap: boolean }> = [];
-    const lineOf = (ln: string, col: number): void => wrapWords(ln.toUpperCase(), per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
-    lineOf(`ULTIMATE: UNLOCKS ${ULT_UNLOCK_S} SEC INTO A FIGHT, THEN READY AGAIN ${ULT_COOLDOWN_S} SEC AFTER EACH USE.`, PALETTE.fog);
-    lineOf(`WHAT IT DOES: ${ult.desc}`, PALETTE.gold);
-    lineOf(isTouch() ? 'HOW TO USE: TAP THE ULT BUTTON WHEN IT LIGHTS UP.' : 'HOW TO USE: PRESS Q WHEN THE ULT BADGE TURNS GOLD.', 0x9ad0ff);
-    lineOf(`ELEMENT: ${el.name}`, el.light);
-    const LH = 7;
-    const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
-    const h = Math.min(GAME_H - 4, 27 + textH + 22);
-    const x = (GAME_W - w) / 2;
-    const y = Math.max(2, (GAME_H - h) / 2);
-    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, 0xffd45e));
-    M.add(text(this, x + 8, y + 8, `ULTIMATE - ${ult.name}`, PALETTE.gold));
-    M.add(text(this, x + w - 6, y + 8, c.name.toUpperCase(), PALETTE.fog).setOrigin(1, 0));
-    M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
-    let ly = y + 28;
-    for (const r of rows) {
-      if (r.gap) ly += 3;
-      if (ly + 6 > y + h - 20) break;
-      M.add(smallText(this, x + 8, ly, r.s, r.col));
-      ly += LH;
-    }
-    M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
+    // (user, 4 Nov: each step in its own clear sentence, in order; no HOW TO
+    // USE, no ELEMENT -- the card already says both)
+    const rows: Array<[string, number]> =
+      ult.steps.length === 1
+        ? [[`WHAT IT DOES: ${ult.steps[0]}`, PALETTE.gold]]
+        : [['WHAT IT DOES, IN ORDER:', PALETTE.gold], ...ult.steps.map((st, i): [string, number] => [`${i + 1}. ${st}`, PALETTE.cream])];
+    rows.push([`READY ${ULT_UNLOCK_S} SEC INTO A FIGHT, THEN AGAIN ${ULT_COOLDOWN_S} SEC AFTER EACH USE.`, 0x8a90b0]);
+    this.infoCard(c, `ULTIMATE - ${ult.name}`, rows, 0xffd45e);
   }
 
   /**
@@ -556,51 +531,58 @@ export class CreatureHub extends Phaser.Scene {
    * anything outside it, or the button, puts it away again.
    */
   private showMove(c: Creature, a: Attack): void {
-    // ITS OWN LAYER, OVER EVERYTHING.  It used to go into the screen's layer,
-    // which sits under the creatures' drawing -- so the creatures on the cards
-    // were painted on top of the card that was meant to cover them.
+    const el = ELEMENTS[c.element];
+    const rows = attackCard(a, c.element).map((ln): [string, number] => [
+      ln,
+      ln.startsWith('WHAT IT DOES') ? PALETTE.gold : ln.startsWith('ELEMENT') ? el.light : ln.startsWith('DAMAGE') || ln.startsWith('READY') ? 0xffb08a : PALETTE.fog,
+    ]);
+    this.infoCard(c, a.name, rows, el.col, a);
+  }
+
+  /**
+   * THE CARD FOR A MOVE OR AN ULTIMATE.  Its own layer over everything; the
+   * body in the small face, wrapped, each fact apart from the next (user,
+   * 4 Nov: more height between them), and never taller than the screen.  The
+   * creature's name sits top right only where it fits beside the title.
+   */
+  private infoCard(c: Creature, title: string, lines: Array<[string, number]>, edge: number, a?: Attack): void {
     this.modal?.destroy(true);
     const M = this.add.container(0, 0).setDepth(600);
     this.modal = M;
-    const el = ELEMENTS[c.element];
-    const lines = attackCard(a, c.element);
-    // (user, 28 Oct: the move only -- the creature's strengths are on its
-    // STATS page -- in the bigger house font, wrapped inside the box)
-    const w = 300;
+    const w = 308;
     const close = (): void => this.draw();
     const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
     M.add(veil);
-    // THE BODY IN THE SMALL FACE.  In the house font a move with a long
-    // element and a long weakness ran the card off the bottom of the screen
-    // and took the CLOSE button with it; in the 3x5 face, wrapped, every
-    // move fits with room to spare.
-    // (user, 3 Nov: more detail, the small face, a clear gap between facts)
+    const per = Math.floor((w - 18) / 4);
     const rows: Array<{ s: string; col: number; gap: boolean }> = [];
-    const per = Math.floor((w - 20) / 4);
-    const lineOf = (ln: string, col: number): void => {
-      wrapWords(ln, per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
-    };
-    lines.forEach((ln) =>
-      lineOf(ln, ln.startsWith('WHAT IT DOES') ? PALETTE.gold : ln.startsWith('ELEMENT') ? el.light : ln.startsWith('HOW TO USE') ? 0x9ad0ff : ln.startsWith('DAMAGE') ? 0xffb08a : PALETTE.fog),
-    );
-    const LH = 7;
-    const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
-    // (and never taller than the screen: the button always shows)
-    const h = Math.min(GAME_H - 4, 27 + textH + 22);
+    for (const [ln, col] of lines) wrapWords(ln.toUpperCase(), per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
+    // roomy if it fits, a little tighter if not
+    const room = GAME_H - 4 - 27 - 22;
+    const height = (lh: number, gap: number): number => rows.reduce((t, r) => t + lh + (r.gap ? gap : 0), 0);
+    const [LH, GAP] = ([[9, 6], [8, 5], [8, 3], [7, 3]] as const).find(([lh, g]) => height(lh, g) <= room) ?? [7, 2];
+    const h = Math.min(GAME_H - 4, 27 + height(LH, GAP) + 20);
     const x = (GAME_W - w) / 2;
     const y = Math.max(2, (GAME_H - h) / 2);
-    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
-    const g = this.add.graphics();
-    drawAbilityIcon(g, a, x + 13, y + 13, el.light);
-    M.add(g);
-    M.add(text(this, x + 24, y + 8, a.name, PALETTE.gold));
-    M.add(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));
+    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, edge));
+    let tx = x + 8;
+    if (a) {
+      const g = this.add.graphics();
+      drawAbilityIcon(g, a, x + 13, y + 13, ELEMENTS[c.element].light);
+      M.add(g);
+      tx = x + 24;
+    }
+    const head = text(this, tx, y + 8, title, PALETTE.gold);
+    M.add(head);
+    const nm = c.name.toUpperCase();
+    const right = x + w - 7;
+    if (head.x + head.width + 8 + nm.length * 6 <= right) M.add(text(this, right, y + 8, nm, PALETTE.fog).setOrigin(1, 0));
+    else if (head.x + head.width + 8 + nm.length * 4 <= right) M.add(smallText(this, right, y + 10, nm, PALETTE.fog).setOrigin(1, 0));
     M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
     let ly = y + 28;
     for (const r of rows) {
-      if (r.gap) ly += 3;
-      if (ly + 6 > y + h - 20) break;
+      if (r.gap) ly += GAP;
+      if (ly + 6 > y + h - 18) break;
       M.add(smallText(this, x + 8, ly, r.s, r.col));
       ly += LH;
     }
@@ -618,7 +600,7 @@ export class CreatureHub extends Phaser.Scene {
    *            point for a guard / reflect / thorns move, one for a heal,
    *            and one for STONE, which shrugs damage off
    */
-  private showStats(c: Creature, xp?: number): void {
+  private showStats(c: Creature, xp?: number, uid?: number): void {
     this.modal?.destroy(true);
     const M = this.add.container(0, 0).setDepth(600);
     this.modal = M;
@@ -692,6 +674,34 @@ export class CreatureHub extends Phaser.Scene {
     M.add(this.add.rectangle(x + w / 2, top + 3, 1, y + h - 19 - top - 3, 0x2a3050).setOrigin(0, 0));
     column(x + w / 2 + 5, 'WEAK AGAINST', 0xff9a9a, t.weaknesses);
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
+    // ---- RELEASE (user, 4 Nov): only on one of your own, in the far corner
+    // -- a long way from CLOSE, in a dark red, so it is never hit by mistake
+    // -- and it asks before it does anything
+    if (uid !== undefined) {
+      M.add(button(this, x + w - 32, y + h - 9, 'RELEASE', () => this.confirmRelease(uid, c), { width: 52, height: 12, fill: 0x3a1420, hoverFill: 0x6a2030, textColor: 0xff9a9a }));
+    }
+  }
+
+  /** Are you sure?  Releasing is for good. */
+  private confirmRelease(uid: number, cr: Creature): void {
+    if (this.dialog) return;
+    const last = store.get().creatures.owned.length === 1;
+    this.dialog = confirmDialog(this, {
+      lines: [`RELEASE ${cr.name.toUpperCase()}?`, 'IT WILL NOT COME BACK.', ...(last ? ['IT IS YOUR LAST ONE.'] : [])],
+      confirm: 'RELEASE',
+      onConfirm: () => {
+        this.dialog = null;
+        this.modal?.destroy(true);
+        this.modal = null;
+        this.say(release(uid));
+        this.screen = needsRecovery() ? 'recruit' : 'home';
+        this.draw();
+      },
+      onCancel: () => {
+        this.dialog?.destroy();
+        this.dialog = null;
+      },
+    });
   }
 
   // ----------------------------------------------------------------- screens
@@ -720,7 +730,7 @@ export class CreatureHub extends Phaser.Scene {
       L.add(centerText(this, x + w / 2, y + 80, 'RECRUIT TO FILL', 0x4a4e68));
     } else {
       const cr = ownedCreature(act)!;
-      this.card(cr, x, y, w, h, true, true, act.xp ?? 0, true);
+      this.card(cr, x, y, w, h, true, true, act.xp ?? 0, true, act.uid);
     }
     // ---- the team, where the second card used to be
     const tx = 104;
