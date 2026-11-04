@@ -235,7 +235,7 @@ let scene0: Phaser.Scene | null = null;
 let apiRef: MinigameApi | null = null;
 let pins: Pin[] = [];
 let ball = { x: 0, y: 0, vx: 0, vy: 0, rolling: false };
-let ballBody: Phaser.GameObjects.Arc | null = null;
+let ballBody: Phaser.GameObjects.Image | null = null;
 let aimLine: Phaser.GameObjects.Graphics | null = null;
 let aim = 0;
 /** On a phone, what the stick does: swing the aim, or walk the ball. */
@@ -541,7 +541,7 @@ export const bowling: MinigameModule = {
     // it is the one part of the alley the ball actually passes through, and
     // it did not need decorating.
 
-    ballBody = scene.add.circle(0, 0, BALL_R, PALETTE.plum).setStrokeStyle(1, PALETTE.violet).setDepth(20);
+    ballBody = scene.add.image(0, 0, ballTexture(scene)).setDepth(20);
     aimLine = scene.add.graphics().setDepth(15);
     layOil();
     rack();
@@ -1092,7 +1092,7 @@ function rack(): void {
 function resetBall(): void {
   ball = { x: LANE_L + LANE_W / 2, y: FOUL_Y - 2, vx: 0, vy: 0, rolling: false };
   gutter = 0;
-  ballBody?.setPosition(ball.x, ball.y).setVisible(true).setFillStyle(PALETTE.plum);
+  ballBody?.setPosition(ball.x, ball.y).setVisible(true).clearTint().setRotation(0);
 }
 
 /**
@@ -1202,6 +1202,8 @@ function fixedSteps(dt: number, step: (h: number) => void): void {
 }
 
 function stepPhysics(dt: number): void {
+  // rolling: the swirl and the holes come round with it, the way it hooks
+  if (ballBody && Math.abs(ball.vy) > 1) ballBody.rotation += dt * (2.5 + Math.abs(hook) * 6) * (hook < 0 ? -1 : 1);
   if (gutter !== 0) {
     // IN THE CHANNEL.  Nothing steers it, nothing bends it, nothing on the
     // lane can reach it, and it does not come back: it runs out the length of
@@ -1258,7 +1260,8 @@ function enterGutter(side: -1 | 1): void {
   gutter = side;
   ball.vx = 0;
   ball.x = GUTTER_X[side < 0 ? 0 : 1];
-  ballBody?.setFillStyle(PALETTE.slate);
+  // (in the water: the shine goes off it)
+  ballBody?.setTint(0x8a90a0);
   // ---- INTO THE WATER.  The gutter is a pond now, so it makes a pond noise
   // and throws a pond's worth of water about.  Nothing about where the ball
   // goes or what it scores changed -- this is the same `enterGutter` it has
@@ -1594,4 +1597,62 @@ function finish(): void {
       : `FROGGY WINS ${scores.cpu} - ${scores.player}`;
   centerText(scene0, GAME_W / 2, 100, line, won ? PALETTE.gold : tied ? PALETTE.tealLight : PALETTE.fog).setDepth(50);
   scene0.time.delayedCall(1600, () => (won ? apiRef?.win() : tied ? apiRef?.draw() : apiRef?.lose()));
+}
+
+/**
+ * THE BALL (user list: "a nicer ball").  Not a flat disc: a polished
+ * resin ball, deep plum swirled with violet, lit from the top left with a
+ * hard white glint, darker round its rim, and the three finger holes.
+ * Painted once into a small texture; the scene turns it as it rolls.
+ */
+function ballTexture(scene: Phaser.Scene): string {
+  const key = 'bowling_ball_v2';
+  if (scene.textures.exists(key)) return key;
+  const S = BALL_R * 2 + 2;
+  const t = scene.textures.createCanvas(key, S, S);
+  if (!t) return key;
+  const g = t.getContext();
+  const c = S / 2;
+  const r = BALL_R + 0.5;
+  // the body: lit from the top left, falling off into the rim
+  const body = g.createRadialGradient(c - 1.6, c - 1.8, 0.5, c, c, r);
+  body.addColorStop(0, '#b46ad8');
+  body.addColorStop(0.45, '#6a2a8a');
+  body.addColorStop(1, '#2a0e3a');
+  g.fillStyle = body;
+  g.beginPath();
+  g.arc(c, c, r, 0, Math.PI * 2);
+  g.fill();
+  // the marbling: two swirls of lighter resin
+  g.save();
+  g.beginPath();
+  g.arc(c, c, r - 0.3, 0, Math.PI * 2);
+  g.clip();
+  g.strokeStyle = 'rgba(200,150,255,0.55)';
+  g.lineWidth = 0.9;
+  g.beginPath();
+  g.moveTo(c - r, c + 1);
+  g.bezierCurveTo(c - 2, c - 3, c + 1, c + 4, c + r, c - 1);
+  g.stroke();
+  g.strokeStyle = 'rgba(255,120,200,0.35)';
+  g.beginPath();
+  g.moveTo(c - 2, c + r);
+  g.bezierCurveTo(c - 1, c + 1, c + 3, c + 2, c + 2, c - r);
+  g.stroke();
+  g.restore();
+  // the finger holes: two side by side, the thumb below
+  g.fillStyle = '#12061a';
+  for (const [x, y] of [[c - 1.3, c - 1.6], [c + 1.3, c - 1.6], [c, c + 1.6]]) g.fillRect(Math.round(x - 0.5), Math.round(y - 0.5), 1, 1);
+  // the glint, and a rim
+  g.fillStyle = 'rgba(255,255,255,0.95)';
+  g.fillRect(Math.round(c - 3), Math.round(c - 3), 1, 1);
+  g.fillStyle = 'rgba(255,255,255,0.45)';
+  g.fillRect(Math.round(c - 2), Math.round(c - 3), 1, 1);
+  g.strokeStyle = 'rgba(20,6,30,0.9)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.arc(c, c, r - 0.2, 0, Math.PI * 2);
+  g.stroke();
+  t.refresh();
+  return key;
 }

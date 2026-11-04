@@ -36,6 +36,7 @@ import { CAMERA_PRIZE, shelfStock } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { backWayOpen } from '../game/closingPull';
+import { isTouch } from '../core/device';
 import { attachPockets } from '../ui/pockets';
 import { ensureKeyInPocket, heldItems } from '../game/inventory';
 import { Pedestrians } from '../art/pedestrians';
@@ -53,8 +54,12 @@ import { BEG_SPOT_X, BEG_SPOT_Y, paintBegCup, paintBegSpot } from '../art/begSpo
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
 const ALLEY_X = GAME_W - 24;
-/** The alley is open to you once you have come through the night in the arcade. */
-const alleyOpen = (): boolean => store.get().froggyGone || backWayOpen();
+/**
+ * The alley is open to you once you have come through the night in the arcade.
+ * On a phone the after-the-story visit stays shut (the alley is too heavy to load
+ * there); the closing-time way in that the story needs is left alone.
+ */
+const alleyOpen = (): boolean => backWayOpen() || (store.get().froggyGone && !isTouch());
 type Spot = 'door' | 'man' | 'alley' | 'beg' | null;
 /**
  * THE PITCH: the patch of pavement against the arcade's wall, just left of
@@ -574,7 +579,9 @@ export class ExteriorDay extends Phaser.Scene {
     this.errand = null;
     this.prompt.setVisible(false);
     this.promptPlate.setVisible(false);
-    this.player.setPosition(BEG_X - 3, BEG_Y);
+    // (laid out along the card, the head on it too: at BEG_X - 3 the head
+    // hung a dozen pixels off its left end, on the bare slabs)
+    this.player.setPosition(BEG_X + 13, BEG_Y);
     this.player.lie(1);
     this.cup?.setVisible(false);
     // (over the mat, clear of the sleeper)
@@ -775,7 +782,7 @@ export class ExteriorDay extends Phaser.Scene {
       '"If you want to get away from them, change your appearance. ALL of it. Sharp\'s, the barber, east of here, for the hair -- and Threads for the rest."',
       '"The hat, the coat, the scarf, the trousers, the shoes. Glasses, even. Every stitch that\'s on that poster. Until then, any one of them who sees you knows you."',
       '"Keep out of their sight on the way. Duck down an alley if one comes -- they won\'t follow you down one unless they see you go in."',
-      '"And if they catch you before it\'s done, it\'s all for nothing: you\'re back to the $200 and whatever you\'d bought is gone. All seven in one go."',
+      '"And if they catch you before it\'s done, it\'s all for nothing: you\'re back to the $200 and whatever you\'d bought is gone. So do it all before they get to you."',
       '"And don\'t even think of trying to find a place to sleep until your appearance is changed. If you try to sleep before changing your look, you will get caught."',
       '"Home is Lily\'s again. I rented you a flat: LEVEL 2, ROOM 213. The middle door."',
       `"The first week's on me. After that the rent comes to me, not the landlord. $${RENT_PRICE} a week."`,

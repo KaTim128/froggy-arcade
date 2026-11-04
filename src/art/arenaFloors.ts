@@ -104,12 +104,9 @@ function caves(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number): v
 }
 
 function fields(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number): void {
-  // mown stripes, a dirt path across, tufts and flowers
+  // mown stripes, tufts and flowers (no dirt path straight across: it read
+  // as a line drawn through the fight -- user, 4 Nov)
   for (let y = b.y; y < b.y + b.h; y += 10 * s) g.fillStyle(shade(ground, 0.06), 0.6).fillRect(b.x, y, b.w, 5 * s);
-  const py = b.y + b.h * 0.62;
-  g.fillStyle(0xb89a5a, 0.55).fillRect(b.x, py, b.w, 7 * s);
-  g.fillStyle(0x9a7a42, 0.5).fillRect(b.x, py + 6 * s, b.w, 1);
-  speckle(g, r, { x: b.x, y: py, w: b.w, h: 7 * s }, 40 * s, [0x8a6a3a, 0xd8c08a], 0.7);
   for (let i = 0; i < 120 * s; i++) {
     const [x, y] = at(r, b);
     g.fillStyle(i % 2 ? dark : shade(ground, 0.25), 1).fillRect(x, y, 1, 2).fillRect(x + 1, y - 1, 1, 2);

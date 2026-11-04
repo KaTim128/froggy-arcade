@@ -34,6 +34,7 @@
  * pattern wins; a masher loses.  That is the whole design.
  */
 
+import { cfgNum, cfgPct, cfgStr } from '../core/gameConfig';
 import Phaser from 'phaser';
 import { PALETTE, css } from '../render/palette';
 import { audio } from '../core/audio';
@@ -48,8 +49,9 @@ const FLOOR_Y = 156;
 const WALK_SPEED = 52;
 const JUMP_V = -190;
 const GRAVITY = 620;
-const MAX_HP = 100;
-const ROUND_MS = 99_000;
+/** Each fighter's health, and a round's length (admin-set: core/gameConfig `grudge.hp` / `grudge.round`; 100 and 99 s as shipped). */
+let MAX_HP = 100;
+const roundLen = (): number => cfgNum('grudge.round') * 1000;
 const ROUNDS_TO_WIN = 2;
 
 interface MoveDef {
@@ -194,10 +196,27 @@ const FOES: FoeDef[] = [
     skin: 0x6c737e, skinLight: 0xc9cdd3, glove: 0x2f5fa8, gloveLit: 0x5b8fd6, bodyW: 15, bodyH: 18, headW: 11, look: 'wolf',
     speed: 1.15, power: 1.0, windup: 0.9, reach: 1.05, guard: 1, blockRate: 0.85, tempo: 0.9, dodge: 0.06, style: 'balanced', chaos: 0.12, counter: 0.3,
     note: 'CIRCLES, THEN BITES' },
+  // ---- THE ZEBRA (user, 3 Nov): a kickboxer, not a puncher.  All legs and
+  // momentum: the fastest feet on the card, kicks low and often, slips a
+  // blow more than anyone but the snake, and answers a block with a kick
+  // straight back.  Its special is a STAMPEDE KICK -- it lunges in and
+  // lands both hind hooves, one after the other.  It pays in the head and
+  // the hands: its punches are light and it hardly ever blocks.
+  { key: 'zebra', name: 'ZEBRA', rare: false, weight: 10,
+    skin: 0xf2f0ea, skinLight: 0xffffff, glove: 0x2a7ad8, gloveLit: 0x6aaaff, bodyW: 14, bodyH: 19, headW: 11, look: 'zebra',
+    speed: 1.32, power: 0.86, windup: 0.85, reach: 1.12, guard: 1.15, blockRate: 0.55, tempo: 0.72, dodge: 0.12, style: 'lows', chaos: 0.15, counter: 0.5,
+    note: 'QUICK HOOVES, DOUBLE KICK' },
   { key: 'hyena', name: 'HYENA', rare: false, weight: 10,
     skin: 0xb49660, skinLight: 0xd8c18e, glove: 0x7a2a6a, gloveLit: 0xb05a9a, bodyW: 14, bodyH: 17, headW: 11, look: 'hyena',
     speed: 1.1, power: 0.95, windup: 0.9, reach: 0.95, guard: 1.1, blockRate: 0.8, tempo: 0.85, dodge: 0.08, style: 'lows', chaos: 0.35, counter: 0.2,
     note: 'LAUGHS AND GOES LOW' },
+  // ---- THE PORCUPINE (user): small, slow to come forward, and covered in
+  // quills -- every punch that lands on him pricks the fist that threw it, and
+  // twice as hard if he had them up in a block.
+  { key: 'porcupine', name: 'PORCUPINE', rare: false, weight: 10,
+    skin: 0x6a4a34, skinLight: 0xc8a888, glove: 0x3a6a8a, gloveLit: 0x6a9aba, bodyW: 17, bodyH: 18, headW: 11, look: 'porcupine',
+    speed: 0.9, power: 0.95, windup: 1, reach: 0.9, guard: 0.85, blockRate: 1.25, tempo: 1.05, dodge: 0, style: 'balanced', chaos: 0.1, counter: 0.3,
+    note: 'EVERY HIT COSTS YOU' },
   { key: 'lion', name: 'LION', rare: false, weight: 10,
     skin: 0xcc8e3e, skinLight: 0xecc684, glove: 0x8a1e1e, gloveLit: 0xc04040, bodyW: 18, bodyH: 19, headW: 12, look: 'lion',
     speed: 0.95, power: 1.2, windup: 1.1, reach: 1.0, guard: 0.9, blockRate: 0.9, tempo: 1.0, dodge: 0, style: 'highs', chaos: 0.05, counter: 0.2,
@@ -268,7 +287,9 @@ const FACE: Record<string, FaceDef> = {
   chameleon: { headH: 11, eyes: [[3, -2]], r: 2.4, col: 0xf0f0c0, pupil: 'dot', pr: 1, snout: 'lizard' },
   wolf: { headW: 11, headH: 10, eyes: [[1.6, -2.4]], r: 1.4, col: 0xe8c04a, pupil: 'dot', pr: 0.7, snout: 'none' },
   hyena: { headW: 11, headH: 10, eyes: [[1, -2.4]], r: 1.4, col: 0xf2e6c0, pupil: 'dot', pr: 0.7, snout: 'none' },
+  zebra: { headW: 10, headH: 11, eyes: [[1.2, -3]], r: 1.4, col: 0x2a1a10, pupil: 'none', pr: 0, snout: 'none' },
   lion: { headW: 12, headH: 11, eyes: [[2.2, -2.6]], r: 1.6, col: 0xe8a630, pupil: 'slit', pr: 1, snout: 'none' },
+  porcupine: { headW: 11, headH: 10, eyes: [[2.6, -2.2]], r: 1.3, col: 0x140c08, pupil: 'none', pr: 0, snout: 'none' },
 };
 
 /**
@@ -296,6 +317,7 @@ const JUMP: Record<string, { v: number; squat: number; land: number; drift: numb
   chameleon: { v: -170, squat: 100, land: 110, drift: 40 },
   wolf: { v: -195, squat: 90, land: 100, drift: 50 },
   hyena: { v: -180, squat: 100, land: 110, drift: 46 },
+  zebra: { v: -215, squat: 70, land: 90, drift: 58 },
   lion: { v: -190, squat: 130, land: 140, drift: 48 },
 };
 
@@ -425,7 +447,7 @@ let cd2: Phaser.GameObjects.Rectangle | null = null;
 let cd1Label: Phaser.GameObjects.BitmapText | null = null;
 let wins1 = 0;
 let wins2 = 0;
-let roundMs = ROUND_MS;
+let roundMs = 99_000;
 let roundOver = true;
 let over = false;
 /** Fighting time across the rounds of this match: a win's is the best to beat (core/records). */
@@ -446,6 +468,28 @@ let foeLabel: Phaser.GameObjects.BitmapText | null = null;
 /** Who they are and what they do, under READY on the first round. */
 let introName: Phaser.GameObjects.BitmapText | null = null;
 let introNote: Phaser.GameObjects.BitmapText | null = null;
+/** The line under the note: how to beat this one (user: better pre-fight hints). */
+let introTip: Phaser.GameObjects.BitmapText | null = null;
+/** How to fight each of them, shown before round one. */
+const TIPS: Record<string, string> = {
+  lizard: 'TIP: BAIT A SWING, THEN PUNISH IT',
+  croc: 'TIP: STAY OUT, HIT AFTER HIS BIG ONE',
+  gecko: 'TIP: BLOCK HIGH, SWEEP HIS LEGS',
+  tortoise: 'TIP: HIS SHELL BLOCKS ALL - GO LOW',
+  snake: 'TIP: HE SLIPS HITS - DO NOT SPAM',
+  rhino: 'TIP: BLOCK THE CHARGE, THEN JAB',
+  monkey: 'TIP: KEEP YOUR GUARD, WAIT HIM OUT',
+  penguin: 'TIP: HE GOES LOW - CROUCH-BLOCK',
+  wolf: 'TIP: DO NOT CHASE - LET HIM COME',
+  zebra: 'TIP: THE KICK HITS TWICE - BLOCK BOTH',
+  porcupine: 'TIP: QUILLS PRICK YOU - HIT LESS, HARDER',
+  hyena: 'TIP: CROUCH-BLOCK HIS LOW RUSH',
+  lion: 'TIP: BLOCK HIGH, COUNTER LOW',
+  gorilla: 'TIP: EVERY HIT HURTS - BLOCK FIRST',
+  chameleon: 'TIP: WATCH THE TONGUE - IT REACHES',
+  komodo: 'TIP: KEEP MOVING, DO NOT TRADE',
+  gator: 'TIP: GET OUT OF THE ROLL, THEN HIT',
+};
 /** Seconds since the scene opened, for the idle breathing. */
 let sceneClock = 0;
 /** DEV only: hold the lizard still, so a test can aim at something. */
@@ -569,6 +613,7 @@ export const grudge: MinigameModule = {
     announce = centerText(scene, GAME_W / 2, 90, '', PALETTE.gold, 16);
     introName = centerText(scene, GAME_W / 2, 106, '', PALETTE.cream);
     introNote = centerText(scene, GAME_W / 2, 116, '', PALETTE.amber);
+    introTip = centerText(scene, GAME_W / 2, 127, '', PALETTE.fog);
 
     const kb = scene.input.keyboard;
     if (kb) {
@@ -846,6 +891,7 @@ export const grudge: MinigameModule = {
     sceneClock = v.sceneClock;
     introName?.setText('');
     introNote?.setText('');
+    introTip?.setText('');
     announce?.setText('');
     roundText?.setText(practicing ? `PUNCHING BAG - HITS ${bagHits}` : `ROUND ${wins1 + wins2 + 1}   ${wins1}-${wins2}`);
     timerText?.setText(`${Math.ceil(roundMs / 1000)}`);
@@ -917,6 +963,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   const dark = shade(d.skin, 0.35);
   const E = (x: number, y: number, w: number, h: number, c: number) => scene.add.ellipse(x, y, w, h, c);
   const R = (x: number, y: number, w: number, h: number, c: number, a = 0) => scene.add.rectangle(x, y, w, h, c).setAngle(a);
+  const C = (x: number, y: number, r: number, c: number) => scene.add.circle(x, y, r, c);
   // ---- A TRIANGLE WHERE IT WAS ASKED FOR.
   //
   // `scene.add.triangle` does not draw its three points at (x, y) plus the
@@ -1085,6 +1132,43 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       }
       break;
     }
+    case 'zebra': {
+      // ---- THE ZEBRA, REDRAWN (user, 4 Nov: "make zebra look better").  A
+      // long horse's head that tapers to a soft grey muzzle with a nostril
+      // and a mouth line -- not a dark blob over the face -- thin black
+      // stripes arcing over the brow and down the bridge of the nose, tall
+      // ears black at the tips, a tall stiff mane in tight black and white
+      // bands, and the body ringed in thin, even stripes that curve round it
+      // (each in two strokes, a gentle chevron), over a pale belly.
+      const ink = 0x16161a;
+      const muzzle = 0x5a5a64;
+      // the head, long and tapering, then the muzzle and nose
+      head.push(E(5.6, 1.6, 11.4, 6.2, d.skin), E(10.6, 2.8, 4.6, 3.8, muzzle), E(12.2, 2, 1.3, 0.9, 0x101014));
+      head.push(R(10.4, 5.2, 4, 0.7, 0x202026).setAlpha(0.9));
+      // the brow and the bridge of the nose: thin arcs, close together
+      for (let k = 0; k < 5; k++) head.push(R(-2.6 + k * 1.9, -3.2 + k * 0.5, 0.75, 4.4 - k * 0.3, ink, 18 - k * 4));
+      for (let k = 0; k < 3; k++) head.push(R(6.2 + k * 1.3, -1.8 + k * 0.4, 0.7, 2.6, ink, 74));
+      // tall ears, black at the tips, pale inside
+      headBack.push(TA(-2.6, -3.4, 0.4, -4, -1.4, -11, d.skin), TA(-1.9, -8.8, -0.6, -9, -1.4, -11, ink));
+      headBack.push(TA(-1.8, -4.4, -0.4, -4.6, -1.3, -8.4, 0xd8d0d0));
+      headBack.push(TA(0.6, -3.6, 3.2, -4, 2, -10.4, shade(d.skin, 0.1)), TA(1.6, -9, 2.4, -9.2, 2, -10.4, ink));
+      // the mane: a tall stiff brush up the back of the neck, in tight bands
+      for (let k = 0; k < 10; k++) headBack.push(R(-4.2 - k * 0.5, -7.4 + k * 1.7, 2.6, 2.2, k % 2 ? ink : 0xf8f8f4, -22));
+      // the body: thin even stripes curving round it, over a pale belly
+      body.push(E(3, 2, bw * 0.6, bh * 0.75, 0xffffff).setAlpha(0.55));
+      for (let k = 0; k < 9; k++) {
+        const y = -bh + 2.5 + k * (bh * 2 - 5) / 8;
+        body.push(R(-bw * 0.45, y, bw * 0.95, 1, ink, 12), R(bw * 0.42, y + 0.6, bw * 0.85, 1, ink, -10));
+      }
+      // a tufted tail
+      tailRoot0 = [-bw + 3, bh - 5];
+      {
+        const root: Pt = [-bw + 3, bh - 5];
+        const path = bez(root, [root[0] - 4, root[1] + 3], [root[0] - 7, root[1] + 7], [root[0] - 8, root[1] + 12], 10);
+        tailParts.push(tube(path, 1.8, 1.2, d.skin), E(path[path.length - 1][0], path[path.length - 1][1] + 1, 3, 5, ink));
+      }
+      break;
+    }
     case 'hyena': {
       // ---- A BLUNT DARK MUZZLE AND TWO HUGE ROUND EARS, a bristling ridge
       // down a sloping back, spots, and a short dark bush of a tail.
@@ -1098,6 +1182,59 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
         const root: Pt = [-bw + 3, bh - 5];
         tailParts.push(tube(bez(root, [root[0] - 3, root[1] + 2], [root[0] - 6, root[1] + 5], [root[0] - 8, root[1] + 8], 8), 4.4, 3, 0x3a2c1a));
       }
+      break;
+    }
+    case 'porcupine': {
+      // ---- THE PORCUPINE, REDRAWN (user, 4 Nov: "ugly -- redo it").  A round
+      // brown boxer under a great crest of quills: tapered spikes, dark at the
+      // root and cream at the tip, sweeping back off the crown and down the
+      // whole back in two layers, with a blunt pale snout, a shiny black nose,
+      // a little round ear and beady black eyes.
+      const root0 = 0x3a281a;
+      const tip = 0xf4ecd8;
+      const spike = (list: Phaser.GameObjects.GameObject[], x0: number, y0: number, ang: number, len: number, w: number): void => {
+        const ux = Math.cos(ang);
+        const uy = Math.sin(ang);
+        const px = -uy * w * 0.5;
+        const py = ux * w * 0.5;
+        const ex = x0 + ux * len;
+        const ey = y0 + uy * len;
+        list.push(TA(x0 + px, y0 + py, x0 - px, y0 - py, ex, ey, root0));
+        // the pale tip: the last 40% of the quill
+        const mx = x0 + ux * len * 0.6;
+        const my = y0 + uy * len * 0.6;
+        list.push(TA(mx + px * 0.45, my + py * 0.45, mx - px * 0.45, my - py * 0.45, ex, ey, tip));
+      };
+      // the back: two rows of long quills fanned back (pi) and up (1.5 pi) --
+      // never forward over the face -- rooted along the upper back
+      for (let i = 0; i < 11; i++) {
+        const t = i / 10;
+        const a = Math.PI * (0.86 + t * 0.56);
+        spike(back, -3 - t * 2, 7 - t * 15, a, 13 + Math.sin(t * Math.PI) * 6, 3.4);
+      }
+      for (let i = 0; i < 9; i++) {
+        const t = i / 8;
+        const a = Math.PI * (0.92 + t * 0.5);
+        spike(back, -1 - t, 5 - t * 13, a, 10 + Math.sin(t * Math.PI) * 4, 2.8);
+      }
+      // the crest: quills off the crown, up and back
+      for (let i = 0; i < 7; i++) {
+        const t = i / 6;
+        const a = Math.PI * (1.12 + t * 0.34);
+        spike(headBack, -2 + t * 2, -1 - t * 3, a, 9 + Math.sin(t * Math.PI) * 3, 2.6);
+      }
+      // a soft lighter belly and a dark furry edge where the quills start
+      body.push(E(3, 2, d.bodyW * 0.55, d.bodyH * 0.72, d.skinLight).setAlpha(0.85));
+      body.push(E(-5, -4, 5, d.bodyH * 0.7, shade(d.skin, 0.2)).setAlpha(0.7));
+      // the face: a blunt pale snout, a shiny nose, a little ear, whiskers
+      head.push(E(5.4, 1.6, 7.4, 5.4, 0x9a7a5a), E(8.8, 0.8, 2.8, 2.4, 0x140c08), C(8.4, 0.2, 0.6, 0xffffff));
+      head.push(R(4.6, 3.6, 2.6, 0.6, 0x3a281a));
+      head.push(R(9.4, 2.2, 3, 0.4, 0xf4ecd8).setAngle(12).setAlpha(0.8), R(9.2, 3, 3, 0.4, 0xf4ecd8).setAngle(-6).setAlpha(0.8));
+      headBack.push(C(-1.6, -3.8, 2.2, shade(d.skin, 0.25)), C(-1.6, -3.8, 1.1, 0xd88a8a));
+      // a short tail with its own quills
+      tailRoot0 = [-bw + 3, bh - 5];
+      tailParts.push(E(-2, 2, 6, 4, d.skin));
+      for (const a of [Math.PI * 0.95, Math.PI * 1.1, Math.PI * 0.82]) spike(tailParts, -3, 2, a, 6, 2);
       break;
     }
     case 'lion': {
@@ -1122,55 +1259,77 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       break;
     }
     case 'shell': {
-      // ---- THE TORTOISE.  The shell is the silhouette, and it is a shell:
-      // a high dome with a dark rim, a ring of marginal plates round the
-      // bottom edge, a spine of big hexagonal scutes with pale growth rings
-      // in them, and the sun on top.  It lives in its own group because it
-      // MOVES -- when the tortoise blocks, it turns its shell to the blow.
-      const sw = d.bodyW + 10;
-      const sh = d.bodyH + 6;
-      const rim = 0x3a2e18;
-      const hex = (x: number, y: number, r: number, col: number, seam: number) => {
+      // ---- THE TORTOISE, REDRAWN (user, 4 Nov: "ugly -- redo it").  A boxer
+      // with a real carapace on its back: a high, half-round dome over the
+      // back half of the body with a dark rim, a column of big scutes with
+      // growth rings, a row of marginal plates round the edge and a lit top;
+      // a cream plastron down its front in plates; a short leathery neck into
+      // a wrinkled head with a hooked horn beak; and stumpy clawed feet.
+      const rim = 0x2a1e0c;
+      const horn = 0x6e5428;
+      const half = (cx: number, cy: number, w: number, h: number, col: number): Phaser.GameObjects.Graphics => {
+        const pts: Phaser.Math.Vector2[] = [];
+        for (let k = 0; k <= 18; k++) {
+          const a = Math.PI / 2 + (k / 18) * Math.PI;
+          pts.push(new Phaser.Math.Vector2(cx + Math.cos(a) * w, cy + Math.sin(a) * h));
+        }
+        return scene.add.graphics().fillStyle(col, 1).fillPoints(pts, true);
+      };
+      const plate = (x: number, y: number, rx: number, ry: number, col: number, seam: number): Phaser.GameObjects.Graphics => {
         const pts: Phaser.Math.Vector2[] = [];
         for (let k = 0; k < 6; k++) {
           const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
-          pts.push(new Phaser.Math.Vector2(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.86));
+          pts.push(new Phaser.Math.Vector2(x + Math.cos(a) * rx, y + Math.sin(a) * ry));
         }
         const g = scene.add.graphics().fillStyle(col, 1).fillPoints(pts, true);
-        g.lineStyle(0.8, seam, 1).strokePoints(pts, true);
+        g.lineStyle(0.7, seam, 1).strokePoints(pts, true);
         return g;
       };
-      // the shadow it throws on itself, a dark rim, then the dome in two
-      // tones -- the sunlit top and the shaded skirt -- so it reads as round
-      shell.push(E(1, 2, sw + 3, sh + 2, 0x1e180c).setAlpha(0.5));
-      shell.push(E(0, 0, sw + 2, sh + 2, rim));
-      shell.push(E(0, 0.6, sw, sh, 0x5e4c26));
-      shell.push(E(0, -1, sw - 2, sh - 3, 0x7a6232));
-      // the marginal plates round the skirt, each with its own seam
-      for (let k = -6; k <= 6; k++) {
-        const a = Math.PI / 2 + (k / 6.6) * (Math.PI / 2.05);
-        shell.push(E(Math.cos(a) * (sw / 2 - 1.6), Math.sin(a) * (sh / 2 - 1.6), 3, 2.6, k % 2 ? 0x8a7040 : 0x7e6638).setStrokeStyle(0.6, rim));
+      // the plastron first, under the shell's edge: cream plates down the front
+      body.push(E(4.2, 0.5, 9, d.bodyH * 0.9, 0x8a7a4a), E(4, 0.4, 7.8, d.bodyH * 0.84, 0xe0d098));
+      for (let k = -2; k <= 2; k++) body.push(R(4, 0.4 + k * 3.2, 7, 0.6, 0xa8965e));
+      body.push(R(4, 0.4, 0.6, d.bodyH * 0.76, 0xa8965e).setAlpha(0.8));
+      // the carapace: rim, horn, lit dome
+      body.push(half(1.5, -0.5, 15.5, 13.5, rim));
+      body.push(half(1, -0.5, 14.2, 12.4, horn));
+      body.push(half(0.6, -1, 12.4, 10.6, 0x86683a));
+      // the marginal plates round the edge
+      for (let k = 0; k < 9; k++) {
+        const a = Math.PI / 2 + ((k + 0.5) / 9) * Math.PI;
+        body.push(R(1 + Math.cos(a) * 13.3, -0.5 + Math.sin(a) * 11.6, 3.4, 2.2, k % 2 ? 0x9a7a44 : 0x7e6236, (a * 180) / Math.PI + 90).setStrokeStyle(0.5, rim));
       }
-      // the scutes: a spine of three down the middle and two pairs either
-      // side, every one with pale growth rings and a dark seam
-      for (const [x, y, r] of [[0, -5, 4.2], [0, 0.6, 4], [-6, -2, 3.6], [6, -2, 3.6], [-5.2, 3.6, 3.2], [5.2, 3.6, 3.2]] as const) {
-        shell.push(hex(x, y, r, 0x9a7c42, 0x3a2c14));
-        shell.push(hex(x, y - 0.3, r * 0.68, 0xa8884a, 0x8a6e36).setAlpha(0.8));
-        shell.push(hex(x, y - 0.5, r * 0.36, 0xc8a85e, 0xa8884a).setAlpha(0.75));
+      // the scutes: three down the spine, two on the flank, each with rings
+      for (const [x, y, rx, ry] of [[-6.4, -6.4, 3.8, 3.4], [-7.6, 0, 4, 3.6], [-6.4, 6.2, 3.8, 3.2], [-1.4, -3.6, 2.8, 2.8], [-1.6, 3.4, 2.8, 2.8]] as const) {
+        body.push(plate(x, y, rx, ry, 0xa8884a, 0x3a2c14));
+        body.push(plate(x, y - 0.2, rx * 0.62, ry * 0.62, 0xb8985a, 0x8a6e36).setAlpha(0.85));
+        body.push(E(x - 0.3, y - 0.5, rx * 0.5, ry * 0.36, 0xe0c888).setAlpha(0.55));
       }
-      // the keel along the top, and the sun on the dome
-      shell.push(R(0, -2, 1, sh - 8, 0x4a3a1c).setAlpha(0.45));
-      shell.push(E(-3, -sh / 2 + 3.6, sw * 0.46, 2.6, 0xfff0c0).setAlpha(0.4));
-      shell.push(E(-5, -sh / 2 + 5.2, 3, 1.4, 0xffffff).setAlpha(0.35));
-      // a hooked horny beak, a wrinkled old neck, and scales on the crown
-      head.push(TA(3.4, -0.4, 7.6, 0.6, 4, 3.4, 0x5a5230), TA(6, 0.2, 7.6, 0.6, 6.8, 2.2, 0x3a3420));
-      head.push(R(-1, 3, 5, 0.8, dark).setAlpha(0.6), R(0, 5, 4, 0.8, dark).setAlpha(0.6), R(-0.5, 6.8, 3.4, 0.7, dark).setAlpha(0.5));
-      for (const [sx, sy] of [[-2, -3.4], [0.4, -3.8], [-0.8, -2.2], [1.8, -2.6]] as const) head.push(E(sx, sy, 1.8, 1.3, shade(d.skin, 0.18)).setAlpha(0.8));
-      // a wise old eyebrow over the eye
-      head.push(R(2.2, -3.2, 3, 0.7, dark).setAngle(-12).setAlpha(0.7));
-      // and the plastron on its front, under the chin
-      body.push(E(2, 1, d.bodyW * 0.62, d.bodyH * 0.8, 0xd8c88a).setStrokeStyle(0.6, 0x8a7a4a));
-      for (let k = -1; k <= 1; k++) body.push(R(2, 1 + k * 3.4, d.bodyW * 0.5, 0.6, 0x8a7a4a).setAlpha(0.7));
+      // the sun on the top of the dome
+      body.push(E(-6, -9, 7, 2.2, 0xfff0c0).setAlpha(0.35));
+      // a short leathery neck out of the front of the shell
+      {
+        const neck = bez([3, -6], [3.4, -8], [3.4, -10], [3, -12], 8);
+        body.push(tube(neck, 6.4, 5.2, d.skin));
+        for (const t of [0.35, 0.65]) {
+          const [nx, ny] = neck[Math.round(t * (neck.length - 1))];
+          body.push(R(nx + 0.5, ny, 5, 0.6, dark).setAlpha(0.45));
+        }
+      }
+      // stumpy elephant feet with three pale claws each
+      for (const hx of [-5, 5]) {
+        root.push(E(hx, -1.4, 8, 3.6, shade(d.skin, 0.12)));
+        for (const c of [-2.2, 0, 2.2]) root.push(R(hx + 1.6 + c, -0.2, 1.1, 1.3, 0xe8e0c0));
+      }
+      // a short pointed tail out from under the back of the shell
+      tailRoot0 = [-bw + 1, bh - 4];
+      tailParts.push(TA(0, -1.6, -6, 1.2, 0, 1.6, d.skin));
+      // the head: a hooked horn beak, a mouth line, wrinkles and crown scales
+      head.push(TA(3.6, -1, 7.4, 0.8, 3.8, 3.2, 0x4a4430), TA(5.6, -0.2, 7.4, 0.8, 6.4, 2.2, 0x2a2618));
+      head.push(R(1.6, 2.4, 4.4, 0.7, dark).setAngle(8));
+      for (const [sx, sy] of [[-2.4, -3.2], [0, -3.8], [-1, -1.8], [2, -2.8]] as const) head.push(E(sx, sy, 2, 1.4, shade(d.skin, 0.2)).setAlpha(0.85));
+      head.push(R(-1, 4.2, 4.4, 0.6, dark).setAlpha(0.5), R(0, 3.4, 3, 0.6, dark).setAlpha(0.4));
+      // an old, heavy brow over the eye
+      head.push(R(2.2, -3.4, 3.4, 0.9, dark).setAngle(-14).setAlpha(0.85));
       break;
     }
     case 'snake':
@@ -1270,6 +1429,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
  * mirrored for whichever way they are actually looking.
  */
 function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facing: 1 | -1): Fighter {
+  MAX_HP = cfgNum('grudge.hp');
   const foe = who === 'frog' ? null : who;
   // The lizard's old art switches: every `kind === 'lizard'` below meant
   // "the opponent", and still does -- the species-specific pieces are added
@@ -1344,7 +1504,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
   // that follow the part they belong to; see `Art.headGear`.
   const gear = foe ? foeGear(scene, foe) : { head: [], body: [], back: [], root: [], puff: [], tail: [], tailRoot: [0, 0] as [number, number], drags: false, headBack: [], shell: [] };
   const headBack = scene.add.container(2, -30, gear.headBack);
-  const shellC = gear.shell.length ? scene.add.container(-4, -20, gear.shell) : null;
+  const shellC = gear.shell.length ? scene.add.container(-5, -20, gear.shell).setAngle(-90) : null;
   // a shadow on the boards, which is how a jump reads as off the ground
   const shadow = scene.add.ellipse(x, FLOOR_Y + 1, foe ? foe.bodyW + 8 : 24, 4, 0x000000).setAlpha(0.28).setDepth(19);
   const tailC = gear.tail.length ? scene.add.container(gear.tailRoot[0], -18 + gear.tailRoot[1], gear.tail) : null;
@@ -1406,6 +1566,8 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
 
 function startRound(): void {
   if (!p1 || !p2) return;
+  MAX_HP = cfgNum('grudge.hp');
+  zebraKick = 0;
   p1.hp = MAX_HP;
   p2.hp = MAX_HP;
   p1.x = 90;
@@ -1424,7 +1586,7 @@ function startRound(): void {
   }
   p1.facing = 1;
   p2.facing = -1;
-  roundMs = ROUND_MS;
+  roundMs = roundLen();
   aiBeat = 0;
   aiTimer = 600;
   aiWhiffOpening = 0;
@@ -1445,10 +1607,12 @@ function startRound(): void {
   } else if (first && foe) {
     introName?.setText(`VS ${foe.name}`).setTint(foe.rare ? PALETTE.gold : PALETTE.cream);
     introNote?.setText(foe.rare ? `RARE - ${foe.note}` : foe.note);
+    introTip?.setText(TIPS[foe.key] ?? '');
   }
   sceneRef?.time.delayedCall(first ? 1500 : 800, () => {
     introName?.setText('');
     introNote?.setText('');
+    introTip?.setText('');
     announce?.setText('FIGHT');
     roundOver = false;
     sceneRef?.time.delayedCall(500, () => announce?.setText(''));
@@ -1523,6 +1687,7 @@ function handleInput(dt: number): void {
 /** PRD §9.8: approach -> low -> high-high, with a 0.6s window after a whiff. */
 function runAi(delta: number, dt: number): void {
   if (!p1 || !p2 || aiFrozen) return;
+  stepZebraKick(delta);
   const ai = p2;
   const dist = Math.abs(ai.x - p1.x);
   const me = ai.foe ?? FOES[0];
@@ -1601,7 +1766,7 @@ function runAi(delta: number, dt: number): void {
     const toward = Math.sign(p1.x - ai.x) || 1;
     const drift = dist > ideal + 3 ? 1 : dist < ideal - 3 ? -1 : 0;
     if (drift !== 0) {
-      ai.x += toward * drift * WALK_SPEED * 0.8 * me.speed * dt;
+      ai.x += toward * drift * WALK_SPEED * 0.8 * me.speed * cfgPct('grudge.foeSpeed') * dt;
       ai.x = Phaser.Math.Clamp(ai.x, 20, GAME_W - 20);
     }
     return;
@@ -1674,7 +1839,10 @@ function chooseFoe(): FoeDef {
     const def = want && FOES.find((f) => f.key === want);
     if (def) return def;
   }
-  return pickFoe();
+  // the admin's test zone: the opponent asked for
+  const forced = cfgStr('grudge.foe');
+  const pick = forced !== 'none' ? FOES.find((f) => f.key === forced) : undefined;
+  return pick ?? pickFoe();
 }
 
 function startMove(f: Fighter, move: keyof typeof MOVES): void {
@@ -1685,7 +1853,11 @@ function startMove(f: Fighter, move: keyof typeof MOVES): void {
   // table -- the fighter's own pace on top of it.
   f.timer = MOVES[move].startup * (f.foe?.windup ?? 1);
   f.hitLanded = false;
-  if (move === 'special') f.specialCd = SPECIAL_COOLDOWN;
+  if (move === 'special') {
+    f.specialCd = SPECIAL_COOLDOWN;
+    // THE STAMPEDE KICK: the zebra lunges in on its special
+    if (f.foe?.key === 'zebra') f.x = Phaser.Math.Clamp(f.x + f.facing * 16, 20, GAME_W - 20);
+  }
 }
 
 /**
@@ -1837,7 +2009,8 @@ function tryHit(f: Fighter): void {
   f.hitLanded = true;
   // A tortoise's guard is its shell, and the shell lets NOTHING through.
   const guard = BLOCK_MULT * (target.foe?.guard ?? 1);
-  const dmg = (blocked ? def.dmg * guard : def.dmg) * (f.foe?.power ?? 1);
+  // (and the admin's power settings, yours and theirs: 100% as designed)
+  const dmg = (blocked ? def.dmg * guard : def.dmg) * (f.foe ? f.foe.power * cfgPct('grudge.foePower') : cfgPct('grudge.myPower'));
   // And after a block, the counterpunchers answer straight back.
   if (blocked && target === p2 && target.foe && !aiFrozen && Math.random() < target.foe.counter) aiCounter = 140;
   target.hp -= dmg;
@@ -1857,6 +2030,30 @@ function tryHit(f: Fighter): void {
   const hx = f.x + f.facing * (def.range * 0.6);
   const hy = f.y - (f.move === 'low' ? 12 : f.move === 'special' ? 20 : 28);
   impact(hx, hy, f.move, blocked);
+  // ...and the second hind hoof, a beat after the first
+  if (f.foe?.key === 'zebra' && f.move === 'special') zebraKick = 160;
+  // ---- QUILLS: a fist that lands on the porcupine pays for it
+  if (target.foe?.key === 'porcupine' && target === p2 && f === p1) {
+    const prick = (blocked ? 4 : 2) * cfgPct('grudge.foePower');
+    f.hp -= prick;
+    impact(f.x + f.facing * 8, f.y - 24, 'low', false);
+  }
+}
+
+/** The STAMPEDE KICK's second hoof: ms until it lands (0: none coming). */
+let zebraKick = 0;
+function stepZebraKick(delta: number): void {
+  if (zebraKick <= 0 || !p1 || !p2) return;
+  zebraKick -= delta;
+  if (zebraKick > 0) return;
+  zebraKick = 0;
+  if (Math.abs(p2.x - p1.x) > MOVES.special.range * 1.3 || p1.hp <= 0) return;
+  const dmg = (p1.blocking ? 3 : 9) * cfgPct('grudge.foePower');
+  p1.hp -= dmg;
+  if (!p1.blocking) p1.stun = Math.max(p1.stun, HITSTUN.low);
+  p1.x = Phaser.Math.Clamp(p1.x + (p1.x > p2.x ? 5 : -5), 20, GAME_W - 20);
+  audio.sfx(p1.blocking ? 'ui_blip' : 'whack');
+  impact(p1.x + (p1.x > p2.x ? -6 : 6), p1.y - 18, 'special', p1.blocking);
 }
 
 /**
@@ -1963,7 +2160,9 @@ function render(f: Fighter, dt: number): void {
     const root = a.root;
     if (front && root.getIndex(a.shell) < root.getIndex(a.torso)) root.moveAbove(a.shell, a.bodyGear as unknown as Phaser.GameObjects.Container);
     if (!front && root.getIndex(a.shell) > root.getIndex(a.torso)) root.moveBelow(a.shell, a.torso as unknown as Phaser.GameObjects.Container);
-    a.shell.setPosition(-4 + k * 11, -20 + crouch + breathe - k * 2).setScale(1 - k * 0.12, 1).setAngle(k * 8);
+    // (the dome curves out behind its back, flat side against it; to block it
+    // swings round to curve out in front)
+    a.shell.setPosition(-5 + k * 13, -20 + crouch + breathe - k * 2).setScale(1 - k * 0.12, 1).setAngle(-90 + k * 180);
     a.head.x -= k * 3;
     a.head.y += k * 5;
   }

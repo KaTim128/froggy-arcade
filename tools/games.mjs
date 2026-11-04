@@ -82,7 +82,7 @@ const GAMES = [
   // Aim, charge, throw one over the fence, then try a special item.
   { id: 'frogvslizard', drive: async (p) => { await p.keyboard.press('KeyW'); await p.keyboard.down('Space'); await sleep(620); await p.keyboard.up('Space'); await sleep(3200); await p.keyboard.press('Digit3'); await sleep(300); } },
   // One spin of the wheel, and a scripted dancer who actually plays the chart.
-  { id: 'wheel', drive: async (p) => { await p.keyboard.press('Space'); await sleep(4400); } },
+  { id: 'wheel', drive: async (p) => { await p.keyboard.press('Space'); for (let i = 0; i < 40; i++) { await sleep(500); if (await p.evaluate(() => !window.__wheel?.state().book.pending)) break; } } },
   { id: 'danceoff', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.keyboard.press(['KeyA', 'KeyS', 'KeyW', 'KeyD'][i % 4]); await sleep(190); } } },
   // Four chests, then the fight: the mash is the one cabinet where the game
   // proper is four screens in, so the drive walks the picks rather than
@@ -2653,20 +2653,25 @@ for (const g of [
   // else: the net move for one spin is the face minus the price of the go.
   // Off the wheel, not typed here: the price of a go is the machine's to set.
   const SPIN = await page.evaluate(async () => {
-    const { SPIN_COST } = await import('/src/minigames/wheel.ts');
-    return SPIN_COST;
+    const { spinCost } = await import('/src/minigames/wheel.ts');
+    return spinCost();
   });
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.keyboard.press('Space');
-  await sleep(4600);
+  // (a run can go round more than once: RE spins again, +2 adds two bonus spins)
+  for (let i = 0; i < 60; i++) {
+    await sleep(500);
+    if (await page.evaluate(() => !window.__wheel.state().book.pending && !window.__wheel.state().spinning)) break;
+  }
   const after = await page.evaluate(() => ({
     tokens: window.__froggy.state().tokens,
     at: window.__wheel.state().at,
     won: window.__wheel.state().won,
     spins: window.__wheel.state().spins,
+    log: window.__wheel.state().book.log.slice(-1)[0],
   }));
   const net = after.tokens - before;
-  const paid = net === after.at - SPIN && after.won === after.at && after.spins === 1;
+  const paid = net === after.won - SPIN && after.log && after.won === after.log.pays && after.spins === 1;
   console.log(
     `${paid ? 'PASS' : 'FAIL'}  wheel: one spin, one prize  — landed ${after.at}, net ${net}, banked ${after.won}`,
   );
@@ -3446,6 +3451,46 @@ for (const g of [
     `${paidAll ? 'PASS' : 'FAIL'}  dance off: all three rounds pays 50  — ${before} -> ${after}, wants +50`,
   );
   if (!paidAll) failures++;
+  await page.close();
+}
+
+// A NEW DANCER EVERY ROUND, AND THE CARD BETWEEN ROUNDS WAITS FOR A CHOICE:
+// CASH OUT takes the bank, DANCE ON goes on to the next dancer.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=60&game=danceoff`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__dance');
+  const first = await page.evaluate(() => window.__dance.rival());
+  await page.evaluate(() => {
+    window.__dance.setScores(9000, 0);
+    window.__dance.finish();
+  });
+  await sleep(4000);
+  const waiting = await page.evaluate(() => window.__dance.state());
+  const holds = waiting.cardUp && waiting.round === 1 && !waiting.over;
+  console.log(`${holds ? 'PASS' : 'FAIL'}  dance off: the card waits for CASH OUT or DANCE ON  — card ${waiting.cardUp ? 'up' : 'gone'} after 4s`);
+  if (!holds) failures++;
+  await page.evaluate(() => window.__dance.skipCard());
+  await sleep(500);
+  const second = await page.evaluate(() => window.__dance.rival());
+  const fresh = second !== first;
+  console.log(`${fresh ? 'PASS' : 'FAIL'}  dance off: a new dancer every round  — ${first} -> ${second}`);
+  if (!fresh) failures++;
+  const before = await page.evaluate(() => window.__froggy.state().tokens);
+  await page.evaluate(() => {
+    window.__dance.setScores(9000, 0);
+    window.__dance.finish();
+  });
+  await sleep(400);
+  await page.keyboard.press('KeyC');
+  await sleep(2600);
+  const after = await page.evaluate(() => window.__froggy.state().tokens);
+  const cashed = after - before === 35;
+  console.log(`${cashed ? 'PASS' : 'FAIL'}  dance off: C cashes out the bank between rounds  — ${before} -> ${after}, wants +35`);
+  if (!cashed) failures++;
   await page.close();
 }
 

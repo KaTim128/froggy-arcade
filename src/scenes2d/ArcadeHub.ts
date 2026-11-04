@@ -47,6 +47,11 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { fitPrompt, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
+import corridorUrl from '../assets/apparition-corridor.webp';
+
+/** The apparition's corridor (user's picture, 2 Nov), loaded with the arcade so it is ready by the time it is needed. */
+const CORRIDOR = new Image();
+CORRIDOR.src = corridorUrl;
 
 const INTERACT_RANGE = 24;
 
@@ -1222,6 +1227,54 @@ export class ArcadeHub extends Phaser.Scene {
    * off him, not a different frog drawn in grey.
    */
   private paintApparition(ctx: CanvasRenderingContext2D, t: number): void {
+    // THE PICTURE (user, 2 Nov): the white corridor with the frog on the door
+    // at the far end, from the image the user gave -- this scene only.  Drawn
+    // to fill the screen, cut top and bottom evenly (it is a little taller
+    // than the screen's shape).  Until it has loaded, the corridor drawn here
+    // stands in, so the first frame is never blank.
+    if (CORRIDOR.complete && CORRIDOR.naturalWidth > 0) {
+      const iw = CORRIDOR.naturalWidth;
+      const ih = CORRIDOR.naturalHeight;
+      const k = Math.max(GAME_W / iw, GAME_H / ih);
+      const sw = GAME_W / k;
+      const sh = GAME_H / k;
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(CORRIDOR, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, GAME_W, GAME_H);
+      ctx.restore();
+    } else this.paintCorridorDrawn(ctx);
+
+    // ---- the static.  A scatter of light and dark, redrawn every frame, so
+    // the picture is never quite the same picture twice.
+    const grain = Math.floor(t / 40);
+    for (let i = 0; i < 260; i++) {
+      const n = Math.sin((i * 12.9898 + grain * 78.233) * 43758.5453);
+      const r = n - Math.floor(n);
+      const x = Math.floor((r * GAME_W * 7.3) % GAME_W);
+      const y = Math.floor((r * GAME_H * 13.1) % GAME_H);
+      ctx.fillStyle = r > 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.10)';
+      ctx.fillRect(x, y, 1, 1);
+    }
+    // and a couple of rolling bands, which is what says SIGNAL rather than dust
+    const band = (t / 9) % (GAME_H + 40);
+    ctx.fillStyle = 'rgba(255,255,255,0.035)';
+    ctx.fillRect(0, band - 40, GAME_W, 3);
+    ctx.fillRect(0, GAME_H - band, GAME_W, 2);
+
+    // The vignette that used to sit here is gone with the room: a grey that
+    // goes dark at the corners has a shape and a light source, and the whole
+    // point of this one is that it has neither.
+    //
+    // And the blink that used to end it is gone too.  An eye closing over him
+    // and opening on an empty doorway is a piece of staging: it tells the
+    // player, in the language of film, that the moment is finished and they
+    // may stop looking.  Nothing tells them anything now.  He is on the screen
+    // and then he is not, and the only thing left behind is a room with no
+    // sound in it.
+  }
+
+  /** The corridor as it used to be drawn: only while the picture is still loading. */
+  private paintCorridorDrawn(ctx: CanvasRenderingContext2D): void {
     // The far end of it: the rectangle every line in the picture runs to.
     const HALL = { x0: 147, x1: 173, y0: 64, y1: 101 };
     // A point at depth k, from the near rectangle (the screen) to the far one.
@@ -1377,33 +1430,6 @@ export class ArcadeHub extends Phaser.Scene {
     ctx.fillRect(0, 0, GAME_W, GAME_H);
     ctx.restore();
 
-    // ---- the static.  A scatter of light and dark, redrawn every frame, so
-    // the picture is never quite the same picture twice.
-    const grain = Math.floor(t / 40);
-    for (let i = 0; i < 260; i++) {
-      const n = Math.sin((i * 12.9898 + grain * 78.233) * 43758.5453);
-      const r = n - Math.floor(n);
-      const x = Math.floor((r * GAME_W * 7.3) % GAME_W);
-      const y = Math.floor((r * GAME_H * 13.1) % GAME_H);
-      ctx.fillStyle = r > 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.10)';
-      ctx.fillRect(x, y, 1, 1);
-    }
-    // and a couple of rolling bands, which is what says SIGNAL rather than dust
-    const band = (t / 9) % (GAME_H + 40);
-    ctx.fillStyle = 'rgba(255,255,255,0.035)';
-    ctx.fillRect(0, band - 40, GAME_W, 3);
-    ctx.fillRect(0, GAME_H - band, GAME_W, 2);
-
-    // The vignette that used to sit here is gone with the room: a grey that
-    // goes dark at the corners has a shape and a light source, and the whole
-    // point of this one is that it has neither.
-    //
-    // And the blink that used to end it is gone too.  An eye closing over him
-    // and opening on an empty doorway is a piece of staging: it tells the
-    // player, in the language of film, that the moment is finished and they
-    // may stop looking.  Nothing tells them anything now.  He is on the screen
-    // and then he is not, and the only thing left behind is a room with no
-    // sound in it.
   }
 
   private paintCounter(): void {

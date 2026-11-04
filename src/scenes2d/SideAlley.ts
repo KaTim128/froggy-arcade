@@ -81,8 +81,18 @@ export class SideAlley extends Phaser.Scene {
     kb?.on('keydown-E', () => this.out && this.leave());
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => p.x < 60 && this.leave());
     this.time.delayedCall(500, () => this.say(['OUT OF SIGHT. FOR NOW.', 'NOBODY BACK HERE.', 'QUIET. JUST THE BINS.'][this.variant] ?? 'OUT OF SIGHT.'));
-    alleyWatch(this);
     this.patrol = this.follower(light === 'night');
+    // (going by out on the street, across the open end: see game/patrol)
+    alleyWatch(this, {
+      w: L.sides[0],
+      y: L.walkY,
+      dark: light === 'night',
+      player: () => this.player,
+      spotted: () => {
+        this.say('THEY SAW ME!');
+        this.patrol?.comeIn();
+      },
+    });
   }
 
   /** Seen ducking in here: one of them comes down the alley after you. */

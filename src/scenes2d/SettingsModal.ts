@@ -380,13 +380,22 @@ export class SettingsModal extends Phaser.Scene {
   }
 
   /**
-   * ---- THE ADMIN RUN'S TEST BUTTONS.  Only for ADDMIN128 (store.isTester).
+   * ---- THE ADMIN RUN'S TEST BUTTONS.  Only for the admin profile (store.isTester).
    *
    * Each sets the latches the real story would have set by then and starts
    * the real scene: no copies of anything.
    */
   private renderTest(): void {
     const rows: Array<[string, string, () => void]> = [
+      [
+        'GAME SETTINGS',
+        'COSTS, PRIZES, STATS, TEST ZONE',
+        () => {
+          // over this menu, which stays where it is underneath
+          this.scene.launch('AdminConfig');
+          this.scene.bringToTop('AdminConfig');
+        },
+      ],
       [
         'NEW GAME',
         'AFTER THE INTRO, NOTHING DONE',

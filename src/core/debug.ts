@@ -1,4 +1,6 @@
 import { markLive, reloadTarget } from './session';
+import { unlockAdmin } from './adminAuth';
+import { cfg, inTestZone, layersOf, liveVersion, publish, reloadConfig, resetTest, restoreDefaults, saveTest, setTestZone } from './gameConfig';
 import { BADGES, badgeCount, badgeOnRecord, badgeSet, earnBadge, hasBadge } from '../game/badges';
 import { ICON_IDS } from '../game/badgeIcons';
 import { froggyLayer } from '../render/froggyLayer';
@@ -64,7 +66,19 @@ export function initDebug(g: Phaser.Game): void {
     session: { markLive: () => markLive(), reloadTarget: () => reloadTarget() },
     /** A new profile, made the active one (as the picker would). */
     newProfile: (name: string) => store.createSlot(name),
+    /** The admin password, for the profile in play (as the profile screen asks it). */
+    adminLogin: (pw: string) => {
+      const id = store.activeSlotId();
+      return id ? unlockAdmin(id, pw) : false;
+    },
+    /** The profile with this name made the active one (made if there is none). */
+    useProfile: (name: string) => {
+      const have = store.listSlots().find((x) => x.name.toUpperCase() === name.toUpperCase());
+      return have ? store.selectSlot(have.id) : store.createSlot(name);
+    },
     game: () => g,
+    /** The admin's game settings, through the game's own copy of core/gameConfig. */
+    config: { cfg, saveTest, resetTest, publish, restoreDefaults, setTestZone, inTestZone, layersOf, liveVersion, reload: reloadConfig },
     /** The badges, through the game's own copy of game/badges (the harness's import would be another). */
     badges: {
       earn: (id: string) => earnBadge(id),

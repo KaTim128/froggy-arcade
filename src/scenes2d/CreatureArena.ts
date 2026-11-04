@@ -2,8 +2,11 @@
  * ---- CREATURE CLASH, the fight.  Real time, top down, one on one.
  *
  *   move      WASD / arrows, or the move stick
- *   choose    1 2 3, or the three attack buttons -- BEFORE you aim
- *   aim+fire  mouse + click, or drag the aim stick and let go
+ *   attack    desktop: KEYBOARD ONLY (user, 3 Nov) -- 1 2 3 or J K L fire
+ *             that ability at once, SPACE fires the chosen one; every one
+ *             aims itself at the opponent (a blink goes the way you walk).
+ *             The mouse does nothing in a fight.
+ *   phone     the move pad and the three attack buttons, auto-aimed too
  *
  * Two kinds of fight, and the training ground:
  *
@@ -18,6 +21,7 @@
  * order the timers, taps and tab switches arrive in.
  */
 
+import { cfgPct, cfgStr } from '../core/gameConfig';
 import { countBack } from '../core/pause';
 import { STAGES, WORLDS, lineupFoe, storyFoe, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
@@ -25,15 +29,17 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
+import { button, centerText, confirmDialog, forfeitLines, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
-import { plainWords } from '../game/plainWords';
+import { plainWords, TILE_PX } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
-import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
+import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, bossById, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
-import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
+import { MAX_LEVEL, levelOf, withLevel, xpProgress } from '../game/creatureLevel';
+import { ULT_COOLDOWN_S, ULT_UNLOCK_S, ultColour, ultimateOf, type Ultimate, type UltFx } from '../game/ultimates';
+import { MINI_INFO, MINI_LEVEL, MINI_WIN, abandonMini, boutOver, currentMini } from '../game/creatureMinis';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, EVADE_CHANCE, EVADE_S, FOCUS_CRIT, FOCUS_S, FURY_MUL, FURY_S, QUICK_RATE, QUICK_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, WALL_DEFAULT, WALL_SPECS, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
@@ -58,6 +64,46 @@ const TIME_LIMIT = 120;
  * the biggest creature to walk round the end of a ridge in plain sight.
  */
 const COVER_LANE = 24;
+
+/**
+ * ---- EVERY WORLD HAS MORE THAN ONE KIND OF COVER (user, 3 Nov), and each
+ * world's are its own: a picnic table and a fence in the fields, stumps and
+ * toadstools in the deep wood, drifts in the pass, driftwood on the shore.
+ * Each entry is a kind and how many pieces long it lies.
+ */
+const WORLD_EXTRAS: Record<string, Array<[CoverShape, number]>> = {
+  // (no world shares a piece with another -- user, 4 Nov: "each arena should
+  // have their own unique walls and barriers")
+  caves: [['crystal', 1], ['stalagmite', 1], ['crystal', 2]],
+  fields: [['bush', 1], ['table', 2], ['fence', 3], ['haybale', 1]],
+  forests: [['stump', 1], ['log', 2], ['mushroom', 1]],
+  frozen: [['snowdrift', 2], ['snowman', 1], ['snowdrift', 1]],
+  swamps: [['mossylog', 2], ['bogroot', 1], ['mossylog', 1]],
+  ruins: [['rubble', 1], ['urn', 1], ['rubble', 2]],
+  shore: [['driftwood', 2], ['sandcastle', 1], ['coral', 1]],
+  desert: [['bones', 1], ['sandstone', 1], ['bones', 2]],
+  void: [['altar', 2], ['voidorb', 1], ['altar', 1]],
+  volcano: [['lavarock', 1], ['charred', 1], ['lavarock', 2]],
+};
+
+/**
+ * What a piece of the place takes to knock down, by what it is; missing
+ * means it does not break (stone, a column, a lava crust).  A wooden fence
+ * goes in a few shots, a tree takes a while.
+ */
+const COVER_HP: Partial<Record<CoverShape, number>> = {
+  tree: 60, tuft: 12, ice: 45, reed: 18, shell: 40, cactus: 30,
+  log: 40, bush: 18, table: 30, fence: 24, stump: 45, mushroom: 16, crystal: 35, snowdrift: 22, driftwood: 30, rubble: 30, urn: 14, bones: 20,
+  stalagmite: 50, haybale: 22, pine: 60, snowman: 20, mossylog: 38, bogroot: 34, sandcastle: 16, coral: 28, sandstone: 55, altar: 40, voidorb: 24, charred: 26,
+};
+/** The bits that fly off it when it goes. */
+const DEBRIS: Partial<Record<CoverShape, number[]>> = {
+  tree: [0x2a5a1c, 0x4a3018], tuft: [0x6aa83a], ice: [0xbfe8f6, 0x6ab4d6], reed: [0x5a7a32, 0x8a6a2a], shell: [0xf0dcc4, 0xb08a70], cactus: [0x2f7a3a, 0xe8f0b0],
+  log: [0x6a4424, 0xa07040], bush: [0x3a7a2a, 0x6aa83a], table: [0xa07040, 0x6a4424], fence: [0xc8a070, 0x6a4a2a], stump: [0x6a4424, 0xc89a60], mushroom: [0xd04040, 0xf0e8d8],
+  crystal: [0x8ac8f0, 0xe8f4ff], snowdrift: [0xffffff, 0xd8ecf4], driftwood: [0xc8b090, 0x8a7458], rubble: [0xb8ae90, 0x6a6048], urn: [0xc07040, 0x7a4020], bones: [0xf0e8d0, 0xc8bca0],
+  stalagmite: [0x6a625a, 0x9a9183], haybale: [0xe8c860, 0xb8902a], pine: [0x1e4a2a, 0x4a3018], snowman: [0xffffff, 0xf08a3a], mossylog: [0x5a7a2a, 0x4a3018], bogroot: [0x3a2a18, 0x5a7a32],
+  sandcastle: [0xe8d090, 0xc8a860], coral: [0xff7a8a, 0xffb0a0], sandstone: [0xd8a060, 0xa87040], obelisk: [0x2a1a48, 0xb88aff], altar: [0x3a2a5a, 0xb88aff], voidorb: [0xb88aff, 0xffffff], lavarock: [0x2a1a14, 0xff6a20], charred: [0x1a1210, 0xff8a3a],
+};
 /** The strip a move's line runs along: under the health bars, over the arena. */
 const INFO_X = 8;
 const INFO_R = GAME_W - 8;
@@ -72,6 +118,11 @@ const ATK_T = 0.28;
 const BODY_R = 7;
 
 interface Fighter {
+  /** ULTIMATE (game/ultimates): its move, and seconds until it can be fired (locked 30, then 30 after each use). */
+  ult: Ultimate | null;
+  ultT: number;
+  /** Fired at least once (until then the badge reads LOCKED). */
+  ultUsed?: boolean;
   c: Creature;
   x: number;
   y: number;
@@ -91,7 +142,7 @@ interface Fighter {
   aura: number;
   /** Held where you stand, by a snare or by roots. */
   root: number;
-  dash: { vx: number; vy: number; t: number; dmg: number; hit: boolean; a: Attack; bounced?: boolean; back?: boolean } | null;
+  dash: { vx: number; vy: number; t: number; dmg: number; hit: boolean; a: Attack; bounced?: boolean; back?: boolean; flee?: boolean } | null;
   /** The specials' own effects on it (see creatures `Mod`): seconds left of each. */
   poison: number;
   marked: number;
@@ -179,7 +230,7 @@ interface Fx {
  */
 interface Pool {
   owner: Fighter;
-  kind?: 'burn' | 'flow' | 'honey' | 'floe' | 'mycel' | 'rune' | 'beacon' | 'trail' | 'drift' | 'halo';
+  kind?: 'burn' | 'flow' | 'honey' | 'floe' | 'mycel' | 'rune' | 'beacon' | 'trail' | 'drift' | 'halo' | 'stink';
   x: number;
   y: number;
   x2?: number;
@@ -274,6 +325,12 @@ interface Prop {
   /** A piece somebody put up that shots can break: what it has left, and had. */
   hp?: number;
   maxHp?: number;
+  /**
+   * Whose wall this piece is.  It stops the OTHER one's body and shots;
+   * its owner walks and fires straight through it (user, 3 Nov: "abilities
+   * must never harm or obstruct the player's own creature").
+   */
+  owner?: Fighter;
 }
 
 /**
@@ -360,11 +417,15 @@ interface Brain {
 
 export class CreatureArena extends Phaser.Scene {
   private biome!: Biome;
-  private mode: 'zone' | 'ladder' | 'training' | 'story' = 'zone';
+  private mode: 'zone' | 'ladder' | 'training' | 'story' | 'mini' = 'zone';
+  private ultText: Phaser.GameObjects.BitmapText | null = null;
+  private foeUltText: Phaser.GameObjects.BitmapText | null = null;
   /** Story: which world, which of its stages, and who (drawn when the fight opens, paid at the bell). */
   private storyWorld = 0;
   private storyStage = 0;
-  private storyFoeId = '';
+  /** The trail node asked for, and whether this fight is a replay of one already beaten. */
+  private storyNode: number | undefined;
+  private storyReplay = false;
   private vsShown = false;
   /** The ladder step this is (6 = the boss). */
   private level = 0;
@@ -488,8 +549,9 @@ export class CreatureArena extends Phaser.Scene {
   /** Back after a reload with the battle already open and paid for (core/session). */
   private resumed = false;
 
-  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training' | 'story'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec; world?: number }): void {
+  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training' | 'story' | 'mini'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec; world?: number; node?: number }): void {
     this.storyWorld = data.world ?? 0;
+    this.storyNode = typeof data.node === 'number' ? data.node : undefined;
     this.vsShown = false;
     this.resumed = data.resumed === true;
     // (dev only: tools/clash.mjs)
@@ -534,6 +596,8 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   create(): void {
+    // its own music (user, 1 Nov: every arcade game has its own)
+    audio.setScene({ music: 'game_clash_battle', ambience: ['cabinet_bleeps'] });
     // (a fresh fight: the last one's strip mask and labels went with it)
     this.infoMask = null;
     this.effLabel = null;
@@ -542,9 +606,15 @@ export class CreatureArena extends Phaser.Scene {
     this.foeLevel = 0;
     const own = activeOwned();
     const sim = this.simSpec;
+    // ---- A MINI GAME: the run's own creatures, both at the mini level
+    const mini = this.mode === 'mini' ? currentMini() : null;
+    if (this.mode === 'mini' && (!mini || mini.done || !mini.me.length || !mini.foe.length)) {
+      this.scene.start('CreatureHub', { from: this.from, screen: 'minis', msg: 'NO MINI GAME IS ON.' });
+      return;
+    }
     // (yours fights at its level: see creatureLevel)
-    const mine = sim ? withLevel(creatureById(sim.me)!, sim.level) : own ? ownedCreature(own) : undefined;
-    this.myLevel = sim ? sim.level : own ? levelOf(own.xp ?? 0) : 1;
+    const mine = sim ? withLevel(creatureById(sim.me)!, sim.level) : mini ? withLevel(creatureById(mini.me[0])!, MINI_LEVEL) : own ? ownedCreature(own) : undefined;
+    this.myLevel = sim ? sim.level : mini ? MINI_LEVEL : own ? levelOf(own.xp ?? 0) : 1;
     if (!mine) {
       this.scene.start('CreatureHub', { from: this.from, msg: 'YOU NEED A CREATURE TO FIGHT.' });
       return;
@@ -553,7 +623,11 @@ export class CreatureArena extends Phaser.Scene {
     // drawn when the run was paid for: the place and the opponent come from
     // it, never from here, so nothing about it can be re-rolled.
     let wild: Creature;
-    if (sim) {
+    if (mini) {
+      wild = withLevel(creatureById(mini.foe[0])!, MINI_LEVEL);
+      this.foeLevel = MINI_LEVEL;
+      this.skill = 0.6;
+    } else if (sim) {
       wild = withLevel(creatureById(sim.foe)!, sim.level);
       this.foeLevel = sim.level;
       this.skill = sim.skill;
@@ -564,7 +638,9 @@ export class CreatureArena extends Phaser.Scene {
       const ob = cs.battle;
       const open = this.resumed && ob?.mode === 'story';
       const w = open ? ob!.world ?? 0 : this.storyWorld;
-      const stage = open ? ob!.stage ?? 0 : cs.story.stage[w] ?? 0;
+      // (the node picked on the world's trail; by default its next unbeaten one)
+      const stage = open ? ob!.stage ?? 0 : this.storyNode ?? Math.min(STAGES, cs.story.best[w] ?? 0);
+      this.storyReplay = open ? ob!.replay === true : stage < (cs.story.best[w] ?? 0);
       const foeId = open ? ob!.foe ?? '' : stage >= STAGES ? WORLDS[w].boss : lineupFoe(w, stage);
       const sf = storyFoe(w, stage, foeId);
       if (!sf) {
@@ -573,7 +649,6 @@ export class CreatureArena extends Phaser.Scene {
       }
       this.storyWorld = w;
       this.storyStage = stage;
-      this.storyFoeId = foeId;
       this.biome = BIOMES.find((b) => b.id === WORLDS[w].biome) ?? this.biome;
       wild = sf.foe;
       this.boss = sf.boss;
@@ -597,12 +672,38 @@ export class CreatureArena extends Phaser.Scene {
       wild = withLevel(nextZoneFoe(this.biome), lv);
       this.foeLevel = lv;
     }
+    // THE ADMIN'S TEST ZONE (core/gameConfig): the opponent or boss asked
+    // for, at the level the fight would have had (never in a ladder run,
+    // whose steps were drawn and paid for)
+    if (!sim && this.mode !== 'ladder' && this.mode !== 'mini') {
+      const lv = this.foeLevel || this.myLevel;
+      const wantBoss = cfgStr('clash.boss');
+      const wantFoe = cfgStr('clash.foe');
+      if (this.boss && wantBoss !== 'none' && bossById(wantBoss)) wild = { ...withLevel(bossById(wantBoss)!, lv), name: wild.name };
+      else if (!this.boss && wantFoe !== 'none' && creatureById(wantFoe)) wild = withLevel(creatureById(wantFoe)!, lv);
+    }
+    // the admin's stat settings: yours and theirs, as percentages (100 = as designed)
+    const scaled = (c: Creature, side: 'my' | 'foe'): Creature => {
+      const hp = cfgPct(`clash.${side}Hp`);
+      const dmg = cfgPct(`clash.${side}Dmg`);
+      const spd = cfgPct(`clash.${side}Speed`);
+      if (hp === 1 && dmg === 1 && spd === 1) return c;
+      return {
+        ...c,
+        hp: Math.max(1, Math.round(c.hp * hp)),
+        speed: Math.max(1, Math.round(c.speed * spd)),
+        attacks: c.attacks.map((a) => ({ ...a, dmg: a.dmg > 0 ? Math.max(1, Math.round(a.dmg * dmg)) : 0 })) as Creature['attacks'],
+      };
+    };
     // (a copy: the roster's own entry is never renamed)
-    const foeC = this.training ? { ...wild, name: 'TRAINING DUMMY' } : wild;
-    this.me = this.fighter(mine, ARENA.x + 40, ARENA.y + ARENA.h / 2, 1, 1);
+    const foeC = scaled(this.training ? { ...wild, name: 'TRAINING DUMMY' } : wild, 'foe');
+    this.me = this.fighter(scaled(mine, 'my'), ARENA.x + 40, ARENA.y + ARENA.h / 2, 1, 1);
     // (a boss is bigger, not huge: it has to fit the arena and be fair to hit)
     this.foe = this.fighter(foeC, ARENA.x + ARENA.w - 40, ARENA.y + ARENA.h / 2, -1, this.boss ? 1.35 : 1);
     this.lastFoePos = { x: this.foe.x, y: this.foe.y, stuck: 0 };
+    // (3v3: whoever won the last bout walks in with the health it had)
+    if (mini?.myHp !== undefined) this.me.hp = Math.max(1, Math.min(this.me.max, mini.myHp));
+    if (mini?.foeHp !== undefined) this.foe.hp = Math.max(1, Math.min(this.foe.max, mini.foeHp));
 
     this.paintGround();
     this.g = this.add.graphics().setDepth(10);
@@ -662,6 +763,10 @@ export class CreatureArena extends Phaser.Scene {
     this.input.keyboard!.on('keydown-ONE', () => this.keyFire(0));
     this.input.keyboard!.on('keydown-TWO', () => this.keyFire(1));
     this.input.keyboard!.on('keydown-THREE', () => this.keyFire(2));
+    // SPACE: the chosen ability, auto-aimed
+    this.input.keyboard!.on('keydown-SPACE', () => this.quickFire(this.sel));
+    // Q: the ULTIMATE, once it is up
+    this.input.keyboard!.on('keydown-Q', () => this.useUlt(this.me));
     this.input.addPointer(2);
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.down(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.moveP(p));
@@ -760,10 +865,11 @@ export class CreatureArena extends Phaser.Scene {
     // (a reload into a battle already paid for: the bell, and no second stake)
     const open = this.resumed && !!store.get().creatures.battle;
     this.resumed = false;
-    if (!this.training && !open) {
-      const r = this.mode === 'ladder' ? startLadderBattle() : this.mode === 'story' ? startStory(this.storyWorld, this.storyFoeId) : startBattle(this.biome.id, this.foe.c.id);
+    // (a mini game was paid for when it was picked: nothing more at the bell)
+    if (!this.training && !open && this.mode !== 'mini') {
+      const r = this.mode === 'ladder' ? startLadderBattle() : this.mode === 'story' ? startStory(this.storyWorld, this.storyStage) : startBattle(this.biome.id, this.foe.c.id);
       if (!r.ok) {
-        this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'story' : 'map', msg: r.msg });
+        this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'trail' : 'map', msg: r.msg });
         return;
       }
       // its own cry, at the bell
@@ -794,8 +900,8 @@ export class CreatureArena extends Phaser.Scene {
   private keyFire(i: number): void {
     this.choose(i);
     if (this.touch || this.band || this.over || this.paused || !this.started || this.dialog) return;
-    const p = this.input.activePointer;
-    this.fire(this.me, i, p.worldX - this.me.x, p.worldY - this.me.y);
+    // auto-aimed, never the mouse: the fight is played on the keyboard
+    this.quickFire(i);
   }
 
   /** A band button: that attack, now, at the foe (a blink goes the way you are walking). */
@@ -843,6 +949,7 @@ export class CreatureArena extends Phaser.Scene {
       c, x, y, hp: c.hp, max: c.hp, cds: [0, 0.8, 2], face, scale, burn: 0, slow: 0, stun: 0, stunImmune: 0, blind: 0, shield: 0, invuln: 0, aura: 0, root: 0, dash: null,
       poison: 0, marked: 0, shred: 0, weak: 0, chill: 0, haste: 0, regen: 0, guard: 0, shieldMod: null, st: {}, ref: {},
       kx: 0, ky: 0, flash: 0, moving: false, atk: 0, atkX: 0, atkY: 0, stride: 0,
+      ult: ultimateOf(c.id), ultT: ULT_UNLOCK_S,
     };
   }
 
@@ -870,6 +977,31 @@ export class CreatureArena extends Phaser.Scene {
     ];
     // (each world's own floor and set pieces: art/arenaFloors)
     paintFloor(g, b.id, ARENA, b.ground, b.groundDark, b.id, 1, avoid);
+    // ---- THE TILES (user, 4 Nov): every distance on the cards is in TILES
+    // (game/plainWords TILE_PX), so the floor shows them -- a faded box
+    // outline for each, laid in from the middle so the part tiles at the top
+    // and bottom edges are the same, a dark line with a faint lit edge
+    // inside it, the way tiles are set in a floor
+    {
+      const T = TILE_PX;
+      const cols = Math.floor(ARENA.w / T);
+      const rows = Math.floor(ARENA.h / T);
+      const ox = ARENA.x + (ARENA.w - cols * T) / 2;
+      const oy = ARENA.y + (ARENA.h - rows * T) / 2;
+      // (a dark line on a light floor, a pale one on a dark floor: faded on both)
+      const lum = (((b.ground >> 16) & 255) * 0.3 + ((b.ground >> 8) & 255) * 0.59 + (b.ground & 255) * 0.11) / 255;
+      const [edge, edgeA] = lum < 0.38 ? [0xffffff, 0.07] : [0x000000, 0.13];
+      for (let cx = -1; cx <= cols; cx++)
+        for (let cy = -1; cy <= rows; cy++) {
+          const x0 = Math.max(ARENA.x, ox + cx * T);
+          const y0 = Math.max(ARENA.y, oy + cy * T);
+          const x1 = Math.min(ARENA.x + ARENA.w, ox + (cx + 1) * T);
+          const y1 = Math.min(ARENA.y + ARENA.h, oy + (cy + 1) * T);
+          if (x1 - x0 < 2 || y1 - y0 < 2) continue;
+          g.lineStyle(1, edge, edgeA).strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+          g.fillStyle(0xffffff, 0.035).fillRect(x0 + 1, y0 + 1, x1 - x0 - 2, 1);
+        }
+    }
     // a worn track round the middle, where fights happen
     g.lineStyle(3, b.groundDark, 0.25).strokeEllipse(ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, ARENA.w * 0.72, ARENA.h * 0.78);
     // the haze of the place, heaviest at the edges: light coming in over it
@@ -910,13 +1042,64 @@ export class CreatureArena extends Phaser.Scene {
       Math.hypot(x - this.me.x, y - this.me.y) > r + 26 &&
       Math.hypot(x - this.foe.x, y - this.foe.y) > r + 26 * this.foe.scale &&
       x > ARENA.x + COVER_LANE && x < ARENA.x + ARENA.w - COVER_LANE && y > ARENA.y + COVER_LANE - 4 && y < ARENA.y + ARENA.h - COVER_LANE + 4 &&
-      (!apart || !this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + 10));
-    const add = (parts: Prop[]): void => {
+      // (wide apart: a creature always fits between two barriers, so melee
+      // can be walked round and not funnelled -- user, 3 Nov)
+      (!apart || !this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + 19));
+    const add = (parts: Prop[], kind: CoverShape = b.prop): void => {
       if (!parts.length) return;
-      this.barriers.push({ kind: b.prop, parts, seed: rnd.between(1, 9999), life: -1, owner: null });
+      // the place's own pieces break when they are the breaking kind
+      const hp = COVER_HP[kind];
+      if (hp) for (const q of parts) Object.assign(q, { hp, maxHp: hp });
+      this.barriers.push({ kind, parts, seed: rnd.between(1, 9999), life: -1, owner: null });
       this.props.push(...parts);
     };
-    const n = this.boss ? 3 : 4;
+    // ---- the world's other cover first, so the long pieces (a table, a
+    // fence, a log) always find room; the main cover fills in round them
+    const extras = WORLD_EXTRAS[b.id] ?? [];
+    // (more of it than there was -- user, 4 Nov: "place more barriers")
+    const want = this.boss ? 3 : 4;
+    let placed = 0;
+    // ---- THE LANE BETWEEN THE TWO STARTS IS NEVER BARE: a piece or two
+    // across the middle of it first, so a straight run at each other always
+    // has something to go round or duck behind
+    for (const k of [-1, 1]) {
+      for (let tries = 0; tries < 30; tries++) {
+        const x = ARENA.x + ARENA.w / 2 + k * rnd.between(12, 44);
+        const y = midY + rnd.between(-14, 14);
+        const [kind] = extras.length ? extras[rnd.between(0, extras.length - 1)] : [b.prop];
+        const r = kind === 'mushroom' || kind === 'urn' ? 5 : 6;
+        if (!clear(x, y, r + 4)) continue;
+        add([{ x, y, r }], kind);
+        break;
+      }
+    }
+    // (each kind gets its tries before the next: the long ones -- a table,
+    // a fence -- would otherwise always lose out to the small ones)
+    const start = rnd.between(0, Math.max(0, extras.length - 1));
+    let slot = 0;
+    for (let guard = 0; placed < want && slot < extras.length * 2 && guard < 240; guard++) {
+      if (guard > 0 && guard % 20 === 0) slot++;
+      const [kind, len] = extras[(start + slot) % extras.length] ?? ['rock', 1];
+      const x = ARENA.x + rnd.between(44, ARENA.w - 44);
+      const y = ARENA.y + rnd.between(COVER_LANE + 2, ARENA.h - COVER_LANE - 2);
+      const r = kind === 'mushroom' || kind === 'urn' ? 5 : 6;
+      // lying along the floor, a piece every 10px
+      const horiz = rnd.frac() < 0.6;
+      const parts: Prop[] = [];
+      for (let k = 0; k < len; k++) {
+        const off = (k - (len - 1) / 2) * 10;
+        parts.push({ x: x + (horiz ? off : 0), y: y + (horiz ? 0 : off * 0.8), r });
+      }
+      if (!parts.every((q) => clear(q.x, q.y, q.r + 4))) continue;
+      add(parts, kind);
+      placed++;
+      slot++;
+      guard = Math.ceil(guard / 20) * 20;
+    }
+    const n = this.boss ? 4 : 6;
+    // (the main cover counts on its own: the extras above are not its share)
+    const base0 = this.barriers.length;
+    const mine = (): number => this.barriers.length - base0;
     switch (b.cover) {
       case 'line': {
         // two ridges across the middle of the floor, each with a gap you can
@@ -928,9 +1111,10 @@ export class CreatureArena extends Phaser.Scene {
           const gap = rnd.between(-10, 10);
           const parts: Prop[] = [];
           for (let y = ARENA.y + COVER_LANE; y < ARENA.y + ARENA.h - COVER_LANE; y += 7) {
-            if (Math.abs(y - (midY + gap)) < 15) continue;
+            if (Math.abs(y - (midY + gap)) < 20) continue;
             const x = cx + rnd.between(-2, 2);
-            if (!clear(x, y, 5, false)) continue;
+            // (the ridge's own pieces touch; anything else keeps its distance)
+            if (!clear(x, y, 5, true)) continue;
             parts.push({ x, y, r: 5 });
           }
           add(parts);
@@ -938,16 +1122,17 @@ export class CreatureArena extends Phaser.Scene {
         break;
       }
       case 'grove': {
-        // clumps, the way trees grow -- real cover you can stand inside
+        // clumps, the way trees grow -- packed tight, so a clump is one solid
+        // stand to hide behind and never a ring of trunks to get stuck in
         let guard = 0;
-        while (this.barriers.length < n && guard++ < 200) {
+        while (mine() < n && guard++ < 300) {
           const cx = ARENA.x + rnd.between(46, ARENA.w - 46);
           const cy = ARENA.y + rnd.between(COVER_LANE + 4, ARENA.h - COVER_LANE - 4);
           if (!clear(cx, cy, 16)) continue;
           const parts: Prop[] = [];
           for (let i = 0; i < rnd.between(4, 6); i++) {
             const a = rnd.rotation();
-            const d = rnd.between(0, 11);
+            const d = rnd.between(0, 6);
             const p = { x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d * 0.7, r: rnd.between(5, 7) };
             if (clear(p.x, p.y, p.r, false)) parts.push(p);
           }
@@ -968,7 +1153,7 @@ export class CreatureArena extends Phaser.Scene {
       }
       default: {
         let guard = 0;
-        while (this.barriers.length < n + 2 && guard++ < 200) {
+        while (mine() < n + 2 && guard++ < 300) {
           const x = ARENA.x + rnd.between(50, ARENA.w - 50);
           const y = ARENA.y + rnd.between(COVER_LANE, ARENA.h - COVER_LANE);
           if (!clear(x, y, 9)) continue;
@@ -977,6 +1162,72 @@ export class CreatureArena extends Phaser.Scene {
         break;
       }
     }
+    // ---- NOBODY IS EVER BOXED IN: every open patch of floor joins up with
+    // both starts.  A barrier that closes a pocket off is taken out again.
+    for (let tries = 0; tries < 12; tries++) {
+      const r = this.pathCheck();
+      if (r.ok) break;
+      const near = this.barriers
+        .filter((bar) => bar.life < 0)
+        .map((bar) => ({ bar, d: Math.min(...bar.parts.map((q) => Math.hypot(q.x - r.at!.x, q.y - r.at!.y))) }))
+        .sort((p1, p2) => p1.d - p2.d)[0];
+      if (!near) break;
+      this.barriers = this.barriers.filter((bar) => bar !== near.bar);
+      this.props = this.props.filter((q) => !near.bar.parts.includes(q));
+    }
+  }
+
+  /**
+   * Can a creature get everywhere?  The floor on a 4px grid, each cell open
+   * if the biggest body in the fight fits there; flooded from your start.
+   * ok when the other start is reached and no open cell is left cut off;
+   * otherwise `at` is one of the cut-off cells.
+   */
+  pathCheck(): { ok: boolean; reached: boolean; pockets: number; at: { x: number; y: number } | null } {
+    const C = 4;
+    const cols = Math.floor(ARENA.w / C);
+    const rows = Math.floor(ARENA.h / C);
+    const body = BODY_R * Math.max(this.me.scale, this.foe.scale) * 0.85;
+    const open = new Uint8Array(cols * rows);
+    const cx = (i: number): number => ARENA.x + (i + 0.5) * C;
+    const cy = (j: number): number => ARENA.y + (j + 0.5) * C;
+    for (let j = 0; j < rows; j++)
+      for (let i = 0; i < cols; i++) {
+        const x = cx(i);
+        const y = cy(j);
+        if (x < ARENA.x + body || x > ARENA.x + ARENA.w - body || y < ARENA.y + body || y > ARENA.y + ARENA.h - body) continue;
+        if (this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + body)) continue;
+        open[j * cols + i] = 1;
+      }
+    const cellOf = (x: number, y: number): number => Phaser.Math.Clamp(Math.floor((y - ARENA.y) / C), 0, rows - 1) * cols + Phaser.Math.Clamp(Math.floor((x - ARENA.x) / C), 0, cols - 1);
+    const seen = new Uint8Array(cols * rows);
+    const start = cellOf(this.me.x, this.me.y);
+    const q: number[] = [start];
+    seen[start] = 1;
+    while (q.length) {
+      const c = q.pop()!;
+      const i = c % cols;
+      const j = (c - i) / cols;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+        const n = nj * cols + ni;
+        if (seen[n] || !open[n]) continue;
+        seen[n] = 1;
+        q.push(n);
+      }
+    }
+    const reached = seen[cellOf(this.foe.x, this.foe.y)] === 1;
+    let pockets = 0;
+    let at: { x: number; y: number } | null = null;
+    for (let c = 0; c < open.length; c++)
+      if (open[c] && !seen[c]) {
+        pockets++;
+        if (!at) at = { x: cx(c % cols), y: cy(Math.floor(c / cols)) };
+      }
+    if (!reached && !at) at = { x: this.foe.x, y: this.foe.y };
+    return { ok: reached && pockets === 0, reached, pockets, at };
   }
 
   /** A shot into a breakable piece of wall: it cracks, and at nothing it falls. */
@@ -987,11 +1238,20 @@ export class CreatureArena extends Phaser.Scene {
       this.repaintCover();
       return;
     }
+    const bar = this.barriers.find((b) => b.parts.includes(p));
     this.props = this.props.filter((q) => q !== p);
     for (const b of this.barriers) b.parts = b.parts.filter((q) => q !== p);
     this.barriers = this.barriers.filter((b) => b.parts.length || b.max === undefined);
     this.fx.push({ kind: 'boom', x: p.x, y: p.y, r: 10, t: 0, life: 0.3, col: 0xd8d0c0 });
-    audio.sfx('item_thud', 0.4);
+    // it comes apart in its own colours
+    const cols = (bar && DEBRIS[bar.kind]) || [0xd8d0c0];
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5;
+      const d = p.r + 4 + Math.random() * 8;
+      const bit = this.add.rectangle(p.x, p.y, 2, 2, cols[i % cols.length]).setDepth(30);
+      this.tweens.add({ targets: bit, x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d * 0.7, alpha: 0, angle: 180, duration: 420 + Math.random() * 260, ease: 'Quad.easeOut', onComplete: () => bit.destroy() });
+    }
+    audio.sfx('item_thud', 0.55);
     this.repaintCover();
   }
 
@@ -1023,7 +1283,11 @@ export class CreatureArena extends Phaser.Scene {
       const fade = bar.max !== undefined ? Math.max(0, Math.min(1, bar.life / 1.2)) : 1;
       g.setAlpha(fade);
       for (const p of bar.parts) {
-        this.paintProp(g, p, bar);
+        // worn down: drawn a size smaller at each stage (it still blocks at
+        // its full size until it goes)
+        const k = p.hp !== undefined && p.maxHp ? p.hp / p.maxHp : 1;
+        const stage = k > 0.66 ? 1 : k > 0.33 ? 0.88 : 0.76;
+        this.paintProp(g, stage < 1 ? { ...p, r: p.r * stage } : p, bar);
         // cracks across a piece that has been shot, more the worse it is
         if (p.hp !== undefined && p.maxHp && p.hp < p.maxHp) {
           const dmg = 1 - p.hp / p.maxHp;
@@ -1186,6 +1450,219 @@ export class CreatureArena extends Phaser.Scene {
         g.lineBetween(p.x, p.y - p.r * 0.2, p.x + p.r * 0.2, p.y - p.r * 0.8);
         g.fillStyle(0xffd060, 0.9).fillCircle(p.x, p.y - p.r * 0.2, 1.2);
         break;
+      case 'log':
+      case 'driftwood': {
+        // a length of trunk on its side, bark and a cut end
+        const drift = kind === 'driftwood';
+        g.fillStyle(drift ? 0x8a7458 : 0x4a2e16, 1).fillRoundedRect(p.x - p.r - 1, p.y - p.r * 0.6, p.r * 2 + 2, p.r * 1.2, 2);
+        g.fillStyle(drift ? 0xc8b090 : 0x6a4424, 1).fillRoundedRect(p.x - p.r, p.y - p.r * 0.55, p.r * 2, p.r * 0.8, 2);
+        g.lineStyle(1, drift ? 0x9a8468 : 0x3a2412, 0.8);
+        for (let i = -1; i <= 1; i++) g.lineBetween(p.x - p.r * 0.8, p.y + i * 1.6, p.x + p.r * 0.8, p.y + i * 1.6 + 0.5);
+        g.fillStyle(drift ? 0xe0d0b0 : 0xc89a60, 1).fillEllipse(p.x + p.r, p.y, 3, p.r * 1.1);
+        break;
+      }
+      case 'stump':
+        g.fillStyle(0x4a2e16, 1).fillRect(p.x - p.r * 0.8, p.y - p.r * 0.4, p.r * 1.6, p.r * 1.1);
+        g.fillStyle(0x6a4424, 1).fillRect(p.x - p.r * 0.8 + 1, p.y - p.r * 0.4, p.r * 0.6, p.r * 1.1);
+        g.fillStyle(0xc89a60, 1).fillEllipse(p.x, p.y - p.r * 0.4, p.r * 1.6, p.r * 0.8);
+        g.lineStyle(1, 0x8a6030, 0.9).strokeEllipse(p.x, p.y - p.r * 0.4, p.r * 0.9, p.r * 0.45);
+        g.fillStyle(0x4a2e16, 1).fillRect(p.x - p.r, p.y + p.r * 0.6, 3, 1.5).fillRect(p.x + p.r - 3, p.y + p.r * 0.6, 3, 1.5);
+        break;
+      case 'bush':
+        g.fillStyle(0x1e4a16, 1);
+        this.blob(g, p.x, p.y, p.r * 1.15, seed, 0.75, 10);
+        g.fillStyle(0x3a7a2a, 1);
+        this.blob(g, p.x - 0.5, p.y - 1, p.r * 0.95, seed + 3, 0.75, 10);
+        g.fillStyle(0x6aa83a, 0.9);
+        this.blob(g, p.x - p.r * 0.35, p.y - p.r * 0.45, p.r * 0.45, seed + 6, 0.8, 7);
+        g.fillStyle(0xd84a4a, 1).fillCircle(p.x + p.r * 0.4, p.y - 1, 0.9).fillCircle(p.x - p.r * 0.1, p.y + 1.5, 0.9);
+        break;
+      case 'table':
+        // a picnic table: the top, its planks and the bench in front
+        g.fillStyle(0x6a4424, 1).fillRect(p.x - p.r - 1, p.y - p.r * 0.7, p.r * 2 + 2, p.r * 0.9);
+        g.fillStyle(0xa07040, 1).fillRect(p.x - p.r, p.y - p.r * 0.7, p.r * 2, p.r * 0.7);
+        g.lineStyle(1, 0x6a4424, 1).lineBetween(p.x - p.r, p.y - p.r * 0.35, p.x + p.r, p.y - p.r * 0.35);
+        g.fillStyle(0x6a4424, 1).fillRect(p.x - p.r + 1, p.y + p.r * 0.2, 2, p.r * 0.6).fillRect(p.x + p.r - 3, p.y + p.r * 0.2, 2, p.r * 0.6);
+        g.fillStyle(0x8a5a30, 1).fillRect(p.x - p.r, p.y + p.r * 0.45, p.r * 2, 2);
+        break;
+      case 'fence':
+        g.fillStyle(0x6a4a2a, 1).fillRect(p.x - p.r - 1, p.y - p.r * 0.5, p.r * 2 + 2, 2).fillRect(p.x - p.r - 1, p.y + p.r * 0.2, p.r * 2 + 2, 2);
+        for (const dx of [-p.r * 0.6, p.r * 0.6]) {
+          g.fillStyle(0xc8a070, 1).fillRect(p.x + dx - 1.5, p.y - p.r * 1.1, 3, p.r * 1.9);
+          g.fillStyle(0xe0c090, 1).fillTriangle(p.x + dx - 1.5, p.y - p.r * 1.1, p.x + dx + 1.5, p.y - p.r * 1.1, p.x + dx, p.y - p.r * 1.4);
+        }
+        break;
+      case 'mushroom':
+        g.fillStyle(0xf0e8d8, 1).fillRect(p.x - 1.5, p.y - p.r * 0.3, 3, p.r * 1.1);
+        g.fillStyle(0xa02828, 1).fillEllipse(p.x, p.y - p.r * 0.4, p.r * 2.2, p.r * 1.3);
+        g.fillStyle(0xd04040, 1).fillEllipse(p.x - 0.5, p.y - p.r * 0.55, p.r * 1.9, p.r * 1);
+        g.fillStyle(0xffffff, 1).fillCircle(p.x - p.r * 0.4, p.y - p.r * 0.7, 1).fillCircle(p.x + p.r * 0.35, p.y - p.r * 0.5, 0.9).fillCircle(p.x, p.y - p.r * 0.85, 0.8);
+        break;
+      case 'crystal': {
+        const c1 = this.biome.id === 'void' ? 0x6a3ab8 : 0x3a6a9a;
+        const c2 = this.biome.id === 'void' ? 0xb88aff : 0x8ac8f0;
+        g.fillStyle(c1, 1).fillTriangle(p.x - p.r, p.y + p.r * 0.7, p.x - p.r * 0.2, p.y + p.r * 0.7, p.x - p.r * 0.7, p.y - p.r * 1.2);
+        g.fillStyle(c2, 1).fillTriangle(p.x - p.r * 0.5, p.y + p.r * 0.8, p.x + p.r * 0.5, p.y + p.r * 0.8, p.x, p.y - p.r * 1.7);
+        g.fillStyle(c1, 1).fillTriangle(p.x + p.r * 0.2, p.y + p.r * 0.7, p.x + p.r, p.y + p.r * 0.7, p.x + p.r * 0.7, p.y - p.r * 0.8);
+        g.fillStyle(0xffffff, 0.8).fillTriangle(p.x - p.r * 0.1, p.y + p.r * 0.3, p.x + p.r * 0.1, p.y + p.r * 0.3, p.x, p.y - p.r * 1.3);
+        break;
+      }
+      case 'snowdrift':
+        g.fillStyle(0xa0c4d4, 1);
+        this.blob(g, p.x, p.y + 1, p.r * 1.2, seed, 0.6, 9);
+        g.fillStyle(0xf4fbff, 1);
+        this.blob(g, p.x - 0.5, p.y - 0.5, p.r * 1.05, seed + 2, 0.55, 9);
+        g.fillStyle(0xffffff, 1).fillEllipse(p.x - p.r * 0.3, p.y - p.r * 0.35, p.r * 0.9, p.r * 0.3);
+        break;
+      case 'rubble':
+        for (let i = 0; i < 4; i++) {
+          const ox = [-0.5, 0.45, -0.1, 0.3][i] * p.r;
+          const oy = [0.25, 0.3, -0.35, -0.1][i] * p.r;
+          g.fillStyle(0x6a6048, 1).fillRect(p.x + ox - p.r * 0.42, p.y + oy - p.r * 0.3, p.r * 0.84, p.r * 0.6);
+          g.fillStyle(0xb8ae90, 1).fillRect(p.x + ox - p.r * 0.42, p.y + oy - p.r * 0.3, p.r * 0.84, p.r * 0.35);
+        }
+        break;
+      case 'urn':
+        g.fillStyle(0x7a4020, 1).fillEllipse(p.x, p.y, p.r * 1.7, p.r * 1.9);
+        g.fillStyle(0xc07040, 1).fillEllipse(p.x - 0.5, p.y - 0.5, p.r * 1.4, p.r * 1.6);
+        g.fillStyle(0x7a4020, 1).fillRect(p.x - p.r * 0.45, p.y - p.r * 1.1, p.r * 0.9, 2);
+        g.lineStyle(1, 0xf0c060, 0.9).lineBetween(p.x - p.r * 0.7, p.y, p.x + p.r * 0.7, p.y);
+        break;
+      case 'bones':
+        // a big old skull and a rib or two, half in the sand
+        g.fillStyle(0xc8bca0, 1).fillEllipse(p.x, p.y, p.r * 1.8, p.r * 1.3);
+        g.fillStyle(0xf0e8d0, 1).fillEllipse(p.x - 0.5, p.y - 0.5, p.r * 1.5, p.r * 1.05);
+        g.fillStyle(0x3a2a1a, 1).fillCircle(p.x - p.r * 0.35, p.y - p.r * 0.1, 1.3).fillCircle(p.x + p.r * 0.3, p.y - p.r * 0.1, 1.3);
+        g.lineStyle(1, 0xf0e8d0, 1);
+        for (const dx of [-p.r * 0.9, p.r * 0.9]) g.lineBetween(p.x + dx, p.y + p.r * 0.6, p.x + dx * 1.2, p.y - p.r * 0.4);
+        break;
+      case 'stalagmite':
+        // a cone of wet stone up from the cave floor, ringed
+        g.fillStyle(0x3a342e, 1).fillTriangle(p.x - p.r, p.y + p.r * 0.7, p.x + p.r, p.y + p.r * 0.7, p.x, p.y - p.r * 1.9);
+        g.fillStyle(0x6a625a, 1).fillTriangle(p.x - p.r * 0.75, p.y + p.r * 0.6, p.x + p.r * 0.5, p.y + p.r * 0.6, p.x - p.r * 0.05, p.y - p.r * 1.7);
+        g.fillStyle(0x9a9183, 1).fillTriangle(p.x - p.r * 0.45, p.y + p.r * 0.4, p.x - p.r * 0.1, p.y + p.r * 0.4, p.x - p.r * 0.1, p.y - p.r * 1.4);
+        g.lineStyle(1, 0x2a241e, 0.8).lineBetween(p.x - p.r * 0.6, p.y, p.x + p.r * 0.55, p.y).lineBetween(p.x - p.r * 0.35, p.y - p.r * 0.8, p.x + p.r * 0.3, p.y - p.r * 0.8);
+        g.fillStyle(0xbfe0ff, 0.9).fillRect(p.x - 0.5, p.y - p.r * 1.85, 1, 1);
+        break;
+      case 'haybale':
+        g.fillStyle(0x8a6a1a, 1).fillRoundedRect(p.x - p.r - 1, p.y - p.r * 0.8, p.r * 2 + 2, p.r * 1.6, 2);
+        g.fillStyle(0xe0b848, 1).fillRoundedRect(p.x - p.r, p.y - p.r * 0.8, p.r * 2, p.r * 1.4, 2);
+        g.fillStyle(0xf4d878, 1).fillRect(p.x - p.r + 1, p.y - p.r * 0.8, p.r * 2 - 2, 2);
+        g.lineStyle(1, 0x9a3a2a, 1).lineBetween(p.x - p.r * 0.4, p.y - p.r * 0.8, p.x - p.r * 0.4, p.y + p.r * 0.6).lineBetween(p.x + p.r * 0.4, p.y - p.r * 0.8, p.x + p.r * 0.4, p.y + p.r * 0.6);
+        g.fillStyle(0xb8902a, 1);
+        for (let i = 0; i < 5; i++) g.fillRect(p.x - p.r + 1 + i * (p.r * 0.45), p.y - p.r * 0.3 + (i % 2) * 2, 2, 1);
+        break;
+      case 'pine':
+        // a conifer: three tiers of needles over a short trunk
+        g.fillStyle(0x3a2410, 1).fillRect(p.x - 1.5, p.y, 3, p.r * 0.9);
+        for (let k = 0; k < 3; k++) {
+          const w = p.r * (1.35 - k * 0.32);
+          const y0 = p.y + p.r * 0.2 - k * p.r * 0.65;
+          g.fillStyle(0x10301a, 1).fillTriangle(p.x - w - 1, y0 + 1, p.x + w + 1, y0 + 1, p.x, y0 - p.r * 1.05);
+          g.fillStyle(0x1e5a32, 1).fillTriangle(p.x - w, y0, p.x + w * 0.6, y0, p.x - w * 0.1, y0 - p.r * 0.95);
+          g.fillStyle(0x3a8a4a, 1).fillTriangle(p.x - w * 0.7, y0 - 1, p.x - w * 0.15, y0 - 1, p.x - w * 0.25, y0 - p.r * 0.7);
+        }
+        break;
+      case 'snowman':
+        g.fillStyle(0xa0c4d4, 1).fillCircle(p.x, p.y + p.r * 0.3, p.r * 0.95).fillCircle(p.x, p.y - p.r * 0.85, p.r * 0.65);
+        g.fillStyle(0xffffff, 1).fillCircle(p.x - 0.5, p.y + p.r * 0.2, p.r * 0.85).fillCircle(p.x - 0.5, p.y - p.r * 0.9, p.r * 0.56);
+        g.fillStyle(0x1a1a24, 1).fillRect(p.x - 2, p.y - p.r * 1.05, 1, 1).fillRect(p.x + 1, p.y - p.r * 1.05, 1, 1).fillRect(p.x - 0.5, p.y + p.r * 0.05, 1, 1).fillRect(p.x - 0.5, p.y + p.r * 0.45, 1, 1);
+        g.fillStyle(0xf08a3a, 1).fillTriangle(p.x, p.y - p.r * 0.85, p.x, p.y - p.r * 0.65, p.x + 3, p.y - p.r * 0.75);
+        g.fillStyle(0xc83a3a, 1).fillRect(p.x - p.r * 0.6, p.y - p.r * 0.42, p.r * 1.2, 1.5);
+        break;
+      case 'mossylog': {
+        // a rotting log half in the water, furred with moss
+        g.fillStyle(0x1e3024, 0.8).fillEllipse(p.x, p.y + p.r * 0.5, p.r * 2.6, p.r * 0.8);
+        g.fillStyle(0x3a2412, 1).fillRoundedRect(p.x - p.r - 1, p.y - p.r * 0.55, p.r * 2 + 2, p.r * 1.1, 2);
+        g.fillStyle(0x5a3a1e, 1).fillRoundedRect(p.x - p.r, p.y - p.r * 0.5, p.r * 2, p.r * 0.7, 2);
+        g.fillStyle(0x5a8a2a, 1);
+        this.blob(g, p.x - p.r * 0.2, p.y - p.r * 0.55, p.r * 0.8, seed, 0.35, 8);
+        g.fillStyle(0x8ab04a, 1).fillRect(p.x - p.r * 0.6, p.y - p.r * 0.7, 2, 1).fillRect(p.x + p.r * 0.2, p.y - p.r * 0.6, 2, 1);
+        g.fillStyle(0x8a6a3a, 1).fillEllipse(p.x + p.r, p.y - p.r * 0.1, 3, p.r);
+        break;
+      }
+      case 'bogroot':
+        // a knot of black roots arching out of the mire
+        g.fillStyle(0x1e3024, 0.8).fillEllipse(p.x, p.y + p.r * 0.6, p.r * 2.4, p.r * 0.7);
+        g.lineStyle(2, 0x2a1c10, 1);
+        g.beginPath().arc(p.x - p.r * 0.3, p.y + p.r * 0.5, p.r * 0.7, Math.PI, 0).strokePath();
+        g.beginPath().arc(p.x + p.r * 0.4, p.y + p.r * 0.5, p.r * 0.6, Math.PI, 0).strokePath();
+        g.lineStyle(1, 0x5a4024, 1);
+        g.beginPath().arc(p.x - p.r * 0.3, p.y + p.r * 0.5, p.r * 0.7, Math.PI * 1.1, Math.PI * 1.5).strokePath();
+        g.fillStyle(0x3a2a18, 1).fillRect(p.x - 1, p.y - p.r * 1.1, 2, p.r * 1.1);
+        g.fillStyle(0x5a7a32, 1).fillRect(p.x - 2, p.y - p.r * 1.2, 4, 1.5);
+        break;
+      case 'sandcastle':
+        g.fillStyle(0xb89a60, 1).fillRect(p.x - p.r, p.y - p.r * 0.4, p.r * 2, p.r * 1.1);
+        g.fillStyle(0xe8d090, 1).fillRect(p.x - p.r + 1, p.y - p.r * 0.4, p.r * 2 - 2, p.r * 0.9);
+        g.fillStyle(0xd8b878, 1).fillRect(p.x - p.r * 0.45, p.y - p.r * 1.2, p.r * 0.9, p.r * 0.9);
+        for (const dx of [-p.r, -p.r * 0.35, p.r * 0.3]) g.fillStyle(0xe8d090, 1).fillRect(p.x + dx, p.y - p.r * 0.6, 2, 2);
+        g.fillStyle(0x6a4a2a, 1).fillRect(p.x - 0.5, p.y + p.r * 0.1, 1.5, p.r * 0.6);
+        g.fillStyle(0xd83a3a, 1).fillTriangle(p.x, p.y - p.r * 1.8, p.x + 3, p.y - p.r * 1.6, p.x, p.y - p.r * 1.4);
+        g.fillStyle(0x6a4a2a, 1).fillRect(p.x - 0.5, p.y - p.r * 1.8, 1, p.r * 0.6);
+        break;
+      case 'coral':
+        // a branching pink coral on a stone
+        g.fillStyle(0x8a7a68, 1);
+        this.blob(g, p.x, p.y + p.r * 0.5, p.r * 0.9, seed, 0.5, 8);
+        g.lineStyle(2, 0xe85a6a, 1);
+        for (const [dx, h] of [[-p.r * 0.6, 1.2], [0, 1.6], [p.r * 0.55, 1.1]] as const) {
+          g.lineBetween(p.x + dx, p.y + p.r * 0.4, p.x + dx, p.y - p.r * h + p.r * 0.4);
+          g.lineBetween(p.x + dx, p.y - p.r * 0.2, p.x + dx + (dx >= 0 ? 2 : -2), p.y - p.r * 0.6);
+        }
+        g.fillStyle(0xffb0a0, 1).fillCircle(p.x, p.y - p.r * 1.2, 1).fillCircle(p.x - p.r * 0.6, p.y - p.r * 0.8, 1).fillCircle(p.x + p.r * 0.55, p.y - p.r * 0.7, 1);
+        break;
+      case 'sandstone':
+        // a wind-cut boulder in layered bands
+        g.fillStyle(0x8a5a30, 1);
+        this.blob(g, p.x, p.y, p.r * 1.1, seed, 0.8, 9);
+        g.fillStyle(0xd8a060, 1);
+        this.blob(g, p.x - 0.5, p.y - 0.5, p.r * 0.95, seed + 2, 0.8, 9);
+        g.lineStyle(1, 0xa87040, 0.9);
+        for (let k = -1; k <= 1; k++) g.lineBetween(p.x - p.r * 0.8, p.y + k * p.r * 0.35, p.x + p.r * 0.8, p.y + k * p.r * 0.35 + 0.5);
+        g.fillStyle(0xf0c888, 1).fillEllipse(p.x - p.r * 0.3, p.y - p.r * 0.55, p.r * 0.8, p.r * 0.3);
+        break;
+      case 'obelisk':
+        // a black needle of stone, runes lit along it
+        g.fillStyle(0x0e0a1a, 1).fillRect(p.x - p.r * 0.65, p.y - p.r * 1.5, p.r * 1.3, p.r * 2.2);
+        g.fillStyle(0x2a1a48, 1).fillRect(p.x - p.r * 0.55, p.y - p.r * 1.4, p.r * 1.1, p.r * 2.05);
+        g.fillStyle(0x0e0a1a, 1).fillTriangle(p.x - p.r * 0.65, p.y - p.r * 1.5, p.x + p.r * 0.65, p.y - p.r * 1.5, p.x, p.y - p.r * 2.1);
+        g.fillStyle(0x3a2a68, 1).fillRect(p.x - p.r * 0.55, p.y - p.r * 1.4, 1.5, p.r * 2.05);
+        g.fillStyle(0xb88aff, 1);
+        for (let k = 0; k < 3; k++) g.fillRect(p.x - 1, p.y - p.r * 1.1 + k * p.r * 0.55, 2, 1).fillRect(p.x, p.y - p.r * 1.0 + k * p.r * 0.55, 1, 1);
+        break;
+      case 'altar':
+        g.fillStyle(0x140f22, 1).fillRect(p.x - p.r - 1, p.y - p.r * 0.6, p.r * 2 + 2, p.r * 1.4);
+        g.fillStyle(0x3a2a5a, 1).fillRect(p.x - p.r, p.y - p.r * 0.6, p.r * 2, p.r * 1.1);
+        g.fillStyle(0x5a4a8a, 1).fillRect(p.x - p.r, p.y - p.r * 0.6, p.r * 2, 1.5);
+        g.lineStyle(1, 0xb88aff, 0.9).strokeCircle(p.x, p.y, p.r * 0.35);
+        g.fillStyle(0xe8d8ff, 1).fillRect(p.x - 0.5, p.y - 0.5, 1, 1);
+        break;
+      case 'voidorb':
+        // a sphere of nothing in a cradle, a ring of light round it
+        g.fillStyle(0x3a2a5a, 1).fillRect(p.x - p.r * 0.7, p.y + p.r * 0.3, p.r * 1.4, p.r * 0.5);
+        g.fillStyle(0x07050e, 1).fillCircle(p.x, p.y - p.r * 0.3, p.r * 0.85);
+        g.lineStyle(1, 0xb88aff, 1).strokeCircle(p.x, p.y - p.r * 0.3, p.r * 0.85);
+        g.lineStyle(1, 0xe8d8ff, 0.7).strokeEllipse(p.x, p.y - p.r * 0.3, p.r * 2.1, p.r * 0.6);
+        g.fillStyle(0xffffff, 0.9).fillRect(p.x - p.r * 0.35, p.y - p.r * 0.7, 1, 1);
+        break;
+      case 'lavarock':
+        // a black boulder with molten seams
+        g.fillStyle(0x0e0806, 1);
+        this.blob(g, p.x, p.y, p.r * 1.1, seed, 0.85, 8);
+        g.fillStyle(0x2a1a14, 1);
+        this.blob(g, p.x - 0.5, p.y - 0.5, p.r * 0.9, seed + 4, 0.85, 8);
+        g.lineStyle(1, 0xff6a20, 1).lineBetween(p.x - p.r * 0.6, p.y - p.r * 0.2, p.x + p.r * 0.1, p.y + p.r * 0.3).lineBetween(p.x + p.r * 0.1, p.y + p.r * 0.3, p.x + p.r * 0.5, p.y - p.r * 0.3);
+        g.fillStyle(0x4a3028, 1).fillEllipse(p.x - p.r * 0.3, p.y - p.r * 0.5, p.r * 0.6, p.r * 0.25);
+        break;
+      case 'charred':
+        // a burnt tree: a black trunk and two dead limbs, embers in the bark
+        g.fillStyle(0x0e0806, 1).fillRect(p.x - 2.5, p.y - p.r * 1.6, 5, p.r * 2.2);
+        g.fillStyle(0x2a1c16, 1).fillRect(p.x - 1.5, p.y - p.r * 1.6, 2, p.r * 2.2);
+        g.lineStyle(2, 0x0e0806, 1).lineBetween(p.x, p.y - p.r * 0.9, p.x - p.r, p.y - p.r * 1.5).lineBetween(p.x, p.y - p.r * 0.5, p.x + p.r * 0.9, p.y - p.r * 1.1);
+        g.fillStyle(0xff8a3a, 1).fillRect(p.x - 0.5, p.y - p.r * 0.2, 1, 1).fillRect(p.x + 1, p.y - p.r, 1, 1);
+        g.fillStyle(0x3a2a24, 0.8).fillEllipse(p.x, p.y + p.r * 0.6, p.r * 1.8, p.r * 0.5);
+        break;
     }
     if (tint) {
       // somebody's own cover: it carries their colour so you know whose it is
@@ -1253,6 +1730,10 @@ export class CreatureArena extends Phaser.Scene {
     const eff = ELEMENTS[this.me.c.element];
     this.effLabel = text(this, 8, 20, `${eff.name}: ${eff.effect}`, eff.light).setDepth(51);
     this.labels.push(this.effLabel);
+    // the ultimate's badge text (drawn in drawUlt), and the opponent's countdown
+    this.ultText = smallText(this, ARENA.x + ARENA.w - 54, ARENA.y + ARENA.h - 12, '', PALETTE.cream).setDepth(53);
+    this.foeUltText = smallText(this, ARENA.x + ARENA.w - 5, ARENA.y + 3, '', PALETTE.fog).setOrigin(1, 0).setDepth(53);
+    this.labels.push(this.ultText!, this.foeUltText!);
   }
 
   // ------------------------------------------------------------------ input
@@ -1289,7 +1770,7 @@ export class CreatureArena extends Phaser.Scene {
       if (p.x < GAME_W / 2 && this.moveStick.id < 0) Object.assign(this.moveStick, { id: p.id, bx: p.x, by: p.y, dx: 0, dy: 0 });
       return;
     }
-    this.fire(this.me, this.sel, p.x - this.me.x, p.y - this.me.y);
+    // (a desktop click on the arena fires nothing: the keys do all of it)
   }
 
   private moveP(p: Phaser.Input.Pointer): void {
@@ -1351,7 +1832,7 @@ export class CreatureArena extends Phaser.Scene {
           // the ability's own pixel icon, as the arena draws it -- not an emoji
           const icon = abilityIconURL(a, ELEMENTS[this.me.c.element].light);
           return { label: `${inf.emoji}\n${word}`, icon, key: keys[i], primary: i === 0 };
-        }),
+        }).concat(this.me.ult ? [{ label: '★\nULT', icon: undefined as unknown as string, key: 'Q' as KeyName, primary: false }] : []),
       },
       'CreatureArena',
     );
@@ -1375,9 +1856,32 @@ export class CreatureArena extends Phaser.Scene {
    */
   private confirmLeave(): void {
     if (this.dialog || this.over) return;
+    if (this.mode === 'mini') {
+      const was = this.paused;
+      this.paused = true;
+      this.dialog = confirmDialog(this, {
+        lines: ['LEAVE THIS MINI GAME?', 'THE ENTRY IS GONE AND NOTHING IS PAID.'],
+        confirm: 'CONFIRM LEAVE',
+        edge: 0xc31f2e,
+        onConfirm: () => {
+          this.dialog = null;
+          this.over = true;
+          this.settled = true;
+          abandonMini();
+          this.scene.start('CreatureHub', { from: this.from, screen: 'minis', msg: 'YOU LEFT THE MINI GAME.' });
+        },
+        onCancel: () => {
+          this.dialog?.destroy();
+          this.dialog = null;
+          if (this.started && !was) countBack(() => (this.paused = was));
+          else this.paused = was;
+        },
+      });
+      this.dialog.setDepth(3000);
+      return;
+    }
     const paid = this.started;
-    const c = store.get().creatures;
-    const risk = !paid ? 0 : this.mode === 'ladder' ? LADDER_COST : this.mode === 'story' ? storyPrice(this.storyWorld, this.storyWorld < c.story.cleared).cost : BATTLE_COST;
+    const risk = !paid ? 0 : this.mode === 'ladder' ? LADDER_COST : this.mode === 'story' ? storyPrice(this.storyWorld, this.storyReplay).cost : BATTLE_COST;
     const name = this.me.c.name.toUpperCase();
     const lines = !paid
       ? ['LEAVE BEFORE THE BELL?', 'NOTHING HAS BEEN PAID YET.']
@@ -1394,8 +1898,8 @@ export class CreatureArena extends Phaser.Scene {
         this.dialog = null;
         this.over = true;
         this.settled = true;
-        const screen = this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'story' : 'map';
-        const r = paid ? finishBattle(false) : null;
+        const screen = this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'trail' : 'map';
+        const r = paid ? finishBattle(false, this.foeLevel) : null;
         const fainted = r && !r.runOver ? `YOU LEFT. ${name} FAINTED.` : 'YOU LEFT. THE RUN IS OVER.';
         this.scene.start('CreatureHub', { from: this.from, screen, world: this.storyWorld, msg: r ? fainted : 'YOU LEFT BEFORE THE BELL.' });
       },
@@ -1447,7 +1951,8 @@ export class CreatureArena extends Phaser.Scene {
     f.atk = ATK_T;
     f.atkX = ux;
     f.atkY = uy;
-    // out of hiding the moment it attacks
+    // out of hiding the moment it attacks (and an ambush remembers it was)
+    if (f.st.invis > 0) f.st.n_hidden = 1;
     f.st.invis = 0;
     const col = ELEMENTS[f.c.element].col;
     // glow pierces; so does anything fired from beside its own beacon
@@ -1483,15 +1988,36 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('arcane_blast', 0.4);
         break;
       }
-      case 'dash':
-        f.dash = { vx: ux * a.reach * mired, vy: uy * a.reach * mired, t: 0.28, dmg, hit: false, a };
-        if (a.sp === 'thunder_charge') f.st.unstop = 0.3;
-        if (a.sp === 'hit_and_run') {
-          f.ref.retX = f.x;
-          f.ref.retY = f.y;
+      case 'dash': {
+        // ---- TOWARD THEM IS A CHARGE, AWAY IS A GETAWAY (user, 3 Nov).
+        // No aiming: the way it is already moving decides.  Walking away
+        // from the other one, the dash carries it off that way and hurts
+        // nobody; anything else is a charge straight at them.  The AI's
+        // dashes follow the same rule off its own movement.
+        const o = this.other(f);
+        const tx = o.x - f.x;
+        const ty = o.y - f.y;
+        const tl = Math.hypot(tx, ty) || 1;
+        const mvx = f.ref.vx ?? 0;
+        const mvy = f.ref.vy ?? 0;
+        const mv = Math.hypot(mvx, mvy);
+        const flee = mv > 4 && (mvx * tx + mvy * ty) / (mv * tl) < -0.25;
+        const dx = flee ? mvx / mv : tx / tl;
+        const dy = flee ? mvy / mv : ty / tl;
+        f.face = dx >= 0 ? 1 : -1;
+        f.dash = { vx: dx * a.reach * mired, vy: dy * a.reach * mired, t: 0.28, dmg: flee ? 0 : dmg, hit: flee, a, flee };
+        if (flee) {
+          this.floatNum(f, 0, 0xcfe8ff, 'DODGE ');
+        } else {
+          if (a.sp === 'thunder_charge') f.st.unstop = 0.3;
+          if (a.sp === 'hit_and_run' || a.sp === 'sucker_punch') {
+            f.ref.retX = f.x;
+            f.ref.retY = f.y;
+          }
         }
         audio.sfx('throw_whoosh', 0.4);
         break;
+      }
       case 'beam': {
         const len = a.reach * f.scale;
         const x2 = f.x + ux * len;
@@ -1502,7 +2028,7 @@ export class CreatureArena extends Phaser.Scene {
         else this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 3, t: 0, life: 0.18, col });
         const o = this.other(f);
         const lineHit = (k: number) => {
-          if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 6 * o.scale + 2 && (pierce || !this.blocked(f.x, f.y, o.x, o.y))) this.hit(f, o, Math.round(dmg * k), a);
+          if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 6 * o.scale + 2 && (pierce || !this.blocked(f.x, f.y, o.x, o.y, f))) this.hit(f, o, Math.round(dmg * k), a);
         };
         lineHit(1);
         if (a.mod === 'linger') for (const k of [0.35, 0.7, 1]) this.pool(f, f.x + (x2 - f.x) * k, f.y + (y2 - f.y) * k, 9);
@@ -1616,7 +2142,10 @@ export class CreatureArena extends Phaser.Scene {
             r: 6,
             ...(spec.hp ? { hp: spec.hp, maxHp: spec.hp } : {}),
           }))
-          .filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale);
+          .filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale)
+          // never on its own maker either
+          .filter((q) => Math.hypot(q.x - f.x, q.y - f.y) > q.r + BODY_R * f.scale + 2)
+          .map((q) => ({ ...q, owner: f }));
         if (parts.length) {
           this.barriers.push({ kind: wallLook(a.sp, f.c.element), parts, seed: 1, life: spec.life, max: spec.life, owner: f, shatter: a.sp === 'glacier_slab' });
           this.props.push(...parts);
@@ -1727,7 +2256,7 @@ export class CreatureArena extends Phaser.Scene {
           const x2 = f.x + ux * len;
           const y2 = f.y + uy * len;
           this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 3, t: 0, life: 0.25, col });
-          if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 6 * o.scale + 3 && (f.c.element === 'glow' || !this.blocked(f.x, f.y, o.x, o.y))) this.hit(f, o, dmg, a);
+          if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 6 * o.scale + 3 && (f.c.element === 'glow' || !this.blocked(f.x, f.y, o.x, o.y, f))) this.hit(f, o, dmg, a);
           audio.sfx('arcane_blast', 0.45);
         } });
         f.root = Math.max(f.root, 0.5);
@@ -1835,6 +2364,58 @@ export class CreatureArena extends Phaser.Scene {
         f.st.capacitor = 4;
         f.st.n_cap = 0;
         ring(14, 0xfff4a0);
+        return true;
+      // ---------------------------------------------- the audit's new moves (3 Nov)
+      case 'smoke_bomb': {
+        // a puff of smoke: whoever is near is blinded, and it slips away unseen
+        for (let k = 0; k < 6; k++) this.fx.push({ kind: 'ring', x: f.x + Phaser.Math.Between(-8, 8), y: f.y + Phaser.Math.Between(-6, 6), r: 12 + k * 3, t: 0, life: 0.6, col: 0x6a6a78 });
+        if (Math.hypot(o.x - f.x, o.y - f.y) < 40 + 6 * o.scale) o.blind = Math.max(o.blind, 2);
+        f.st.invis = 1.5;
+        const d = Math.hypot(f.x - o.x, f.y - o.y) || 1;
+        const to = { x: cx(f.x + ((f.x - o.x) / d) * a.reach), y: cy(f.y + ((f.y - o.y) / d) * a.reach) };
+        if (!this.props.some((p) => Math.hypot(p.x - to.x, p.y - to.y) < p.r + 6)) {
+          f.x = to.x;
+          f.y = to.y;
+        }
+        audio.sfx('poison_hiss', 0.5);
+        return true;
+      }
+      case 'play_dead': {
+        // flops over: untouchable, lost to them, mending -- and the next hit is a mean one
+        const back = Math.round(f.max * 0.15);
+        this.heal(f, back);
+        f.invuln = Math.max(f.invuln, 1.2);
+        f.st.invis = 1.2;
+        f.root = Math.max(f.root, 1.2);
+        f.st.ambush = 2;
+        this.floatNum(f, 0, 0x8ae88a, `+${back} `);
+        ring(12, 0x8ae88a);
+        audio.sfx('item_thud', 0.4);
+        return true;
+      }
+      case 'musk_cloud':
+        this.pools.push({ owner: f, kind: 'stink', x: f.x, y: f.y, r: a.reach, t: 4, tick: 0 });
+        ring(a.reach, 0x9ab84a);
+        audio.sfx('poison_hiss', 0.6);
+        return true;
+      case 'heat_haze':
+        // the shimmer: hits slide off (EVASION, from its mod) and their aim bends
+        o.st.n_dazzle = 2;
+        ring(18, 0xffc880);
+        audio.sfx('wind_gust', 0.3);
+        return true;
+      case 'blubber':
+        f.st.armour = 5;
+        f.st.anchor = 5;
+        ring(16, 0xc8d8e8);
+        audio.sfx('item_thud', 0.4);
+        return true;
+      case 'submerge':
+        f.st.invis = 2.5;
+        f.st.sunk = 2.5;
+        f.st.n_lurk = 1;
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y + 4, r: 14, t: 0, life: 0.5, col: 0x7a8a6a });
+        audio.sfx('splash', 0.4);
         return true;
       case 'eel_dive':
         f.st.invis = 2;
@@ -2167,6 +2748,7 @@ export class CreatureArena extends Phaser.Scene {
         to.st.confused = 1.5;
         break;
       case 'hit_and_run':
+      case 'sucker_punch':
         if (dash) dash.back = true;
         break;
       case 'ill_omen':
@@ -2178,6 +2760,14 @@ export class CreatureArena extends Phaser.Scene {
         break;
       case 'dazzle':
         to.st.n_dazzle = 2;
+        break;
+      case 'ink_cloud':
+        to.blind = Math.max(to.blind, 2);
+        to.slow = Math.max(to.slow, 3);
+        break;
+      case 'rut_bellow':
+        if (!to.st.unstop) to.stun = Math.max(to.stun, 0.4);
+        to.weak = Math.max(to.weak, 1.5);
         break;
       default:
         break;
@@ -2504,6 +3094,241 @@ export class CreatureArena extends Phaser.Scene {
    * An area going off at (x, y): the hit, and the area specials -- a
    * patch left burning, a second go a moment later, a pull to the middle.
    */
+  // ------------------------------------------------------------- ultimates
+
+  /**
+   * FIRE THE ULTIMATE (game/ultimates).  Only once it is up -- 30 seconds into
+   * the fight, and 30 after the last one -- and only when the creature could
+   * act anyway.  Its name goes up over it, the screen shakes and flashes its
+   * element's colour, and its effects go off one after another.
+   */
+  private useUlt(f: Fighter): boolean {
+    if (!this.started || this.over || this.paused || this.dialog) return false;
+    if (!f.ult || f.ultT > 0 || f.hp <= 0 || !this.canAct(f) || f.dash) return false;
+    f.ultT = ULT_COOLDOWN_S;
+    f.ultUsed = true;
+    const { col, light } = ultColour(f.c.element);
+    const t = centerText(this, f.x, f.y - 20 * f.scale, f.ult.name, light).setDepth(60);
+    backPlate(this, t, col);
+    this.tweens.add({ targets: t, y: t.y - 10, alpha: 0, delay: 700, duration: 500, onComplete: () => t.destroy() });
+    this.cameras.main.shake(220, 0.006);
+    this.cameras.main.flash(110, (col >> 16) & 255, (col >> 8) & 255, col & 255, false);
+    this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 22 * f.scale, t: 0, life: 0.5, col: light });
+    audio.sfx('arcane_blast', 0.7);
+    f.ult.fx.forEach((e, i) => this.time.delayedCall(i * 380, () => !this.over && f.hp > 0 && this.ultFx(f, e)));
+    return true;
+  }
+
+  /** One effect of an ultimate, with its own look and sound. */
+  private ultFx(f: Fighter, e: UltFx): void {
+    const o = this.other(f);
+    const { col, light } = ultColour(f.c.element);
+    const dx = o.x - f.x;
+    const dy = o.y - f.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d;
+    const uy = dy / d;
+    const inArena = (x: number, y: number): [number, number] => [Phaser.Math.Clamp(x, ARENA.x + 10, ARENA.x + ARENA.w - 10), Phaser.Math.Clamp(y, ARENA.y + 10, ARENA.y + ARENA.h - 10)];
+    switch (e.k) {
+      case 'charge':
+        // a long, hard rush straight through them
+        f.dash = { vx: (ux * e.dist) / 0.3, vy: (uy * e.dist) / 0.3, t: 0.3, dmg: e.dmg, hit: false, a: f.c.attacks[0] };
+        for (let k = 0; k < 4; k++) this.time.delayedCall(k * 60, () => this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 8 * f.scale, t: 0, life: 0.3, col: light }));
+        audio.sfx('throw_whoosh', 0.6);
+        break;
+      case 'blink': {
+        // gone, and behind them
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 12 * f.scale, t: 0, life: 0.35, col: 0x101018 });
+        const [bx, by] = inArena(o.x + ux * 18, o.y + uy * 18);
+        f.x = bx;
+        f.y = by;
+        f.face = o.x >= f.x ? 1 : -1;
+        this.fx.push({ kind: 'boom', x: o.x, y: o.y, r: 14, t: 0, life: 0.3, col: light });
+        this.hit(f, o, e.dmg, null);
+        audio.sfx('whack', 0.7);
+        break;
+      }
+      case 'nova':
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: e.r, t: 0, life: 0.45, col }, { kind: 'boom', x: f.x, y: f.y, r: e.r * 0.7, t: 0, life: 0.35, col: light });
+        if (d < e.r + 7 * o.scale) {
+          this.hit(f, o, e.dmg, null);
+          o.kx += ux * e.knock;
+          o.ky += uy * e.knock;
+        }
+        audio.sfx('boom', 0.6);
+        break;
+      case 'rage': {
+        // bigger, faster, harder, for a while
+        const s0 = f.scale;
+        f.scale = s0 * 1.25;
+        f.aura = Math.max(f.aura, e.t);
+        f.haste = Math.max(f.haste, e.t * 0.6);
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 18 * s0, t: 0, life: 0.6, col: 0xff4a3a });
+        this.time.delayedCall(e.t * 1000, () => (f.scale = s0));
+        audio.sfx('stinger', 0.5);
+        break;
+      }
+      case 'pull':
+        if (d < e.r) {
+          o.kx -= ux * 320;
+          o.ky -= uy * 320;
+          this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: o.x, y2: o.y, r: 2, t: 0, life: 0.3, col: light });
+          this.time.delayedCall(260, () => {
+            if (this.over) return;
+            this.fx.push({ kind: 'boom', x: f.x + f.face * 8, y: f.y, r: 14, t: 0, life: 0.3, col });
+            if (Math.hypot(o.x - f.x, o.y - f.y) < 40 * f.scale) this.hit(f, o, e.dmg, null);
+          });
+        }
+        audio.sfx('throw_whoosh', 0.5);
+        break;
+      case 'barrage': {
+        const a = { ...f.c.attacks[0], kind: 'bolt' as const, sp: undefined };
+        const base = Math.atan2(uy, ux);
+        for (let k = 0; k < e.n; k++) {
+          const ang = base + (e.n > 1 ? (k / (e.n - 1) - 0.5) * e.spread : 0);
+          this.time.delayedCall(k * 40, () => {
+            if (this.over) return;
+            this.shots.push({ owner: f, x: f.x + Math.cos(ang) * 8, y: f.y + Math.sin(ang) * 8, vx: Math.cos(ang) * 210, vy: Math.sin(ang) * 210, life: 1.1, dmg: e.dmg, a, pierce: false, t: 0, ang });
+          });
+        }
+        audio.sfx('throw_whoosh', 0.6);
+        break;
+      }
+      case 'beam': {
+        const x2 = f.x + ux * e.len;
+        const y2 = f.y + uy * e.len;
+        this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: e.w, t: 0, life: 0.4, col: light }, { kind: 'beam', x: f.x, y: f.y, x2, y2, r: e.w * 0.4, t: 0, life: 0.4, col: 0xffffff });
+        if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < e.w + 6 * o.scale) this.hit(f, o, e.dmg, null);
+        audio.sfx('arcane_blast', 0.6);
+        break;
+      }
+      case 'meteor':
+        for (let k = 0; k < e.n; k++) {
+          const [mx, my] = inArena(o.x + (Math.random() - 0.5) * 34, o.y + (Math.random() - 0.5) * 26);
+          this.fx.push({ kind: 'warn', x: mx, y: my, r: e.r, t: 0, life: 0.6 + k * 0.18, col });
+          this.time.delayedCall(600 + k * 180, () => {
+            if (this.over) return;
+            this.fx.push({ kind: 'boom', x: mx, y: my, r: e.r, t: 0, life: 0.45, col: 0xffb040 });
+            audio.sfx('arcane_blast', 0.45);
+            if (Math.hypot(o.x - mx, o.y - my) < e.r + 7 * o.scale) this.hit(f, o, e.dmg, null);
+          });
+        }
+        break;
+      case 'zone':
+        for (let k = 0; k < e.n; k++) {
+          const a = (k / e.n) * Math.PI * 2;
+          const [zx, zy] = inArena(o.x + Math.cos(a) * 14, o.y + Math.sin(a) * 10);
+          this.pool(f, zx, zy, e.r);
+          this.fx.push({ kind: 'ring', x: zx, y: zy, r: e.r, t: 0, life: 0.4, col });
+        }
+        break;
+      case 'shield':
+        f.shield = Math.max(f.shield, e.t);
+        f.shieldMod = null;
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 14 * f.scale, t: 0, life: 0.6, col: 0xdcefff });
+        audio.sfx('heal_up', 0.4);
+        break;
+      case 'heal':
+        this.heal(f, Math.round(f.max * e.frac));
+        this.floatNum(f, Math.round(f.max * e.frac), 0x8ae88a, '+');
+        for (let k = 0; k < 3; k++) this.time.delayedCall(k * 120, () => this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: (8 + k * 6) * f.scale, t: 0, life: 0.4, col: 0x8ae88a }));
+        audio.sfx('heal_up', 0.6);
+        break;
+      case 'drain': {
+        let n = Math.round(e.t * 4);
+        const per = Math.max(1, Math.round(e.dps / 4));
+        this.time.addEvent({
+          delay: 250,
+          repeat: n - 1,
+          callback: () => {
+            if (this.over || f.hp <= 0 || o.hp <= 0 || --n < 0) return;
+            if (Math.hypot(o.x - f.x, o.y - f.y) > 150) return;
+            this.fx.push({ kind: 'beam', x: o.x, y: o.y, x2: f.x, y2: f.y, r: 1.5, t: 0, life: 0.22, col: light });
+            this.hit(f, o, per, null);
+            this.heal(f, per);
+          },
+        });
+        break;
+      }
+      case 'slowfield':
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: e.r, t: 0, life: 0.7, col: light });
+        if (d < e.r) o.slow = Math.max(o.slow, e.t);
+        audio.sfx('item_thud', 0.5);
+        break;
+      case 'clones':
+        for (let k = 0; k < e.n; k++) {
+          this.decoy(f);
+          const mi = this.minions[this.minions.length - 1];
+          if (mi) {
+            const [cx, cy] = inArena(f.x + Math.cos(k * 2.1) * 26, f.y + Math.sin(k * 2.1) * 18);
+            mi.x = cx;
+            mi.y = cy;
+          }
+        }
+        break;
+      case 'invuln':
+        f.invuln = Math.max(f.invuln, e.t);
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 16 * f.scale, t: 0, life: 0.8, col: 0xffffff });
+        audio.sfx('chime', 0.5);
+        break;
+      case 'stun':
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: e.r, t: 0, life: 0.4, col: 0xfff080 });
+        if (d < e.r) {
+          o.stun = Math.max(o.stun, e.t);
+          this.fx.push({ kind: 'spark', x: o.x, y: o.y - 8, r: 6, t: 0, life: 0.5, col: 0xfff080 });
+        }
+        audio.sfx('spot_slam', 0.5);
+        break;
+      case 'haste':
+        f.haste = Math.max(f.haste, e.t);
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 10 * f.scale, t: 0, life: 0.4, col: 0xf0fff4 });
+        break;
+    }
+  }
+
+  /**
+   * THE ULTIMATE ON THE HUD: your badge in the arena's bottom-right corner --
+   * LOCKED with the seconds to go, READY and pulsing with its key, or
+   * cooling with its seconds -- and the opponent's, small, top right.
+   */
+  private drawUlt(u: Phaser.GameObjects.Graphics): void {
+    if (!this.ultText || !this.foeUltText) return;
+    const show = !!this.me.ult && !this.over && !this.band && !this.touch;
+    const w = 66;
+    const x = ARENA.x + ARENA.w - w - 3;
+    const y = ARENA.y + ARENA.h - 15;
+    const f = this.me;
+    const ready = f.ultT <= 0 && this.started;
+    const locked = !f.ultUsed;
+    if (show) {
+      const pulse = 0.6 + Math.sin(this.time.now / 140) * 0.4;
+      u.fillStyle(ready ? 0x3a1a58 : 0x10101c, 0.9).fillRect(x, y, w, 12);
+      u.lineStyle(1, ready ? 0xffd45e : locked ? 0x4a4a68 : 0x9a6aff, ready ? pulse : 1).strokeRect(x, y, w, 12);
+      if (!ready) u.fillStyle(locked ? 0x4a4a68 : 0x9a6aff, 0.8).fillRect(x + 1, y + 10, Math.round((w - 2) * (1 - f.ultT / (locked ? ULT_UNLOCK_S : ULT_COOLDOWN_S))), 1);
+      // a star
+      const sc = ready ? 0xffd45e : 0x8a8ab0;
+      const pts: Phaser.Math.Vector2[] = [];
+      for (let k = 0; k < 10; k++) {
+        const ang = -Math.PI / 2 + (k * Math.PI) / 5;
+        const r = k % 2 ? 2 : 4.6;
+        pts.push(new Phaser.Math.Vector2(x + 7 + Math.cos(ang) * r, y + 6 + Math.sin(ang) * r));
+      }
+      u.fillStyle(sc, 1).fillPoints(pts, true);
+    }
+    // the opponent's chip: a dark plate so it reads over any floor
+    const fo2 = this.foe;
+    if (fo2.ult && !this.over && !this.training && this.foeUltText) {
+      const tw = this.foeUltText.width + 6;
+      const rdy = fo2.ultT <= 0 && this.started;
+      u.fillStyle(0x10101c, 0.85).fillRect(ARENA.x + ARENA.w - 2 - tw, ARENA.y + 1, tw, 9);
+      u.lineStyle(1, rdy ? 0xff6a6a : 0x4a4a68, 1).strokeRect(ARENA.x + ARENA.w - 2 - tw, ARENA.y + 1, tw, 9);
+    }
+    this.ultText.setVisible(show).setText(ready ? 'ULT  [Q]' : locked ? `LOCKED ${Math.ceil(f.ultT)}` : `ULT ${Math.ceil(f.ultT)}S`).setTint(ready ? 0xffd45e : locked ? 0x8a8ab0 : 0xc8a8ff);
+    const fo = this.foe;
+    const foeShow = !!fo.ult && !this.over && !this.training;
+    this.foeUltText.setVisible(foeShow).setText(fo.ultT <= 0 && this.started ? 'FOE ULT READY' : `FOE ULT ${Math.ceil(fo.ultT)}S`).setTint(fo.ultT <= 0 && this.started ? 0xff8a8a : 0xb0b0d0);
+  }
+
   private burst(f: Fighter, x: number, y: number, r: number, dmg: number, a: Attack, look: 'ring' | 'boom', again = true): void {
     const col = ELEMENTS[f.c.element].col;
     this.fx.push(look === 'ring' ? { kind: 'ring', x, y, r, t: 0, life: 0.35, col } : { kind: 'boom', x, y, r, t: 0, life: 0.35, col });
@@ -2646,6 +3471,26 @@ export class CreatureArena extends Phaser.Scene {
       d -= 10;
       to.st.n_bark -= 1;
     }
+    // A SUCKER PUNCH is only fair if the fight is: out of hiding, or on
+    // someone stunned, held or blind, it lands double and takes their buffs
+    if (a?.sp === 'sucker_punch' && ((from.st.n_hidden ?? 0) > 0 || to.stun > 0 || to.root > 0 || to.blind > 0)) {
+      d *= 2;
+      to.aura = to.shield = to.guard = 0;
+      for (const k of ['b_fury', 'b_focus', 'b_evade', 'b_quicken', 'armour']) delete to.st[k];
+      this.floatNum(to, 0, 0xc090e0, 'STOLEN ');
+    }
+    // up from playing dead: the next hit is a mean one
+    if (from.st.ambush && a) {
+      from.st.ambush = 0;
+      d *= 1.5;
+    }
+    // out of the water: the lurker's first bite
+    if ((from.st.n_lurk ?? 0) > 0 && a) {
+      from.st.n_lurk = 0;
+      d *= 1.8;
+      to.root = Math.max(to.root, 0.8);
+    }
+    if (a) from.st.n_hidden = 0;
     // FURY: its hits land harder while it lasts
     if ((from.st.b_fury ?? 0) > 0 && a) d *= FURY_MUL;
     let crit = false;
@@ -2762,8 +3607,9 @@ export class CreatureArena extends Phaser.Scene {
     this.tweens.add({ targets: n, y: n.y - 10, alpha: 0, duration: 650, ease: 'Quad.easeOut', onComplete: () => n.destroy() });
   }
 
-  private blocked(x1: number, y1: number, x2: number, y2: number): boolean {
-    return this.props.some((p) => this.segDist(p.x, p.y, x1, y1, x2, y2) < p.r);
+  private blocked(x1: number, y1: number, x2: number, y2: number, by?: Fighter): boolean {
+    // (a wall never blocks the one who put it up)
+    return this.props.some((p) => (!by || p.owner !== by) && this.segDist(p.x, p.y, x1, y1, x2, y2) < p.r);
   }
 
   private segDist(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
@@ -2779,6 +3625,8 @@ export class CreatureArena extends Phaser.Scene {
     // (the size it is drawn at: a big boss stops at the cover with its body,
     // not with a point in its middle)
     const r = BODY_R * f.scale;
+    // (blubber: nothing knocks it back while it lasts)
+    if (f.st.anchor) f.kx = f.ky = 0;
     let nx = f.x + (vx + f.kx) * dt;
     let ny = f.y + (vy + f.ky) * dt;
     f.kx *= Math.pow(0.02, dt);
@@ -2788,6 +3636,7 @@ export class CreatureArena extends Phaser.Scene {
     // (phasing: cover is not there for it)
     if (!f.st.phase) {
       for (const p of this.props) {
+        if (p.owner === f) continue; // its own wall lets it through
         const d = Math.hypot(nx - p.x, ny - p.y);
         if (d < p.r + r) {
           const k = (p.r + r - d) / (d || 1);
@@ -2821,9 +3670,12 @@ export class CreatureArena extends Phaser.Scene {
     for (const pl of this.pools) {
       if (Math.hypot(pl.x - f.x, pl.y - f.y) > pl.r) continue;
       if (pl.kind === 'honey' && pl.owner !== f) k *= 0.4;
+      if (pl.kind === 'stink' && pl.owner !== f) k *= 0.85;
       if (pl.kind === 'floe') k *= pl.owner === f ? 1.4 : 0.6;
       if (pl.kind === 'drift' && pl.owner !== f) k *= 0.5;
     }
+    // submerged: creeping along under the surface
+    if (f.st.sunk) k *= 0.7;
     if (f.st.comet && this.pools.some((pl) => pl.kind === 'trail' && pl.owner === f && Math.hypot(pl.x - f.x, pl.y - f.y + 5) < 8)) k *= 1.5;
     // (an enraged boss comes at you faster)
     if (this.boss && f === this.foe && this.bossRage) k *= 1.15;
@@ -2857,6 +3709,8 @@ export class CreatureArena extends Phaser.Scene {
     // (QUICKEN: the cooldowns run faster while it lasts)
     const cdRate = (f.st.b_quicken ?? 0) > 0 ? QUICK_RATE : 1;
     for (let i = 0; i < 3; i++) f.cds[i] = Math.max(0, f.cds[i] - dt * cdRate);
+    // (the ultimate's clock runs only while the fight is on)
+    if (this.started && !this.over) f.ultT = Math.max(0, f.ultT - dt);
     for (const k of ['slow', 'stun', 'stunImmune', 'blind', 'shield', 'invuln', 'aura', 'root', 'flash'] as const) f[k] = Math.max(0, f[k] - dt);
     if (f.burn > 0) {
       const before = Math.floor(f.burn);
@@ -2898,7 +3752,7 @@ export class CreatureArena extends Phaser.Scene {
       }
       this.step(f, f.dash.vx, f.dash.vy, dt);
       // a burning trail behind a lingering charge
-      if (f.dash.a.mod === 'linger' && Math.random() < dt * 14) this.pool(f, f.x, f.y, 9);
+      if (f.dash.a.mod === 'linger' && !f.dash.flee && Math.random() < dt * 14) this.pool(f, f.x, f.y, 9);
       const o = this.other(f);
       if (!f.dash.hit && Math.hypot(o.x - f.x, o.y - f.y) < 7 * (o.scale + f.scale)) {
         f.dash.hit = true;
@@ -2906,7 +3760,7 @@ export class CreatureArena extends Phaser.Scene {
       }
       if (f.dash && f.dash.t <= 0) {
         // an echoing charge: a shockwave where it stopped
-        if (f.dash.a.mod === 'echo') this.burst(f, f.x, f.y, 24, Math.round(f.dash.dmg * 0.5), f.dash.a, 'ring', false);
+        if (f.dash.a.mod === 'echo' && !f.dash.flee) this.burst(f, f.x, f.y, 24, Math.round(f.dash.dmg * 0.5), f.dash.a, 'ring', false);
         // hit and run: back where it came from
         const back = f.dash.back && f.ref.retX !== undefined;
         const a = f.dash.a;
@@ -2924,6 +3778,14 @@ export class CreatureArena extends Phaser.Scene {
   // ---------------------------------------------------------------------- AI
 
   private think(dt: number, f: Fighter = this.foe, me: Fighter = this.me, B: Brain = this.foeBrain): void {
+    // ---- ITS ULTIMATE, by the same clock as yours: once it is up, fired
+    // when it would do some good (a heal when hurt, the rest in range)
+    if (f.ult && f.ultT <= 0 && this.started && this.canAct(f) && !f.dash) {
+      const d = Math.hypot(me.x - f.x, me.y - f.y);
+      const lead = f.ult.fx[0].k;
+      const want = lead === 'heal' ? f.hp < f.max * 0.6 : lead === 'shield' || lead === 'invuln' ? d < f.ult.range || f.hp < f.max * 0.4 : d < f.ult.range;
+      if (want && Math.random() < dt * (0.8 + this.skill * 2)) this.useUlt(f);
+    }
     // WHAT IT THINKS IS YOU: a decoy draws it while it lasts, and a you it
     // cannot see is wherever it last saw you
     const decoy = this.minions.find((mi) => mi.kind === 'decoy' && mi.owner === me);
@@ -2943,7 +3805,7 @@ export class CreatureArena extends Phaser.Scene {
     const dx = p.x - f.x;
     const dy = p.y - f.y;
     const dist = Math.hypot(dx, dy) || 1;
-    const clear = !this.blocked(f.x, f.y, p.x, p.y) || f.c.element === 'glow';
+    const clear = !this.blocked(f.x, f.y, p.x, p.y, f) || f.c.element === 'glow';
     // aim: worse when blinded, better the sharper it is -- and a sharp one
     // shoots where you are GOING, not where you were
     const lead = sk > 0.5 ? (sk - 0.5) * 2 * Math.min(0.5, dist / 200) : 0;
@@ -3058,6 +3920,13 @@ export class CreatureArena extends Phaser.Scene {
       : a.kind === 'arc' ? a.reach * 0.75
       : a.kind === 'mine' ? 90
       : a.reach * 0.9;
+    // a dash on the way out: hurt, crowded, and already backing off -- the
+    // same getaway the player gets by dashing while walking away
+    if (a.kind === 'dash' && f.hp < f.max * 0.35 && dist < 55) {
+      const o = this.other(f);
+      const away = (f.ref.vx ?? 0) * (o.x - f.x) + (f.ref.vy ?? 0) * (o.y - f.y) < 0;
+      if (away) return true;
+    }
     switch (use) {
       case 'poke':
         return clear && dist < range;
@@ -3285,8 +4154,8 @@ export class CreatureArena extends Phaser.Scene {
         if (s.a.mod === 'boomerang' && !s.back) s.grace = 0.35;
         else s.life = 0;
         if (s.a.mod === 'split') this.shatter(s);
-      } else if (!s.pierce && this.props.some((p) => Math.hypot(p.x - s.x, p.y - s.y) < p.r)) {
-        const p = this.props.find((q) => Math.hypot(q.x - s.x, q.y - s.y) < q.r)!;
+      } else if (!s.pierce && this.props.some((p) => p.owner !== s.owner && Math.hypot(p.x - s.x, p.y - s.y) < p.r)) {
+        const p = this.props.find((q) => q.owner !== s.owner && Math.hypot(q.x - s.x, q.y - s.y) < q.r)!;
         if (s.a.mod === 'bounce' && !s.bounced) {
           // off the cover like a ball off a wall
           const nx = (s.x - p.x) / (Math.hypot(s.x - p.x, s.y - p.y) || 1);
@@ -3341,6 +4210,16 @@ export class CreatureArena extends Phaser.Scene {
         }
         case 'mycel':
           if (near) this.heal(pl.owner, 2 * dt);
+          break;
+        case 'stink':
+          // the musk: it stings, and nobody hits properly with their eyes watering
+          if (near) {
+            o.weak = Math.max(o.weak, 0.4);
+            if (pl.tick <= 0) {
+              pl.tick = 0.5;
+              this.hit(pl.owner, o, 1, null);
+            }
+          }
           break;
         case 'rune': {
           const d = Math.hypot(pl.x - o.x, pl.y - o.y) || 1;
@@ -3640,9 +4519,13 @@ export class CreatureArena extends Phaser.Scene {
     }
     if (this.settled) return;
     this.settled = true;
+    if (this.mode === 'mini') {
+      this.endMini(won);
+      return;
+    }
     // (what the run had paid before this one, for the run's total)
     const before = store.get().creatures.ladder?.earned ?? 0;
-    const r = finishBattle(won);
+    const r = finishBattle(won, this.foeLevel);
     audio.sfx(won ? 'cha_ching' : 'death_stinger', 0.6);
     const timeUp = this.me.hp > 0 && this.foe.hp > 0;
     const ladder = this.mode === 'ladder';
@@ -3666,15 +4549,17 @@ export class CreatureArena extends Phaser.Scene {
         if (story) {
           const nextW = WORLDS[this.storyWorld + 1];
           lines.push([
-            this.boss ? (r.worldOpened ? (nextW ? `${nextW.name} IS OPEN!` : 'THE STORY IS DONE - THE LADDER IS OPEN!') : 'BACK TO BATTLE 1 OF THIS WORLD.') : this.storyStage + 1 >= STAGES ? `NEXT: ${WORLDS[this.storyWorld].bossName}` : `NEXT: BATTLE ${this.storyStage + 2} OF ${STAGES}`,
+            r.replay
+              ? 'REPLAY WON: GOOD PRACTICE'
+              : this.boss ? (r.worldOpened ? (nextW ? `${nextW.name} IS OPEN!` : 'THE STORY IS DONE - THE LADDER IS OPEN!') : 'WORLD CLEARED') : this.storyStage + 1 >= STAGES ? `NEXT: ${WORLDS[this.storyWorld].bossName}` : `NEXT: BATTLE ${this.storyStage + 2} OF ${STAGES}`,
             PALETTE.cream,
           ]);
         }
         if (ladder) lines.push([this.boss ? `THE RUN PAID ${before + r.paid} TOKENS IN ALL.` : this.level >= LADDER_LEVELS ? 'NEXT: THE FINAL BOSS' : `NEXT: LEVEL ${this.level + 1} OF ${LADDER_LEVELS}`, PALETTE.cream]);
-        const xpLine = r.xp ? `+${r.xp} XP` : this.myLevel >= MAX_LEVEL ? 'MAX LEVEL - NO MORE XP' : '';
-        if (xpLine) lines.push([xpLine, 0x8ae88a]);
+        if (!this.training) lines.push([this.xpLine(r.xp ?? 0, r.xpGap ?? 0), 0x8ae88a]);
       } else {
-        lines.push([r.msg, PALETTE.cream]);
+        lines.push([r.msg.replace(/ \+\d+ XP\..*$/, ''), PALETTE.cream]);
+        if (!this.training && r.xp) lines.push([this.xpLine(r.xp, r.xpGap ?? 0), 0x8ae88a]);
         // (nothing said of what a loss does not give back: log #65)
         if (ladder && before) lines.push([`THE RUN PAID ${before} TOKENS. THEY ARE YOURS TO KEEP.`, PALETTE.ash]);
       }
@@ -3688,9 +4573,56 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('chime', 0.7);
       }
       // back to where the fight came from: the run's ladder, or the map
-      const screen = ladder ? 'ladder' : story ? 'story' : 'map';
+      const screen = ladder ? 'ladder' : story ? 'trail' : 'map';
       box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen, world: this.storyWorld }), { width: 80, height: 13 }));
     });
+  }
+
+  /**
+   * A MINI GAME BOUT IS OVER.  Duels end the run here; in 3v3 the loser's
+   * creature leaves and, while both sides have somebody left, the next one
+   * walks in against the survivor -- which keeps the health it had.
+   */
+  private endMini(won: boolean): void {
+    const run = currentMini();
+    const kind = run?.kind ?? 'melee';
+    const loser = (won ? this.foe : this.me).c.name.toUpperCase();
+    const r = boutOver(won, Math.max(1, Math.round(won ? this.me.hp : this.foe.hp)));
+    audio.sfx(r.over ? (r.won ? 'cha_ching' : 'death_stinger') : 'bell_ding', 0.6);
+    this.time.delayedCall(700, () => {
+      const box = this.add.container(0, 0).setDepth(2000);
+      const X = GAME_W / 2;
+      const Y = GAME_H / 2;
+      box.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.6).setOrigin(0, 0).setInteractive());
+      box.add(this.add.rectangle(X, Y, 244, 90, PALETTE.ink).setStrokeStyle(1, r.over ? (r.won ? PALETTE.gold : 0xc31f2e) : PALETTE.neon));
+      box.add(centerText(this, X, Y - 34, MINI_INFO[kind].title, PALETTE.ash));
+      if (!r.over && run) {
+        // the next one in
+        const nextMine = creatureById(run.me[0])?.name.toUpperCase() ?? '';
+        const nextFoe = creatureById(run.foe[0])?.name.toUpperCase() ?? '';
+        box.add(centerText(this, X, Y - 20, `${loser} FAINTS!`, won ? PALETTE.gold : 0xff6a6a));
+        box.add(centerText(this, X, Y - 6, `${nextMine}  VS  ${nextFoe}`, PALETTE.cream).setMaxWidth(232));
+        box.add(centerText(this, X, Y + 6, `YOU ${run.me.length} LEFT  -  THEM ${run.foe.length} LEFT`, PALETTE.fog));
+        box.add(button(this, X, Y + 30, 'NEXT BOUT', () => this.scene.start('CreatureArena', { mode: 'mini', from: this.from, biome: BIOMES[Phaser.Math.Between(0, BIOMES.length - 1)].id }), { width: 80, height: 13 }));
+        return;
+      }
+      box.add(centerText(this, X, Y - 20, r.won ? 'VICTORY!' : 'DEFEATED', r.won ? PALETTE.gold : 0xff6a6a));
+      box.add(centerText(this, X, Y - 6, r.won ? `+${MINI_WIN} TOKENS` : 'NO TOKENS THIS TIME', r.won ? PALETTE.gold : PALETTE.ash));
+      box.add(button(this, X, Y + 30, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen: 'minis' }), { width: 80, height: 13 }));
+    });
+  }
+
+  /**
+   * THE EXPERIENCE, AND HOW FAR TO THE NEXT LEVEL (user, 2 Nov): "+34 XP
+   * LV 4 40/130", and a word when the foe was well below you -- that is why
+   * it taught so little.
+   */
+  private xpLine(xp: number, gap: number): string {
+    const own = activeOwned();
+    const p = xpProgress(own?.xp ?? 0);
+    if (p.max) return xp ? `+${xp} XP - MAX LEVEL` : 'MAX LEVEL - NO MORE XP';
+    const note = gap <= -3 ? ' (WEAK FOE)' : gap >= 2 ? ' (TOUGH FOE!)' : '';
+    return `+${xp} XP${note}  LV ${p.level}: ${p.into}/${p.need}`;
   }
 
   /**
@@ -3767,6 +4699,16 @@ export class CreatureArena extends Phaser.Scene {
         case 'honey':
           g.fillStyle(0xe8a830, Math.min(0.7, pl.t)).fillCircle(pl.x, pl.y, pl.r);
           break;
+        case 'stink': {
+          // a drifting green-yellow fog, puffs rolling in it
+          const a = Math.min(0.45, pl.t * 0.4);
+          g.fillStyle(0x9ab84a, a * 0.6).fillCircle(pl.x, pl.y, pl.r);
+          for (let k = 0; k < 6; k++) {
+            const q = t * 0.6 + k * 1.05;
+            g.fillStyle(0xc8d86a, a).fillCircle(pl.x + Math.cos(q) * pl.r * 0.55, pl.y + Math.sin(q * 1.3) * pl.r * 0.45, 5 + (k % 3));
+          }
+          break;
+        }
         case 'floe':
           g.fillStyle(0xd8f4ff, Math.min(0.6, pl.t)).fillCircle(pl.x, pl.y, pl.r);
           g.lineStyle(1, 0xffffff, Math.min(0.8, pl.t)).strokeCircle(pl.x, pl.y, pl.r);
@@ -4063,7 +5005,10 @@ export class CreatureArena extends Phaser.Scene {
         const secs = left >= 10 ? `${Math.ceil(left)}` : (Math.ceil(left * 10) / 10).toFixed(1);
         touchControls.setCooldown(keys[i], left > 0 ? Phaser.Math.Clamp(left / a.cd, 0, 1) : null, secs);
       });
+      // the ULT button counts down too
+      if (this.me.ult) touchControls.setCooldown('Q', this.me.ultT > 0 ? Phaser.Math.Clamp(this.me.ultT / ULT_COOLDOWN_S, 0, 1) : null, `${Math.ceil(this.me.ultT)}`);
     }
+    this.drawUlt(u);
     // the chosen attack's line, fading
     const showing = this.infoT > 0 && !this.over && !this.dialog;
     this.info.setVisible(showing).setAlpha(Math.min(1, this.infoT * 3));

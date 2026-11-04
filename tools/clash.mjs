@@ -12,7 +12,7 @@
 import puppeteer from 'puppeteer-core';
 import { existsSync } from 'node:fs';
 
-const URL = 'http://localhost:5173';
+const URL = process.env.CLASH_URL ?? 'http://localhost:5173';
 const N = Number(process.argv[2] ?? 8);
 const LEVEL = Number(process.argv[3] ?? 10);
 const HIGH = 0.68;

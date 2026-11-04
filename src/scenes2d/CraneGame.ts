@@ -39,6 +39,7 @@
  * pockets (the room checks before you get here, and AGAIN checks again).
  */
 
+import { cfgNum, cfgPct } from '../core/gameConfig';
 import Phaser from 'phaser';
 import { earnBadge } from '../game/badges';
 import { PALETTE } from '../render/palette';
@@ -110,7 +111,15 @@ const HOW_TO_KEYS: ControlRow[] = [
 
 export type CraneKind = 'plush' | 'oddity';
 
-export const CRANE_COST: Record<CraneKind, number> = { plush: 5, oddity: 5 };
+/** What a go costs (admin-set: core/gameConfig `crane.plushCost` / `crane.oddityCost`, 5 and 5 as shipped). */
+export const CRANE_COST: Record<CraneKind, number> = {
+  get plush(): number {
+    return cfgNum('crane.plushCost');
+  },
+  get oddity(): number {
+    return cfgNum('crane.oddityCost');
+  },
+};
 
 /** What a capsule from the dark crane holds: tokens, always. */
 export const CAPSULE_MIN = 1;
@@ -179,7 +188,8 @@ const CHUTE = { x: 46, z: 0.05, l: 20, r: 72 };
  * front, look again from the side and still think about it: the clock is
  * there so nobody stands at the glass all afternoon, not to hurry the shot.
  */
-const CLOCK_S = 14;
+/** Seconds a go has (admin-set: `crane.clock`, 14 as shipped). */
+const clockS = (): number => cfgNum('crane.clock');
 /** How far the claw can be let down, in pixels below the gantry. */
 const MAX_DROP = 118;
 /** The claw is drawn this much bigger than its design, to match the toys. */
@@ -193,7 +203,14 @@ const RAISE = 70;
  * whole of its odds: come down on a capsule and it is yours 80% of the
  * time, wherever on it the fingers landed, and nothing slips on the way.
  */
-export const GRIP: Record<CraneKind, number> = { plush: 0.34, oddity: 0.8 };
+export const GRIP: Record<CraneKind, number> = {
+  get plush(): number {
+    return cfgPct('crane.plushGrip');
+  },
+  get oddity(): number {
+    return cfgPct('crane.oddityGrip');
+  },
+};
 /**
  * THE ODDS, ALL TOLD, ARE ABOUT ONE GO IN FIVE -- and they come out of how a
  * claw machine actually loses.  The claw lifts what it closed on GRIP of the
@@ -203,7 +220,12 @@ export const GRIP: Record<CraneKind, number> = { plush: 0.34, oddity: 0.8 };
  * Aimed fairly well, that is 0.34 x ~0.75 x 0.8: about 20%.  (The plush
  * crane's: the capsule crane's odds are GRIP alone.)
  */
-export const SLIP: Record<CraneKind, number> = { plush: 0.2, oddity: 0 };
+export const SLIP: Record<CraneKind, number> = {
+  get plush(): number {
+    return cfgPct('crane.plushSlip');
+  },
+  oddity: 0,
+};
 /** Only the plush crane's grip weakens off centre. */
 const OFF_CENTRE: Record<CraneKind, number> = { plush: 0.45, oddity: 0 };
 /** How close the fingers must come down to a toy to close on it at all. */
@@ -212,6 +234,8 @@ const REACH_Z = 0.1;
 /** From the claw's hanging point down to its fingertips, in claw units. */
 /** From the claw's hanging point to the tips of its fingers, open. */
 const FINGERS = 24 * TOY_RES;
+/** From the claw's hanging point down to the top of a held toy's head, in pixels (under the hub's 5.5 claw units). */
+const HEAD_GAP = 6 * CLAW_K;
 
 /** Front of the floor is lower on screen; the back of it is higher. */
 const floorY = (z: number): number => 146 - z * 32;
@@ -329,7 +353,7 @@ export class CraneGame extends Phaser.Scene {
   private sway = 0;
   /** Gliding back to HOME after a go. */
   private homing = false;
-  private clock = CLOCK_S;
+  private clock = 14;
   /** The clock ran out this go: the claw drops and grabs by itself. */
   private timedOut = false;
   private toys: Toy[] = [];
@@ -344,6 +368,8 @@ export class CraneGame extends Phaser.Scene {
   /** Where the held prize was when the claw closed on it, and how long since. */
   private heldFrom = new Phaser.Math.Vector2();
   private heldT = 0;
+  /** The gap between where it lay and the claw's fingers, closed over heldT. */
+  private heldOff = new Phaser.Math.Vector2();
   /** How far through the carry the prize slips out, or -1 if it holds. */
   private slipAt = -1;
   /**
@@ -383,7 +409,7 @@ export class CraneGame extends Phaser.Scene {
   create(): void {
     fadeIn(this);
     const eerie = this.kind === 'oddity';
-    audio.setScene({ music: eerie ? 'lab_calm' : 'room_lounge', ambience: ['cabinet_bleeps'] });
+    audio.setScene({ music: eerie ? 'game_crane_oddity' : 'game_crane_plush', ambience: ['cabinet_bleeps'] });
     this.phase = 'aim';
     this.clawX = HOME.x;
     this.clawZ = HOME.z;
@@ -959,7 +985,7 @@ export class CraneGame extends Phaser.Scene {
 
   private askToPay(): void {
     this.phase = 'pay';
-    this.clockText.setText(`TIME ${CLOCK_S}`);
+    this.clockText.setText(`TIME ${clockS()}`);
     if (pocketsFull()) {
       this.showResult(FULL_LINE, PALETTE.ember, false);
       return;
@@ -1010,7 +1036,7 @@ export class CraneGame extends Phaser.Scene {
     this.fumbleAt = -1;
     // every go starts at the first step: line it up from the front
     if (this.sideOn) this.toggleSide();
-    this.clock = CLOCK_S;
+    this.clock = clockS();
     this.timedOut = false;
     this.drop = 0;
     this.syncButtons();
@@ -1279,14 +1305,19 @@ export class CraneGame extends Phaser.Scene {
     if (this.held && this.phase !== 'release') {
       const k = scaleAt(this.clawZ);
       const hx = screenX(this.clawX, this.clawZ) + this.sway;
-      // hanging from the closed claw by its head
-      // its head between the closed prongs: the hooks under its chin
-      const hy = gantryY(this.clawZ) + (this.drop + 9 * CLAW_K + TOY_H * 0.74) * k;
-      // from where it lay into the claw's fingers, over a moment, not a snap
-      this.heldT = Math.min(1, this.heldT + dt / 0.3);
-      const e = this.heldT * this.heldT * (3 - 2 * this.heldT);
+      // HELD BY THE HEAD, IN THE CLAW.  The top of its head just under the
+      // hub, the head between the shut prongs, the hooks under its chin --
+      // so it hangs from the fingers, not stuck up through the claw (its
+      // feet are its origin: TOY_H under the top of its head).
+      const hy = this.claw.y + (HEAD_GAP + TOY_H) * k;
+      // From where it lay into the fingers over a moment, not a snap -- the
+      // gap closing on a claw that is already rising, so the toy goes up
+      // with it from the first frame instead of trailing behind.
+      if (this.heldT === 0) this.heldOff.set(this.heldFrom.x - hx, this.heldFrom.y - hy);
+      this.heldT = Math.min(1, this.heldT + dt / 0.25);
+      const e = 1 - this.heldT * this.heldT * (3 - 2 * this.heldT);
       this.held.art
-        .setPosition(Phaser.Math.Linear(this.heldFrom.x, hx, e), Phaser.Math.Linear(this.heldFrom.y, hy, e))
+        .setPosition(hx + this.heldOff.x * e, hy + this.heldOff.y * e)
         .setScale(k)
         .setDepth(this.clawDepth() - 0.005);
     }
@@ -1755,7 +1786,8 @@ export class CraneGame extends Phaser.Scene {
         this.sideHeld = this.add.image(0, 0, toyTexture(this, this.held.look as Parameters<typeof toyTexture>[1], drawn, 0, 'side')).setOrigin(0.5, 1).setData('drawn', drawn);
         this.sideBox.add(this.sideHeld);
       }
-      this.sideHeld.setPosition(x, tip + (10 * CLAW_K + TOY_H * 0.8) * k).setScale(k / (this.sideHeld.getData('drawn') as number)).setVisible(true);
+      // (hung the same way as in the front view: head under the hub, between the prongs)
+      this.sideHeld.setPosition(x, this.sideClaw.y + (HEAD_GAP + TOY_H) * k).setScale(k / (this.sideHeld.getData('drawn') as number)).setVisible(true);
     } else this.dropSideHeld();
   }
 

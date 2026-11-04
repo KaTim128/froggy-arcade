@@ -35,6 +35,8 @@ export interface TalkOpts {
   /** No options: a line with "[E] LEAVE IT" under it. */
   options?: TalkOption[];
   depth?: number;
+  /** Four options as a 2x2 grid of equal buttons, rather than a row or a column. */
+  grid?: boolean;
 }
 
 export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObjects.Container {
@@ -76,8 +78,9 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
   const textH = Math.max(8, Math.ceil(body.height));
   const widths = options.map((op) => Math.max(60, op.label.length * FONT_ADVANCE + 14));
   const across = widths.reduce((a, w) => a + w, 0) + Math.max(0, widths.length - 1) * GAP;
-  const oneRow = across <= inner;
-  const rows = options.length === 0 ? 0 : oneRow ? 1 : options.length;
+  const grid = !!o.grid && options.length === 4;
+  const oneRow = !grid && across <= inner;
+  const rows = options.length === 0 ? 0 : grid ? 2 : oneRow ? 1 : options.length;
   const h = Math.max(sp ? WELL_H + 8 : 0, PAD + HEAD + textH + PAD + (rows > 0 ? rows * ROW + 2 : 10));
   // on the bottom edge of the screen
   const y = GAME_H - h - 2;
@@ -104,6 +107,14 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
     // panel itself is the way to leave it: a tap on it is the E)
     parts.push(text(scene, cx, y + h - 9, touchControls.mounted() ? 'TAP TO LEAVE IT' : '[E] LEAVE IT', PALETTE.ash).setOrigin(0.5, 0.5));
     if (touchControls.mounted()) panel.setInteractive().on('pointerdown', () => touchControls.tap('E'));
+  } else if (grid) {
+    // two by two, every button the same size, the pair centred
+    const bw = Math.max(...widths);
+    options.forEach((op, i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      parts.push(button(scene, cx + (col ? 1 : -1) * (bw / 2 + GAP / 2), top + row * ROW, op.label, op.fn, { width: bw, height: 13 }));
+    });
   } else if (oneRow) {
     let x = cx - across / 2;
     options.forEach((op, i) => {

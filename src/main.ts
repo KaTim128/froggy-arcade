@@ -8,6 +8,7 @@
  *   2. The post-break-in arcade is totally silent  (src/core/audio.ts, AU-2)
  */
 
+import './core/gameConfig';
 import { claimInstance } from './core/singleInstance';
 
 // ONE COPY PER DEVICE: the game (and with it the save) is only loaded once

@@ -32,7 +32,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { centerText, text } from '../core/ui';
+import { centerText, smallText, text } from '../core/ui';
 import { GAME_H, GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
@@ -217,6 +217,22 @@ let sudden = false;
 let lastGoal: Team = 'green';
 let selected: Body | null = null;
 let dragging = false;
+/**
+ * ---- THREE STEPS A TURN (user): 1 pick the frog, 2 set the direction of the
+ * pull, 3 stop the power bar where you want it.  Each by a click or a tap,
+ * or by keys: 1-3 pick, A/D turn the aim, SPACE sets each step.
+ */
+type Step = 'pick' | 'dir' | 'power';
+let step: Step = 'pick';
+/** The way the frog will go (the pull is the other way). */
+let aimAngle = 0;
+/** ms the power bar has been swinging. */
+let powerT = 0;
+/** The power bar's swing: 0 to full and back in this long. */
+const POWER_SWING_MS = 1500;
+let stepText: Phaser.GameObjects.BitmapText | null = null;
+let aimKeys: { l: Phaser.Input.Keyboard.Key[]; r: Phaser.Input.Keyboard.Key[] } = { l: [], r: [] };
+const powerNow = (): number => 0.5 - 0.5 * Math.cos((powerT / POWER_SWING_MS) * Math.PI * 2);
 let pullX = 0;
 let pullY = 0;
 let stillMs = 0;
@@ -247,15 +263,15 @@ export const bogBall: MinigameModule = {
   tutorial: {
     pitch: 'SLING YOUR FROGS TO KNOCK THE MUD BALL HOME.',
     steps: [
-      { say: 'CLICK ONE OF YOUR GREEN FROGS.', phone: 'TAP ONE OF YOUR GREEN FROGS.', demo: 'bog.pick' },
-      { say: 'DRAG BACK TO AIM AND SET THE POWER. LET GO TO LAUNCH IT.', demo: 'bog.sling' },
+      { say: '1 - CLICK ONE OF YOUR GREEN FROGS (OR 1 2 3).', phone: '1 - TAP ONE OF YOUR GREEN FROGS.', demo: 'bog.pick' },
+      { say: '2 - AIM WITH THE MOUSE (OR A/D) AND CLICK TO SET IT. 3 - CLICK AGAIN TO STOP THE POWER BAR.', phone: '2 - DRAG TO AIM, TAP TO SET. 3 - TAP TO STOP THE POWER BAR.', demo: 'bog.sling' },
       { say: 'KNOCK THE BALL INTO HIS ARCH. TEN SHOTS EACH - MOST GOALS WINS.', demo: 'bog.goal' },
     ],
     objective: ['KNOCK THE MUD BALL INTO HIS ARCH.', 'ONE FROG A TURN, TEN SHOTS EACH.', 'MOST GOALS WINS.'],
     controls: [
-      ['CLICK A FROG', 'PICK YOUR GREEN FROG'],
-      ['DRAG BACK', 'AIM AND SET THE POWER'],
-      ['LET GO', 'LAUNCH IT'],
+      ['CLICK / 1 2 3', 'PICK A FROG'],
+      ['MOUSE / A D', 'AIM - CLICK OR SPACE SETS'],
+      ['CLICK / SPACE', 'STOP THE POWER BAR'],
     ],
   },
   // (played entirely by dragging the frogs: nothing to put under the thumbs)
@@ -315,6 +331,21 @@ export const bogBall: MinigameModule = {
     // shots left: a row of pips along the foot of each side's panel
     pipG = scene.add.graphics().setDepth(21);
     powerText = centerText(scene, 0, 0, '', PALETTE.cream).setDepth(22).setVisible(false);
+    // what to do now, and how many pulls are left, along the foot of the pitch
+    stepText = smallText(scene, GAME_W / 2, P.b - 8, '', PALETTE.cream).setOrigin(0.5, 0).setDepth(22);
+    const kb = scene.input.keyboard;
+    if (kb) {
+      aimKeys = { l: [kb.addKey('A'), kb.addKey('LEFT')], r: [kb.addKey('D'), kb.addKey('RIGHT')] };
+      const pickN = (n: number) => () => {
+        const mine = frogs.filter((f) => f.team === 'green');
+        if (phase === 'aim' && turn === 'green' && mine[n]) pickFrog(mine[n]);
+      };
+      kb.on('keydown-ONE', pickN(0));
+      kb.on('keydown-TWO', pickN(1));
+      kb.on('keydown-THREE', pickN(2));
+      kb.on('keydown-SPACE', () => confirmStep());
+      kb.on('keydown-BACKSPACE', () => backStep());
+    }
 
     scene.input.on('pointerdown', onDown);
     scene.input.on('pointermove', onMove);
@@ -489,7 +520,10 @@ function beginTurn(t: Team): void {
   turn = t;
   selected = null;
   dragging = false;
+  step = 'pick';
+  powerT = 0;
   refreshHud();
+  showStep();
   if (t === 'green') {
     phase = 'aim';
     say(sudden ? 'SUDDEN DEATH' : 'PLAYER TURN', sudden ? PALETTE.ember : PALETTE.mossLight);
@@ -586,6 +620,7 @@ function finish(): void {
 
 function onDown(p: Phaser.Input.Pointer): void {
   if (phase !== 'aim' || turn !== 'green') return;
+  // a green frog under the pointer is always a (re)pick
   let best: Body | null = null;
   let bd = 14;
   for (const f of frogs) {
@@ -593,33 +628,89 @@ function onDown(p: Phaser.Input.Pointer): void {
     const d = Math.hypot(p.worldX - f.x, p.worldY - f.y);
     if (d < bd) (bd = d), (best = f);
   }
-  if (!best) return;
-  selected = best;
-  dragging = true;
+  if (best && (step === 'pick' || step === 'dir')) {
+    pickFrog(best);
+    return;
+  }
   pullX = p.worldX;
   pullY = p.worldY;
-  audio.sfx('ui_blip', 0.4);
+  if (step === 'dir' && selected) aimAngle = Math.atan2(selected.y - pullY, selected.x - pullX);
+  confirmStep();
 }
 
 function onMove(p: Phaser.Input.Pointer): void {
-  if (!dragging) return;
   pullX = p.worldX;
   pullY = p.worldY;
+  // step 2: the pull follows the pointer (the frog goes the other way)
+  if (phase === 'aim' && step === 'dir' && selected && Math.hypot(selected.x - pullX, selected.y - pullY) > 4) {
+    aimAngle = Math.atan2(selected.y - pullY, selected.x - pullX);
+  }
 }
 
-function onUp(p: Phaser.Input.Pointer): void {
-  if (!dragging || !selected) return;
+function onUp(_p: Phaser.Input.Pointer): void {
   dragging = false;
-  pullX = p.worldX;
-  pullY = p.worldY;
-  const { angle, power } = pullOf(selected, pullX, pullY);
-  // a tap, or a pull too small to mean anything, just picks the frog
-  if (power < 0.08) {
-    aimG?.clear();
-    powerText?.setVisible(false);
+}
+
+/** Step 1: this frog. */
+function pickFrog(f: Body): void {
+  if (phase !== 'aim' || turn !== 'green') return;
+  selected = f;
+  step = 'dir';
+  // start aimed at the ball, which is where most pulls go
+  aimAngle = Math.atan2(ball.y - f.y, ball.x - f.x);
+  audio.sfx('ui_blip', 0.4);
+  showStep();
+}
+
+/** SPACE / a click: set the step that is up and go on to the next. */
+function confirmStep(): void {
+  if (phase !== 'aim' || turn !== 'green') return;
+  if (step === 'pick') {
+    const first = frogs.find((f) => f.team === 'green');
+    if (first) pickFrog(first);
     return;
   }
-  launch(selected, angle, power);
+  if (!selected) return;
+  if (step === 'dir') {
+    step = 'power';
+    powerT = 0;
+    audio.sfx('ui_hover', 0.5);
+    showStep();
+    return;
+  }
+  // step 3: the power bar stops where it is, and the frog goes
+  const pw = Math.max(0.06, powerNow());
+  step = 'pick';
+  launch(selected, aimAngle, pw);
+  showStep();
+}
+
+/** BACKSPACE: one step back. */
+function backStep(): void {
+  if (phase !== 'aim' || turn !== 'green') return;
+  if (step === 'power') step = 'dir';
+  else if (step === 'dir') {
+    step = 'pick';
+    selected = null;
+  }
+  showStep();
+}
+
+/** What to do now, and how many pulls each side has left. */
+function showStep(): void {
+  const total = sudden ? SHOTS_EACH + SUDDEN_EACH : SHOTS_EACH;
+  const mine = Math.max(0, total - shots.green);
+  const his = Math.max(0, total - shots.red);
+  const what =
+    turn !== 'green' || phase !== 'aim'
+      ? ''
+      : step === 'pick'
+        ? '1 PICK A FROG'
+        : step === 'dir'
+          ? '2 AIM - CLICK TO SET'
+          : '3 CLICK TO STOP POWER';
+  const decided = sudden ? 'NEXT GOAL WINS' : `BEST AFTER ${SHOTS_EACH} EACH`;
+  stepText?.setText(`${what ? `${what}   ` : ''}PULLS LEFT ${mine} - ${his}   ${decided}`);
 }
 
 /**
@@ -790,18 +881,31 @@ function drawAim(): void {
   if (!g) return;
   g.clear();
   const f = selected;
-  if (!f || !(dragging || phase === 'pull')) {
+  // the player's three steps, or the machine's pull as it takes it
+  const mine = phase === 'aim' && turn === 'green' && f && step !== 'pick';
+  if (!f || !(mine || phase === 'pull')) {
     powerText?.setVisible(false);
+    if (phase === 'aim' && turn === 'green') showStep();
     return;
   }
-  const { angle, power } = pullOf(f, pullX, pullY);
-  if (power < 0.02) return;
+  if (mine) {
+    const dt = sceneRef?.game.loop.delta ?? 16;
+    // A / D turn the aim in step 2
+    if (step === 'dir') {
+      if (aimKeys.l.some((k) => k.isDown)) aimAngle -= dt * 0.0025;
+      if (aimKeys.r.some((k) => k.isDown)) aimAngle += dt * 0.0025;
+    }
+    if (step === 'power') powerT += dt;
+  }
+  const angle = mine ? aimAngle : pullOf(f, pullX, pullY).angle;
+  const power = mine ? (step === 'power' ? powerNow() : 0.55) : pullOf(f, pullX, pullY).power;
   const red = f.team === 'red';
-  // the band
-  g.lineStyle(1, 0x3a2a18, 1).lineBetween(f.x - 3, f.y, pullX, pullY).lineBetween(f.x + 3, f.y, pullX, pullY);
-  g.fillStyle(0x6b4a2f, 1).fillCircle(pullX, pullY, 2);
-  // the vector: hotter the harder
-  const col = power < 0.5 ? (red ? 0xff9a3c : 0x9ae07c) : power < 0.85 ? 0xffd45e : 0xff5a3a;
+  const col = mine && step === 'dir' ? 0xbfe8ff : power < 0.5 ? (red ? 0xff9a3c : 0x9ae07c) : power < 0.85 ? 0xffd45e : 0xff5a3a;
+  // the band, pulled back the other way
+  const bx = f.x - Math.cos(angle) * (8 + power * 16);
+  const by = f.y - Math.sin(angle) * (8 + power * 16);
+  g.lineStyle(1, 0x3a2a18, 1).lineBetween(f.x - 3, f.y, bx, by).lineBetween(f.x + 3, f.y, bx, by);
+  g.fillStyle(0x6b4a2f, 1).fillCircle(bx, by, 2);
   const len = 10 + power * 44;
   const ex = f.x + Math.cos(angle) * len;
   const ey = f.y + Math.sin(angle) * len;
@@ -816,7 +920,7 @@ function drawAim(): void {
   let py = ey;
   let dx = Math.cos(angle);
   let dy = Math.sin(angle);
-  const reach = power * 150;
+  const reach = (mine && step === 'dir' ? 0.7 : power) * 150;
   for (let d = 0; d < reach; d += 6) {
     px += dx * 6;
     py += dy * 6;
@@ -824,11 +928,20 @@ function drawAim(): void {
     if (px < P.l + FROG_R || px > P.r - FROG_R) dx = -dx;
     g.fillStyle(col, 0.7 * (1 - d / reach)).fillRect(Math.round(px), Math.round(py), 1, 1);
   }
+  // step 3: the power bar beside the frog, swinging
+  if (mine && step === 'power') {
+    const bxp = f.x + 11;
+    const byp = f.y - 12;
+    g.fillStyle(0x0c0a0c, 0.85).fillRect(bxp - 1, byp - 1, 5, 26);
+    g.fillStyle(col, 1).fillRect(bxp, byp + 24 - power * 24, 3, power * 24);
+    g.lineStyle(1, 0xffffff, 0.6).strokeRect(bxp - 1, byp - 1, 5, 26);
+  }
   powerText
-    ?.setVisible(true)
+    ?.setVisible(!(mine && step === 'dir'))
     .setText(`${Math.round(power * 100)}%`)
     .setPosition(f.x, f.y - 14)
     .setTint(col);
+  showStep();
 }
 
 /** The portals in the arches: slow rings of light turning in each mouth. */

@@ -31,7 +31,14 @@ const PAD_R = 9;
  * being stuck to it.
  */
 const KEEP_OFF = PAD_R + PUCK_R + 3;
-const MAX_SPEED = 520;
+/** (a heavier puck: it tops out lower and carries what it is given) */
+const MAX_SPEED = 460;
+/**
+ * ---- A HEAVIER PUCK (user).  The share of a hit that reaches it: a light
+ * puck took the whole of the mallet's swing and flew; this one takes most
+ * of it and moves like something with weight.
+ */
+const PUCK_TAKES = 0.8;
 // Hard tier: it reads the puck sooner and misjudges it less.  At 140ms/18px it
 // was a warm-up opponent; the cabinet costs five tokens now.
 const AI_REACTION_MS = 66;
@@ -87,6 +94,10 @@ let vel: Vec = { x: 0, y: 0 };
 let padPrev: Vec = { x: 0, y: 0 };
 /** Who conceded the last goal, which is all the AI does with the face-off. */
 let openingDir = 1;
+/** The lizard has the serve: when the count ends, he hits it, at an angle of his choosing. */
+let aiServe = false;
+/** The direction and speed of the serve he has chosen. */
+let serveVel: Vec = { x: 0, y: 0 };
 let history: Array<{ t: number; x: number; y: number }> = [];
 let scoreP = 0;
 let scoreA = 0;
@@ -297,6 +308,16 @@ export const airHockey: MinigameModule = {
       return;
     }
     countText?.setVisible(false);
+    // ---- HIS SERVE: the count is up and the puck is his.  Not straight down
+    // the middle every time -- a different angle each serve, some of them
+    // off the boards.
+    if (aiServe) {
+      aiServe = false;
+      aiPad.setPosition(puck.x - serveVel.x * 0.05, puck.y - serveVel.y * 0.05);
+      vel = { ...serveVel };
+      armed = true;
+      audio.sfx('whack');
+    }
 
     // ---- player paddle follows the mouse, clamped to the lower half
     followPointer(scene);
@@ -660,7 +681,10 @@ function collide(m: Vec, mVel: Vec, stepS: number): boolean {
   const rvy = vel.y - mVel.y;
   const closing = rvx * nx + rvy * ny;
   if (closing >= 0) return false; // already parting: nothing to bounce
-  const j = -(1 + RESTITUTION) * closing;
+  // (the heavier puck: off a still mallet it bounces as it always did; what a
+  // swinging mallet adds to it is cut down by its weight)
+  const mClose = mVel.x * nx + mVel.y * ny;
+  const j = -(1 + RESTITUTION) * (closing + mClose * (1 - PUCK_TAKES));
   vel.x += j * nx;
   vel.y += j * ny;
   // and on from the touch for the part of the step it was run back
@@ -689,7 +713,8 @@ function goal(playerScored: boolean): void {
     finish();
     return;
   }
-  serve(playerScored ? -1 : 1);
+  // (the side that conceded serves: you scored, so he does)
+  serve(playerScored ? 1 : -1);
 }
 
 /**
@@ -713,7 +738,23 @@ function serve(dir: number): void {
   //
   // `dir` is kept because the caller knows who conceded and the AI reads it
   // to decide how hard to commit to the opening; nothing moves on its own.
-  puck.setPosition(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h / 2);
+  // ---- THE SIDE THAT CONCEDED SERVES.  The lizard's serve (`dir` > 0: the
+  // opening, or after you score) is struck at a varied angle the moment the
+  // count ends; yours is the puck, still, on your own side, to hit as you like.
+  const lizardServes = dir > 0;
+  const midX = TABLE.x + TABLE.w / 2;
+  if (lizardServes) {
+    const x = midX + (Math.random() - 0.5) * 60;
+    puck.setPosition(x, TABLE.y + 44);
+    // straight-ish, angled, or a bank off the side boards
+    const ang = Math.PI / 2 + (Math.random() - 0.5) * (Math.random() < 0.35 ? 2.2 : 1.1);
+    const sp = 200 + Math.random() * 90;
+    serveVel = { x: Math.cos(ang) * sp, y: Math.abs(Math.sin(ang)) * sp };
+    aiServe = true;
+  } else {
+    puck.setPosition(midX + (Math.random() - 0.5) * 30, TABLE.y + TABLE.h - 44);
+    aiServe = false;
+  }
   vel = { x: 0, y: 0 };
   openingDir = dir;
   frozen = ROUND_GAP_MS;

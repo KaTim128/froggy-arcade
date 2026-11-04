@@ -13,6 +13,7 @@
 
 import { resumeSpot, trackPlace } from '../../game/place';
 import Phaser from 'phaser';
+import type { FurnitureDef } from '../../game/catalog';
 import { PALETTE } from '../../render/palette';
 import { audio } from '../../core/audio';
 import { KEYS } from '../../core/input';
@@ -649,11 +650,30 @@ export abstract class WalkRoom extends Phaser.Scene {
     this.player.lie(facing, restY);
   }
 
-  protected sitOn(x: number, y: number, kind: SeatKind, facing = 1): void {
+  protected sitOn(x: number, y: number, kind: SeatKind, facing = 1, lift = 0): void {
     this.walker.cancel();
     this.seatReturn = { x: this.player.x, y: this.player.y };
     this.player.setPosition(x, y);
-    this.player.sit(kind, { facing });
+    this.player.sit(kind, { facing, lift });
+  }
+
+  /**
+   * How far above a chair's a piece's seat is (for `sitOn`): a sofa's
+   * cushion stands well up off the floor -- its top at 42% of the sofa's
+   * height (art/furnitureArt) -- and sat at a chair's height the body sank
+   * to its base (user, 4 Nov).  Chairs are what the pose is drawn for: 0.
+   */
+  protected seatLift(def: FurnitureDef): number {
+    return def.cat === 'sofa' ? Math.max(0, Math.round(def.h * 0.42) - 5) : 0;
+  }
+
+  /**
+   * How you sit on it: a sofa you sit back on facing out into the room --
+   * the lap across, both shins straight down to the floor (the user's pick,
+   * 4 Nov) -- a chair side-on.
+   */
+  protected seatKindOf(def: FurnitureDef): SeatKind {
+    return def.cat === 'sofa' ? 'front' : 'chair';
   }
 
   /**
@@ -663,10 +683,11 @@ export abstract class WalkRoom extends Phaser.Scene {
   protected refreshPlayer(look?: Look): void {
     const { x, y } = this.player;
     const seated = this.player.seatKind;
+    const lift = this.player.seatRaise;
     this.player.sprite.destroy();
     this.player = look ? new Player(this, x, y, false, look) : new Player(this, x, y);
     this.player.setSurface('carpet');
-    if (seated) this.player.sit(seated, { facing: 1 });
+    if (seated) this.player.sit(seated, { facing: 1, lift });
     if (this.worldW > GAME_W) this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
   }
 

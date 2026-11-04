@@ -51,7 +51,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { centerText, text } from '../core/ui';
+import { centerText, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
@@ -116,7 +116,7 @@ const ITEMS: Record<ItemId, ItemDef> = {
   tnt: { id: 'tnt', name: 'DYNAMITE', short: 'TNT', dmg: 28, heal: 0, poison: 0, sleep: 0, confuse: 0, color: 0xd94f2e, stock: 1, desc: 'DYNAMITE - 28 DAMAGE. A BIG BANG.' },
   poison: { id: 'poison', name: 'POISON', short: 'PSN', dmg: 8, heal: 0, poison: 3, sleep: 0, confuse: 0, color: 0x9b6fe0, stock: 1, desc: 'POISON - 8, THEN 5 A TURN FOR 3 TURNS.' },
   sleep: { id: 'sleep', name: 'SLEEP BALL', short: 'SLP', dmg: 0, heal: 0, poison: 0, sleep: 2, confuse: 0, color: 0x2e4a9a, stock: 1, desc: 'SLEEP BALL - NO DAMAGE. SLEEPS 2 TURNS.' },
-  confuse: { id: 'confuse', name: 'CONFUSION BALL', short: 'CNF', dmg: 4, heal: 0, poison: 0, sleep: 0, confuse: 1, color: 0xff6fb4, stock: 1, desc: 'CONFUSION BALL - 4 DAMAGE. NO WIND BAR 1 TURN.' },
+  confuse: { id: 'confuse', name: 'CONFUSION BALL', short: 'CNF', dmg: 4, heal: 0, poison: 0, sleep: 0, confuse: 1, color: 0xff6fb4, stock: 1, desc: 'CONFUSION - 4 DAMAGE. LOCKS THEIR NEXT WIND.' },
 };
 const ORDER: ItemId[] = ['rock', 'heal', 'tnt', 'poison', 'sleep', 'confuse'];
 /** A round's specials: one of each. */
@@ -183,6 +183,26 @@ let poisonText: Record<Who, Phaser.GameObjects.BitmapText | null> = { frog: null
 let roundText: Phaser.GameObjects.BitmapText | null = null;
 let windText: Phaser.GameObjects.BitmapText | null = null;
 let bannerText: Phaser.GameObjects.BitmapText | null = null;
+let bannerPlate: Phaser.GameObjects.Rectangle | null = null;
+/** The item about to be thrown, drawn over the frog's hand. */
+let heldIcon: Phaser.GameObjects.Graphics | null = null;
+/** Where the power bar sits: over the frog's head. */
+const POWER_Y = GROUND_Y - 52;
+/** How long the power bar's fill is when full. */
+const POWER_W = 38;
+
+/** Not yellow: the HUD never writes in yellow (user, 3 Nov) -- a yellow item colour reads cream. */
+function noYellow(c: number): number {
+  const r = (c >> 16) & 255;
+  const g = (c >> 8) & 255;
+  const b = c & 255;
+  return r > 190 && g > 150 && b < 140 ? PALETTE.cream : c;
+}
+
+/** A centred line in the small face. */
+function centerSmallish(scene: Phaser.Scene, x: number, y: number, str: string): Phaser.GameObjects.BitmapText {
+  return smallText(scene, x, y, str, PALETTE.cream).setOrigin(0.5, 0);
+}
 /** The confused side's turn: the wind bar is not shown. */
 let windHidden = false;
 let zzzT = 0;
@@ -348,7 +368,7 @@ export const frogVsLizard: MinigameModule = {
           chargeDir = 1;
         }
       }
-      powerFill?.setSize(6, (charging ? power : 0) * 48);
+      powerFill?.setSize((charging ? power : 0) * POWER_W, 3);
     }
     drawAim();
     drawStatus(delta);
@@ -430,9 +450,10 @@ export const frogVsLizard: MinigameModule = {
     phase = 'aim';
     power = 0;
     charging = false;
-    powerFill?.setSize(6, 0);
+    powerFill?.setSize(0, 3);
     refreshHud();
-    banner(turn === 'frog' ? 'YOUR THROW' : 'THE LIZARD THROWS', turn === 'frog' ? PALETTE.tealLight : PALETTE.neon);
+    // (no "YOUR THROW" plate: whose go it is shows on the frog, user 4 Nov)
+    banner('');
     if (turn === 'lizard') lizardTurn();
   },
 
@@ -448,6 +469,8 @@ export const frogVsLizard: MinigameModule = {
     roundText = null;
     windText = null;
     bannerText = null;
+    bannerPlate = null;
+    heldIcon = null;
     slots = [];
     sides.frog.sprite = null;
     sides.lizard.sprite = null;
@@ -611,114 +634,174 @@ function groundShadow(scene: Phaser.Scene, x: number, w: number): void {
   scene.add.ellipse(x + 3, GROUND_Y + 1, w, 5, 0x1a3a14, 0.35).setDepth(19);
 }
 
-/** The player: a round frog in a garden, facing the fence. */
+/**
+ * The player: a round frog in a garden, facing the fence.
+ *
+ * TEXTURED, AND NOT THE COLOUR OF THE LAWN (user, 4 Nov).  A dark outline
+ * all the way round, a deeper jade skin with darker blotches and fine
+ * speckle, a warm yellow belly, orange toe pads and a green eye ring -- so he
+ * reads against the grass rather than melting into it.  The eyes stay where
+ * they were (-6/6, -23): the status marks sit over them.
+ */
 function makeFrog(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameObjects.Container {
-  const parts = [
-    scene.add.ellipse(-7, -3, 10, 5, PALETTE.moss),
-    scene.add.ellipse(7, -3, 10, 5, PALETTE.moss),
-    scene.add.ellipse(0, -13, 24, 20, PALETTE.mossLight),
-    scene.add.ellipse(0, -9, 14, 10, 0xcfe8a0),
-    scene.add.ellipse(11, -15, 9, 5, PALETTE.moss),
-    scene.add.circle(-6, -23, 4, PALETTE.cream),
-    scene.add.circle(6, -23, 4, PALETTE.cream),
-    scene.add.circle(-5, -23, 2, PALETTE.black),
-    scene.add.circle(7, -23, 2, PALETTE.black),
-    scene.add.rectangle(2, -16, 9, 1, PALETTE.moss),
-    // lit from the left: a sheen on the crown, shade under the belly
-    scene.add.ellipse(-4, -19, 9, 4, 0xa8e090).setAlpha(0.85),
-    scene.add.ellipse(3, -5, 16, 3, PALETTE.moss).setAlpha(0.5),
-    // and a glint in each eye
-    scene.add.rectangle(-7, -25, 1, 1, 0xffffff),
-    scene.add.rectangle(5, -25, 1, 1, 0xffffff),
-  ];
-  return scene.add.container(x, groundY, parts).setDepth(20);
+  const g = scene.add.graphics();
+  const ink = 0x10240e;
+  const skin = 0x2f8f5a;
+  const skinLit = 0x5cc47e;
+  const skinDark = 0x1d5e3a;
+  const belly = 0xf2d36b;
+  // outline first, a pixel bigger than everything that goes on it
+  g.fillStyle(ink, 1);
+  g.fillEllipse(-7, -3, 13, 7).fillEllipse(7, -3, 13, 7).fillEllipse(0, -13, 27, 23).fillEllipse(11, -15, 12, 8);
+  g.fillCircle(-6, -23, 5.5).fillCircle(6, -23, 5.5);
+  // the back legs, folded, with orange toes
+  g.fillStyle(skinDark, 1).fillEllipse(-7, -3, 11, 5).fillEllipse(7, -3, 11, 5);
+  g.fillStyle(0xf08a3a, 1).fillRect(-13, -2, 2, 1.5).fillRect(-10, -1, 2, 1.5).fillRect(11, -2, 2, 1.5).fillRect(8, -1, 2, 1.5);
+  // body: shade, skin, the lit crown
+  g.fillStyle(skinDark, 1).fillEllipse(0, -13, 25, 21);
+  g.fillStyle(skin, 1).fillEllipse(-0.5, -14, 23, 18);
+  g.fillStyle(skinLit, 1).fillEllipse(-3, -18, 14, 8);
+  // belly, with a soft fold line
+  g.fillStyle(0xd9b04a, 1).fillEllipse(0, -8.5, 16, 11);
+  g.fillStyle(belly, 1).fillEllipse(-0.5, -9, 14, 9);
+  g.lineStyle(1, 0xd9b04a, 0.9).lineBetween(-4, -9, 4, -9);
+  // the throwing arm, out towards the fence
+  g.fillStyle(skinDark, 1).fillEllipse(11, -15, 10, 6);
+  g.fillStyle(skin, 1).fillEllipse(11, -15.5, 8, 4);
+  g.fillStyle(0xf08a3a, 1).fillCircle(15.5, -15, 1.2);
+  // blotches and speckle across the back
+  g.fillStyle(skinDark, 1);
+  for (const [bx, by, br] of [[-8, -14, 2.2], [-3, -21, 1.6], [6, -18, 2], [8, -11, 1.5], [-9, -8, 1.4], [2, -14, 1.1]] as const) g.fillCircle(bx, by, br);
+  g.fillStyle(0x8ad8a0, 0.9);
+  for (const [sx, sy] of [[-6, -17], [-1, -19], [4, -21], [-9, -12], [9, -16], [1, -12]] as const) g.fillRect(sx, sy, 1, 1);
+  // the mouth line
+  g.lineStyle(1, ink, 1).lineBetween(-2, -16, 7, -16);
+  // a crisp lit edge on the crown
+  g.lineStyle(1, 0xa8f0b8, 0.7).beginPath();
+  g.arc(-1, -13, 10.5, Math.PI * 0.95, Math.PI * 1.2);
+  g.strokePath();
+  // the eyes LAST, each in its own dark rim: nothing on the body -- the lit
+  // edge, a blotch, a speck -- is ever drawn across them (user, 4 Nov)
+  g.fillStyle(0x10240e, 1).fillCircle(-6, -23, 5.2).fillCircle(6, -23, 5.2);
+  // a green ring (not yellow -- user, 4 Nov), cream, black, a glint
+  g.fillStyle(0x3aa860, 1).fillCircle(-6, -23, 4.4).fillCircle(6, -23, 4.4);
+  g.fillStyle(0xfff4d8, 1).fillCircle(-6, -23, 3.4).fillCircle(6, -23, 3.4);
+  g.fillStyle(PALETTE.black, 1).fillCircle(-5, -23, 2).fillCircle(7, -23, 2);
+  g.fillStyle(0xffffff, 1).fillRect(-7, -25, 1, 1).fillRect(5, -25, 1, 1);
+  return scene.add.container(x, groundY, [g]).setDepth(20);
 }
 
 /**
  * The opponent: long, low, tan and spiny, so that at 320 pixels wide nobody
- * mistakes him for a second frog.
+ * mistakes him for a second frog.  Outlined, with rows of scales, dark bands
+ * down the back and round the tail, and a pale belly.
  */
 /** The lizard, side on, facing left.  Also the opponent at the air hockey table. */
 export function makeLizard(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameObjects.Container {
-  const hide = 0xc39a3e;
-  const dark = 0x8a6a22;
-  const parts: Phaser.GameObjects.GameObject[] = [
-    // tail, thinning away to the right
-    scene.add.triangle(22, -8, 0, 0, 20, 4, 0, 7, dark).setOrigin(0.5, 0.5),
-    scene.add.triangle(14, -8, 0, 0, 12, 3, 0, 6, hide).setOrigin(0.5, 0.5),
-    // legs, splayed the way a lizard's are
-    scene.add.ellipse(-6, -3, 11, 4, dark),
-    scene.add.ellipse(8, -3, 11, 4, dark),
-    scene.add.ellipse(-11, -2, 5, 3, dark),
-    scene.add.ellipse(13, -2, 5, 3, dark),
-    // body and belly
-    scene.add.ellipse(0, -9, 30, 13, hide),
-    scene.add.ellipse(0, -6, 22, 6, 0xe6d296),
-  ];
+  const g = scene.add.graphics();
+  const ink = 0x3a2408;
+  const hide = 0xc9962f;
+  const lit = 0xe8c262;
+  const dark = 0x7a5414;
+  const belly = 0xf0deaa;
+  const tri = (pts: number[], col: number): void => {
+    g.fillStyle(col, 1).fillTriangle(pts[0], pts[1], pts[2], pts[3], pts[4], pts[5]);
+  };
+  // outline
+  g.fillStyle(ink, 1);
+  g.fillEllipse(0, -9, 33, 16).fillEllipse(-13, -12, 20, 14);
+  tri([-27, -11, -18, -15, -18, -7], ink);
+  tri([12, -12, 36, -7, 12, -3], ink);
+  g.fillEllipse(-6, -3, 13, 6).fillEllipse(8, -3, 13, 6);
+  // tail, banded, thinning away to the right
+  tri([12, -11, 34, -7.5, 12, -4], hide);
+  g.fillStyle(dark, 1);
+  for (const tx of [16, 21, 26, 30]) g.fillRect(tx, -10 + (tx - 16) * 0.14, 2, 6 - (tx - 16) * 0.3);
+  // legs, splayed, with toes
+  g.fillStyle(dark, 1).fillEllipse(-6, -3, 11, 4).fillEllipse(8, -3, 11, 4);
+  g.fillStyle(ink, 1);
+  for (const fx of [-12, -10, 12, 14]) g.fillRect(fx, -1.5, 1, 2);
+  // body: hide, a lit back, the belly
+  g.fillStyle(hide, 1).fillEllipse(0, -9, 30, 13);
+  g.fillStyle(lit, 1).fillEllipse(-2, -12.5, 22, 4);
+  g.fillStyle(belly, 1).fillEllipse(0, -5.5, 22, 5);
+  // dark bands across the back
+  g.fillStyle(dark, 0.9);
+  for (const bx of [-7, -1, 5, 11]) g.fillRect(bx, -15, 2.5, 6);
+  // rows of scales: a pale and a dark dot, alternating
+  for (let row = 0; row < 3; row++)
+    for (let k = 0; k < 7; k++) {
+      const sx = -11 + k * 4 + (row % 2) * 2;
+      const sy = -13 + row * 2.6;
+      g.fillStyle(k % 2 ? 0xf4d88a : 0x9a6a1a, 0.85).fillRect(sx, sy, 1, 1);
+    }
   // a spiny ridge down the back
-  for (const [sx, sh] of [[-6, 5], [0, 6], [6, 5], [11, 4]]) {
-    parts.push(scene.add.triangle(sx, -15, 0, sh, 2.5, 0, 5, sh, dark).setOrigin(0.5, 1));
+  for (const [sx, sh] of [[-8, 4], [-3, 5], [2, 5.5], [7, 5], [12, 3.5]] as const) {
+    tri([sx - 2, -14.5, sx, -14.5 - sh, sx + 2, -14.5], ink);
+    tri([sx - 1.2, -14.5, sx, -14.5 - sh + 1.3, sx + 1.2, -14.5], 0xe0a84a);
   }
-  // spots, so he is patterned rather than painted
-  for (const [px, py] of [[-4, -11], [3, -9], [9, -11]]) {
-    parts.push(scene.add.circle(px, py, 1.6, dark).setAlpha(0.8));
-  }
-  parts.push(
-    // head and snout, pointed away at the fence
-    scene.add.ellipse(-13, -12, 17, 11, hide),
-    scene.add.triangle(-22, -11, 0, 3, 8, 0, 8, 6, hide).setOrigin(0.5, 0.5),
-    scene.add.rectangle(-20, -10, 8, 1, dark),
-    // the eye: a slit, not a frog's saucer
-    scene.add.circle(-15, -16, 3.2, PALETTE.gold),
-    scene.add.rectangle(-15, -16, 1, 4, PALETTE.black),
-    // a throat that reads as a lizard's dewlap
-    scene.add.ellipse(-16, -7, 7, 4, 0xd9b45a),
-    // the sun along his back and the top of his head, and a glint in the eye
-    scene.add.ellipse(-2, -13, 18, 2, 0xe8c870).setAlpha(0.8),
-    scene.add.ellipse(-14, -16, 8, 2, 0xe8c870).setAlpha(0.7),
-    scene.add.rectangle(-16, -17, 1, 1, 0xffffff),
-  );
-  return scene.add.container(x, groundY, parts).setDepth(20);
+  // head and snout, pointed at the fence
+  g.fillStyle(hide, 1).fillEllipse(-13, -12, 17, 11);
+  tri([-26, -11, -18, -14.5, -18, -7.5], hide);
+  g.fillStyle(lit, 1).fillEllipse(-14, -15.5, 10, 3);
+  g.fillStyle(0xe8c26a, 1).fillEllipse(-16, -7, 8, 4);
+  g.lineStyle(1, ink, 1).lineBetween(-25, -10, -14, -9);
+  g.fillStyle(ink, 1).fillRect(-24, -12, 1, 1);
+  // scaly cheek
+  g.fillStyle(dark, 0.8).fillRect(-12, -12, 1, 1).fillRect(-10, -10, 1, 1).fillRect(-9, -13, 1, 1);
+  // the eye: gold, a slit, a glint
+  g.fillStyle(ink, 1).fillCircle(-15, -16, 4);
+  g.fillStyle(0xf0c030, 1).fillCircle(-15, -16, 3.2);
+  g.fillStyle(PALETTE.black, 1).fillRect(-15.5, -18, 1, 4);
+  g.fillStyle(0xffffff, 1).fillRect(-17, -18, 1, 1);
+  return scene.add.container(x, groundY, [g]).setDepth(20);
 }
 
 // --------------------------------------------------------------------- hud
 
 function buildHud(scene: Phaser.Scene): void {
-  // Dark plates under the read-outs: gold and teal on a bright summer sky
-  // were unreadable, and so was the item bar on the lawn.
-  scene.add.rectangle(0, 16, GAME_W, 62, 0x000000, 0.55).setOrigin(0, 0);
+  // ONE THIN STRIP ACROSS THE TOP (user, 3 Nov): it used to be a dark plate
+  // over half the sky.  Names and the round on one row, the health bars and
+  // the wind on the next, the numbers and the keys under them -- and no
+  // yellow writing anywhere (cream, teal and the lizard's pink instead).
+  scene.add.rectangle(0, 16, GAME_W, 33, 0x000000, 0.5).setOrigin(0, 0);
   scene.add.rectangle(0, 148, GAME_W, GAME_H - 148, 0x000000, 0.6).setOrigin(0, 0).setDepth(49);
-  roundText = centerText(scene, GAME_W / 2, 23, '', PALETTE.gold);
+  roundText = centerSmallish(scene, GAME_W / 2, 19, '');
 
-  text(scene, 8, 30, 'FROG', PALETTE.tealLight);
-  text(scene, GAME_W - 8, 30, 'LIZARD', PALETTE.neon).setOrigin(1, 0);
-  scene.add.rectangle(8, 39, 96, 7, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-  hpFill.frog = scene.add.rectangle(9, 40, 94, 5, PALETTE.mossLight).setOrigin(0, 0);
-  scene.add.rectangle(GAME_W - 104, 39, 96, 7, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-  hpFill.lizard = scene.add.rectangle(GAME_W - 9, 40, 94, 5, 0xd98a3d).setOrigin(1, 0);
-  hpText.frog = text(scene, 8, 48, '', PALETTE.cream);
-  hpText.lizard = text(scene, GAME_W - 8, 48, '', PALETTE.cream).setOrigin(1, 0);
-  poisonText.frog = text(scene, 8, 57, '', 0x9b6fe0);
-  poisonText.lizard = text(scene, GAME_W - 8, 57, '', 0x9b6fe0).setOrigin(1, 0);
+  text(scene, 8, 18, 'FROG', PALETTE.tealLight);
+  text(scene, GAME_W - 8, 18, 'LIZARD', PALETTE.neon).setOrigin(1, 0);
+  scene.add.rectangle(8, 27, 96, 6, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
+  hpFill.frog = scene.add.rectangle(9, 28, 94, 4, PALETTE.mossLight).setOrigin(0, 0);
+  scene.add.rectangle(GAME_W - 104, 27, 96, 6, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
+  hpFill.lizard = scene.add.rectangle(GAME_W - 9, 28, 94, 4, 0xd98a3d).setOrigin(1, 0);
+  hpText.frog = smallText(scene, 8, 35, '', PALETTE.cream);
+  hpText.lizard = smallText(scene, GAME_W - 8, 35, '', PALETTE.cream).setOrigin(1, 0);
+  poisonText.frog = smallText(scene, 40, 35, '', 0x9b6fe0);
+  poisonText.lizard = smallText(scene, GAME_W - 40, 35, '', 0x9b6fe0).setOrigin(1, 0);
 
   // The wind, in the middle where both sides can see it.  The bar fills out
   // from the centre towards the side it is blowing, so which way is the shape
   // of it and how hard is the length.
-  windText = centerText(scene, GAME_W / 2, 32, '', PALETTE.cream);
-  scene.add.rectangle(GAME_W / 2 - 36, 39, 72, 6, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-  scene.add.rectangle(GAME_W / 2, 39, 1, 6, PALETTE.steel).setOrigin(0.5, 0);
-  windFill = scene.add.rectangle(GAME_W / 2, 40, 0, 4, PALETTE.tealLight).setOrigin(0, 0);
+  windText = centerSmallish(scene, GAME_W / 2, 35, '');
+  scene.add.rectangle(GAME_W / 2 - 36, 27, 72, 6, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
+  scene.add.rectangle(GAME_W / 2, 27, 1, 6, PALETTE.steel).setOrigin(0.5, 0);
+  windFill = scene.add.rectangle(GAME_W / 2, 28, 0, 4, PALETTE.tealLight).setOrigin(0, 0);
 
-  bannerText = centerText(scene, GAME_W / 2, 62, '', PALETTE.cream);
+  // the keys, small, along the strip's foot
+  const keys = smallText(scene, GAME_W / 2, 41, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-6 ITEM', PALETTE.fog);
+  keys.setOrigin(0.5, 0);
 
-  // the power meter, at the thrower's end of the yard
-  scene.add.rectangle(6, 94, 8, 50, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-  powerFill = scene.add.rectangle(7, 143, 6, 0, PALETTE.gold).setOrigin(0, 1);
-  text(scene, 4, 86, 'PWR', PALETTE.ash);
+  // what is happening, under the strip, on a plate of its own that fits it
+  // (small, and sat in the middle of its plate: it used to hang off the top of it)
+  bannerPlate = scene.add.rectangle(GAME_W / 2, 52, 10, 9, 0x000000, 0.55).setVisible(false);
+  bannerText = smallText(scene, GAME_W / 2, 54, '', PALETTE.cream).setOrigin(0.5, 0);
 
-  // How to play, under the banner in the top panel: the bottom one is the
-  // items' and their description's, and three lines did not fit down there.
-  centerText(scene, GAME_W / 2, 71, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-6 ITEM', PALETTE.fog);
+  // THE THROW, WHERE YOU ARE LOOKING: the power bar and the thing you are
+  // about to throw, over the frog's head rather than off at the screen's edge
+  scene.add.rectangle(FROG_X - 20, POWER_Y, 40, 5, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(48);
+  powerFill = scene.add.rectangle(FROG_X - 19, POWER_Y + 1, 0, 3, PALETTE.tealLight).setOrigin(0, 0).setDepth(48);
+  smallText(scene, FROG_X - 22, POWER_Y, 'PWR', PALETTE.fog).setOrigin(1, 0).setDepth(48);
+  heldIcon = scene.add.graphics().setDepth(48);
 
   // THE ITEM BAR: a picture of each thing, and how many are left (the key
   // that picks it, on a keyboard).  On a phone the bar keeps clear of the
@@ -738,7 +821,8 @@ function buildHud(scene: Phaser.Scene): void {
     slots.push({ box, label, icon });
   });
   // what the chosen item does, in a line of its own under the bar
-  descText = centerText(scene, GAME_W / 2, 173, '', PALETTE.cream).setDepth(51);
+  // (the small font: the longer item lines ran out past the bar)
+  descText = smallText(scene, GAME_W / 2, 170, '', PALETTE.cream).setOrigin(0.5, 0).setDepth(51);
 }
 
 function refreshHud(): void {
@@ -756,8 +840,11 @@ function refreshHud(): void {
 
   // wind: side, and how much of the bar it fills -- unless whoever is
   // throwing is confused, and then nobody is shown it
-  windFill?.setVisible(!windHidden);
-  if (windHidden) windText?.setText('WIND ???');
+  // (confused: the bar is locked and greyed, not just gone -- you can see
+  // there is a wind, you just cannot read it)
+  windFill?.setVisible(true);
+  if (windHidden) windText?.setText('WIND LOCKED').setTint(PALETTE.ash);
+  else windText?.setTint(PALETTE.cream);
   const mag = Math.abs(wind);
   const w = Math.round(mag * 34);
   if (windFill) {
@@ -765,6 +852,10 @@ function refreshHud(): void {
     windFill.setOrigin(wind < 0 ? 1 : 0, 0);
     windFill.x = GAME_W / 2;
     windFill.setFillStyle(mag > 0.66 ? PALETTE.ember : mag > 0.33 ? PALETTE.gold : PALETTE.tealLight);
+    if (windHidden) {
+      windFill.setSize(70, 4).setOrigin(0.5, 0).setFillStyle(0x55596a);
+      windFill.x = GAME_W / 2;
+    }
   }
   const arrows = mag < 0.08 ? '-' : (wind < 0 ? '<' : '>').repeat(Math.min(3, 1 + Math.floor(mag * 3)));
   if (!windHidden) windText?.setText(`WIND ${arrows}`);
@@ -778,11 +869,12 @@ function refreshHud(): void {
     const active = ORDER[i] === sel;
     slot.box.setStrokeStyle(1, active ? PALETTE.gold : PALETTE.steel);
     slot.box.setFillStyle(active ? PALETTE.plum : PALETTE.ink);
-    slot.label.setTint(usable ? (active ? PALETTE.gold : PALETTE.cream) : PALETTE.ash);
+    slot.label.setTint(usable ? (active ? PALETTE.tealLight : PALETTE.cream) : PALETTE.ash);
     // used up: the picture greys out with the count
     slot.icon.setAlpha(usable ? 1 : 0.35);
   });
-  descText?.setText(ITEMS[sel].desc).setTint(ITEMS[sel].color === 0x2e4a9a ? 0x8aa8ff : ITEMS[sel].color);
+  descText?.setText(ITEMS[sel].desc).setTint(noYellow(ITEMS[sel].color === 0x2e4a9a ? 0x8aa8ff : ITEMS[sel].color));
+
 }
 
 /**
@@ -817,7 +909,8 @@ function drawItemIcon(g: Phaser.GameObjects.Graphics, id: ItemId, x: number, y: 
 }
 
 function banner(str: string, colour: number = PALETTE.cream): void {
-  bannerText?.setText(str).setTint(colour).setAlpha(1);
+  bannerText?.setText(str).setTint(noYellow(colour)).setAlpha(1);
+  if (bannerPlate && bannerText) bannerPlate.setSize(Math.ceil(bannerText.width) + 8, 9).setPosition(GAME_W / 2 - (Math.ceil(bannerText.width) + 8) / 2, 52).setOrigin(0, 0).setVisible(!!str).setAlpha(1);
 }
 
 /** A number that floats off whoever it just happened to. */
@@ -890,7 +983,7 @@ function beginTurn(who: Who, first = false): void {
   if (!first) rollWind();
   power = 0;
   charging = false;
-  powerFill?.setSize(6, 0);
+  powerFill?.setSize(0, 3);
 
   // ASLEEP: the turn goes by without him.  Two of them, then he wakes.
   if (s.sleep > 0) {
@@ -913,7 +1006,7 @@ function beginTurn(who: Who, first = false): void {
   if (who === 'frog' && sides.frog.stock[sel] <= 0) sel = 'rock';
 
   refreshHud();
-  banner(who === 'frog' ? 'YOUR THROW' : 'THE LIZARD THROWS', who === 'frog' ? PALETTE.tealLight : PALETTE.neon);
+  banner('');
   if (who === 'lizard') lizardTurn();
 }
 
@@ -948,7 +1041,7 @@ function throwItem(who: Who, angle: number, pow: number, id: ItemId): void {
   phase = 'flight';
   power = 0;
   charging = false;
-  powerFill?.setSize(6, 0);
+  powerFill?.setSize(0, 3);
   aimG?.clear();
   refreshHud();
   banner(`${item.name} AWAY`, item.color);
@@ -1465,6 +1558,41 @@ function skullSmoke(x: number, k: number): void {
   });
 }
 
+/** Four pink mini balls from (x, y) back to `who`, 1 damage each as they land. */
+function miniBalls(who: Who, x: number, y: number): void {
+  const sc = scene0;
+  if (!sc) return;
+  const tx = who === 'frog' ? FROG_X : LIZARD_X;
+  banner('CONFUSED - IT COMES BACK!', 0xff6fb4);
+  for (let i = 0; i < 4; i++) {
+    const b = sc.add.circle(x, y, 2, 0xff6fb4).setStrokeStyle(1, 0xffd0e8).setDepth(46);
+    const ox = (i - 1.5) * 6;
+    const peak = Math.min(y, GROUND_Y - 30) - 16 - i * 4;
+    sc.tweens.addCounter({
+      from: 0,
+      to: 1,
+      delay: i * 140,
+      duration: 650,
+      ease: 'Sine.easeIn',
+      onUpdate: (tw) => {
+        const k = tw.getValue() ?? 0;
+        b.x = x + (tx + ox - x) * k;
+        b.y = (1 - k) * (1 - k) * y + 2 * (1 - k) * k * peak + k * k * (GROUND_Y - 14);
+      },
+      onComplete: () => {
+        b.destroy();
+        if (phase === 'over' || phase === 'roundEnd') return;
+        const s = sides[who];
+        s.hp = Math.max(0, s.hp - 1);
+        floatText(tx + ox, GROUND_Y - 30, '-1', 0xff6fb4);
+        audio.sfx('ui_blip', 0.4);
+        refreshHud();
+        if (i === 3 && (sides.frog.hp <= 0 || sides.lizard.hp <= 0)) endRound();
+      },
+    });
+  }
+}
+
 function puff(x: number, y: number): void {
   if (!scene0) return;
   const p = scene0.add.circle(x, y, 3, 0xbfa07a).setAlpha(0.7).setDepth(40);
@@ -1472,10 +1600,20 @@ function puff(x: number, y: number): void {
 }
 
 function endFlight(hit: boolean): void {
+  const from = proj?.from ?? null;
+  const at = proj ? { x: proj.x, y: Math.min(proj.y, GROUND_Y - 4) } : null;
   proj?.body?.destroy();
   proj = null;
   refreshHud();
   if (!hit) banner('MISS', PALETTE.fog);
+  // ---- A CONFUSED MISS COMES BACK.  The throw breaks into four little pink
+  // balls that fly home to whoever threw it, one damage each.
+  if (!hit && from && at && windHidden && sides[from].confused > 0) {
+    miniBalls(from, at.x, at.y);
+    phase = 'settle';
+    settleMs = 1500;
+    return;
+  }
   if (sides.frog.hp <= 0 || sides.lizard.hp <= 0) {
     endRound();
     return;
@@ -1496,7 +1634,10 @@ function endFlight(hit: boolean): void {
 function drawAim(): void {
   if (!aimG) return;
   aimG.clear();
+  heldIcon?.clear();
   if (phase !== 'aim' || turn !== 'frog') return;
+  // the thing about to be thrown, held up in the frog's hand
+  if (heldIcon) drawItemIcon(heldIcon, sel, FROG_X + HAND.dx - 4, GROUND_Y + HAND.dy - 12);
 
   const x0 = FROG_X + HAND.dx;
   const y0 = GROUND_Y + HAND.dy;

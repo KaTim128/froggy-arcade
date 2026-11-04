@@ -17,6 +17,7 @@
  * other — both of them only ever append to or trim the same draft string.
  */
 
+import { isAdminName, isAdminPassword, isUnlocked, unlockAdmin } from '../core/adminAuth';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -30,6 +31,9 @@ export class ProfileModal extends Phaser.Scene {
   private from = 'StartScreen';
   private body!: Phaser.GameObjects.Container;
   private naming = false;
+  /** Asking for the admin password: for a new profile (its name) or an existing one (its id). */
+  private pwFor: { name: string } | { id: string } | null = null;
+  private pwWrong = false;
   private draft = '';
   /** The name being typed, kept so the caret can blink without a rebuild. */
   private draftText: Phaser.GameObjects.BitmapText | null = null;
@@ -66,6 +70,8 @@ export class ProfileModal extends Phaser.Scene {
     this.naming = false;
     this.draft = '';
     this.confirmingDelete = null;
+    this.pwFor = null;
+    this.pwWrong = false;
   }
 
   create(): void {
@@ -151,7 +157,7 @@ export class ProfileModal extends Phaser.Scene {
     this.body.add(
       this.add.rectangle(GAME_W / 2, GAME_H / 2, 300, 168, PALETTE.ink).setStrokeStyle(1, PALETTE.neon),
     );
-    this.body.add(centerText(this, GAME_W / 2, 24, 'NAME YOUR RUN', PALETTE.cream));
+    this.body.add(centerText(this, GAME_W / 2, 24, this.pwFor ? (this.pwWrong ? 'WRONG PASSWORD - TRY AGAIN' : 'PASSWORD') : 'NAME YOUR RUN', this.pwWrong ? PALETTE.ember : PALETTE.cream));
 
     this.body.add(this.add.rectangle(GAME_W / 2, 40, 150, 15, PALETTE.black, 0.6).setStrokeStyle(1, PALETTE.gold));
     this.draftText = centerText(this, GAME_W / 2, 41, '', PALETTE.gold);
@@ -281,7 +287,9 @@ export class ProfileModal extends Phaser.Scene {
   private syncDraft(): void {
     if (!this.draftText) return;
     // A block caret rather than a thin bar — at this size a 1px line reads as dirt.
-    this.draftText.setText(this.draft + (Math.floor(this.time.now / 400) % 2 === 0 ? '_' : ' '));
+    // (a password shows as stars)
+    const shown = this.pwFor ? '*'.repeat(this.draft.length) : this.draft;
+    this.draftText.setText(shown + (Math.floor(this.time.now / 400) % 2 === 0 ? '_' : ' '));
   }
 
   // -------------------------------------------------------------------- actions
@@ -298,12 +306,22 @@ export class ProfileModal extends Phaser.Scene {
   private cancelNaming(): void {
     this.naming = false;
     this.draft = '';
+    this.pwFor = null;
+    this.pwWrong = false;
     this.render();
   }
 
   private commitName(): void {
-    // (the secret names that jumped into the story are gone: user, 1 Nov.
-    // Only ADDMIN128 is special, and its test buttons are in the pause menu.)
+    // THE ADMIN PROFILE asks for its password before it is made (core/adminAuth)
+    if (this.pwFor) return this.commitPassword();
+    if (isAdminName(this.draft)) {
+      this.pwFor = { name: this.draft };
+      this.pwWrong = false;
+      this.draft = '';
+      audio.sfx('ui_blip');
+      this.render();
+      return;
+    }
     const id = store.createSlot(this.draft);
     this.naming = false;
     this.draft = '';
@@ -315,7 +333,42 @@ export class ProfileModal extends Phaser.Scene {
     this.close();
   }
 
+  private commitPassword(): void {
+    const ask = this.pwFor!;
+    const pw = this.draft;
+    if (!isAdminPassword(pw)) {
+      this.pwWrong = true;
+      this.draft = '';
+      audio.sfx('buzzer');
+      this.render();
+      return;
+    }
+    const id = 'id' in ask ? ask.id : store.createSlot(ask.name);
+    this.pwFor = null;
+    this.naming = false;
+    this.draft = '';
+    if (!id) {
+      this.render();
+      return;
+    }
+    unlockAdmin(id, pw);
+    if ('id' in ask) store.selectSlot(id);
+    store.flush();
+    audio.sfx('coin_spin');
+    this.close();
+  }
+
   private play(id: string): void {
+    // the admin profile, not yet unlocked on this device: its password first
+    const name = store.listSlots().find((x) => x.id === id)?.name;
+    if (isAdminName(name) && !isUnlocked(id)) {
+      this.pwFor = { id };
+      this.pwWrong = false;
+      this.naming = true;
+      this.draft = '';
+      this.render();
+      return;
+    }
     store.selectSlot(id);
     audio.sfx('ui_blip');
     this.close();

@@ -60,8 +60,9 @@ const BACK_DOOR = { x: 20, y: LOUNGE_DOOR.y };
  * here, in the same places, dark.
  */
 const CRANES: Array<{ kind: CraneKind; x: number; y: number; cost: number; title: string }> = [
-  { kind: 'plush', x: 44, y: 74, cost: CRANE_COST.plush, title: 'PLUSH CRANE' },
-  { kind: 'oddity', x: 82, y: 74, cost: CRANE_COST.oddity, title: 'ODDITY CRANE' },
+  // (the price read when it is shown: the admin can change it)
+  { kind: 'plush', x: 44, y: 74, get cost() { return CRANE_COST.plush; }, title: 'PLUSH CRANE' },
+  { kind: 'oddity', x: 82, y: 74, get cost() { return CRANE_COST.oddity; }, title: 'ODDITY CRANE' },
 ];
 
 /** CREATURE CLASH: the upright on the back wall, right of the sign. */

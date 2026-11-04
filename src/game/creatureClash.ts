@@ -28,17 +28,18 @@
  *                 your creatures.
  */
 
+import { cfgNum, cfgPct, cfgStr } from '../core/gameConfig';
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, STARTERS,
+  BATTLE_COST, BATTLE_WIN, BIOMES, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, STARTERS,
   BOSSES, bossById, creatureById, rollLadder, rollPack, zoneFoe, type Biome, type Creature,
 } from './creatures';
 import type { CreatureState, Owned } from './creatureState';
 import { record } from './life';
 import { badgeSet, earnBadge, setBadgeSet } from './badges';
-import { MAX_LEVEL, MAX_XP, XP_BOSS, XP_LOSS, XP_WIN, levelOf, withLevel } from './creatureLevel';
-import { STAGES, WORLDS, lineupFoe, storyPrice } from './creatureStory';
+import { MAX_LEVEL, MAX_XP, battleXp, levelOf, withLevel } from './creatureLevel';
+import { STAGES, WORLDS, lineupFoe, stageLevel, storyPrice } from './creatureStory';
 
 export interface Result {
   ok: boolean;
@@ -83,7 +84,10 @@ export const REVIVE_COST = 0;
 
 /** Non-zero while it is down and needs REVIVE; 0 when it is fit to fight. */
 export function restLeft(o: Owned, _now = Date.now()): number {
-  return o.faintedAt ? 1 : 0;
+  // (user, 2 Nov: a creature that faints is back on its feet straight away --
+  // no trip to the team screen to revive it -- so nothing is ever down)
+  void o;
+  return 0;
 }
 
 /** Back on its feet now. */
@@ -123,20 +127,33 @@ export function claimStarter(id: string): Result {
 }
 
 /** Pay for the pack and lay its nine cards face down.  Refused before paying, never after. */
+/**
+ * WHAT A PACK COSTS NOW (user, 2 Nov): the first one of a run is free, every
+ * one after it 50 -- both admin-set (core/gameConfig `clash.firstFree`,
+ * `clash.packCost`).
+ */
+export function packPrice(c = C()): number {
+  if (c.pulls === 0 && cfgStr('clash.firstFree') === 'yes') return 0;
+  return Math.max(0, Math.round(cfgNum('clash.packCost')));
+}
+
 export function openPack(rng: () => number = Math.random): Result {
   const c = C();
   if (c.battle) return no('FINISH THE BATTLE FIRST.');
   if (c.pending) return no('PICK A CARD FROM THE PACK YOU OPENED FIRST.');
-  if (c.owned.length >= MAX_OWNED) return no('YOU CAN ONLY KEEP TWO. RELEASE ONE FIRST.');
-  if (ledger.balance() < PACK_COST) return no(`A PACK COSTS ${PACK_COST} TOKENS.`);
+  const price = packPrice(c);
+  if (ledger.balance() < price) return no(`A PACK COSTS ${price} TOKENS.`);
   const cards = rollPack(rng);
-  if (!ledger.debit(PACK_COST, 'creature')) return no(`A PACK COSTS ${PACK_COST} TOKENS.`);
+  // (the admin's test zone: the creature asked for is in every pack)
+  const want = cfgStr('clash.recruit');
+  if (want !== 'none' && creatureById(want) && !cards.includes(want)) cards[0] = want;
+  if (price > 0 && !ledger.debit(price, 'creature')) return no(`A PACK COSTS ${price} TOKENS.`);
   edit((s) => {
     s.pending = { cards };
     s.pulls += 1;
   });
   store.flush();
-  return ok('PICK ONE CARD.');
+  return ok(price ? 'PICK ONE CARD.' : 'YOUR FIRST ONE IS FREE. PICK ONE CARD.');
 }
 
 /** Turn over one of the nine: it is yours, and the pack is spent. */
@@ -145,7 +162,6 @@ export function pickCard(index: number): Result & { id?: string; cards?: string[
   const p = c.pending;
   if (!p) return no('NO PACK IS OPEN.');
   if (!Number.isInteger(index) || index < 0 || index > 8) return no('PICK ONE OF THE NINE.');
-  if (c.owned.length >= MAX_OWNED) return no('YOU CAN ONLY KEEP TWO.');
   const id = p.cards[index];
   edit((s) => {
     const uid = s.nextUid++;
@@ -165,17 +181,6 @@ export function setActive(uid: number): Result {
   return ok('READY TO FIGHT.');
 }
 
-export function release(uid: number): Result {
-  const c = C();
-  if (c.battle) return no('NOT IN THE MIDDLE OF A BATTLE.');
-  const o = c.owned.find((x) => x.uid === uid);
-  if (!o) return no('NOT YOURS.');
-  edit((s) => {
-    s.owned = s.owned.filter((x) => x.uid !== uid);
-    if (s.active === uid) s.active = s.owned[0]?.uid ?? -1;
-  });
-  return ok(`${creatureById(o.id)!.name.toUpperCase()} WANDERS OFF.`);
-}
 
 
 // --------------------------------------------------------------- zone battle
@@ -209,36 +214,56 @@ export function startBattle(biomeId: string, foeId?: string): Result {
 
 /** Whether world `w` (0-based) is open: the first always, each next once the one before is beaten. */
 export const worldOpen = (w: number, c = C()): boolean => w >= 0 && w < WORLDS.length && w <= c.story.cleared;
-/** Whether a battle there now is a replay (its boss already beaten): the cheaper price. */
-export const isReplay = (w: number, c = C()): boolean => w < c.story.cleared;
+/** Whether every fight in world `w` is beaten: the whole trail is a replay. */
+export const isReplay = (w: number, c = C()): boolean => (c.story.best[w] ?? 0) >= STAGES + 1;
+
+/** Where a world's trail is: how many of its five fights are beaten (0..5). */
+export const storyBest = (w: number, c = C()): number => (worldOpen(w, c) ? c.story.best[w] ?? 0 : 0);
 
 /**
- * PAY FOR WORLD `w`'s NEXT FIGHT: its next battle, or its boss.  Who you meet
- * is drawn here and kept with the battle, so a reload cannot change it.
- * Refused before paying, never after.
+ * A node of world `w`'s trail: `done` beaten (it can be replayed), `next`
+ * the one to beat, `locked` past it -- or the whole world shut.
  */
-export function startStory(w: number, foeId?: string, rng: () => number = Math.random): Result {
+export function nodeState(w: number, node: number, c = C()): 'done' | 'next' | 'locked' {
+  if (!worldOpen(w, c)) return 'locked';
+  const best = storyBest(w, c);
+  return node < best ? 'done' : node === best ? 'next' : 'locked';
+}
+
+/** The node a world's trail opens on: the next to beat, or the boss once all are. */
+export const trailNode = (w: number, c = C()): number => Math.min(STAGES, storyBest(w, c));
+
+/**
+ * PAY FOR A FIGHT ON WORLD `w`'s TRAIL: node 0..3 its battles, 4 its boss --
+ * the next unbeaten one at the full price, or one already beaten again, as
+ * a replay, at the replay price (for the experience; it moves nothing on).
+ * Who you meet is fixed by the node and kept with the battle, so a reload
+ * cannot change it.  Refused before paying, never after.
+ */
+export function startStory(w: number, node?: number): Result {
   const c = C();
   if (!worldOpen(w, c)) return no(`BEAT ${WORLDS[Math.max(0, w - 1)].bossName} TO OPEN ${WORLDS[w]?.name ?? 'THAT WORLD'}.`);
   if (c.battle) return no('A BATTLE IS ALREADY ON.');
   if (c.pending) return no('PICK A CARD FROM YOUR OPEN PACK FIRST.');
   const why = unfit(c);
   if (why) return no(why);
-  const { cost } = storyPrice(w, isReplay(w, c));
+  const stage = typeof node === 'number' && Number.isInteger(node) ? node : trailNode(w, c);
+  if (stage < 0 || stage > STAGES) return no('NO SUCH FIGHT.');
+  const state = nodeState(w, stage, c);
+  if (state === 'locked') return no('BEAT THE ONE BEFORE IT FIRST.');
+  const replay = state === 'done';
+  const { cost } = storyPrice(w, replay);
   if (ledger.balance() < cost) return no(`THIS FIGHT COSTS ${cost} TOKENS.`);
   const world = WORLDS[w];
-  const stage = c.story.stage[w] ?? 0;
-  // (fixed: the world's lineup, stage by stage -- `foeId` is only ever that)
-  void foeId;
-  void rng;
   const foe = stage >= STAGES ? world.boss : lineupFoe(w, stage);
   if (!ledger.debit(cost, 'creature')) return no(`THIS FIGHT COSTS ${cost} TOKENS.`);
   edit((s) => {
-    s.battle = { mode: 'story', biome: world.biome, world: w, stage, foe };
+    s.battle = { mode: 'story', biome: world.biome, world: w, stage, foe, ...(replay ? { replay: true } : {}) };
     if (stage < STAGES) s.lastFoe[world.id] = foe;
   });
   store.flush();
-  return ok(stage >= STAGES ? `${world.bossName}!` : `BATTLE ${stage + 1} OF ${STAGES}!`);
+  const tag = replay ? 'REPLAY: ' : '';
+  return ok(stage >= STAGES ? `${tag}${world.bossName}!` : `${tag}BATTLE ${stage + 1} OF ${STAGES}!`);
 }
 
 // -------------------------------------------------------------------- ladder
@@ -316,6 +341,9 @@ export interface BattleEnd extends Result {
   runOver?: boolean;
   /** Story: this win beat a world's boss for the first time, and opened the next. */
   worldOpened?: boolean;
+  /** The foe's level less yours (what the experience was scaled by), and whether it was a replay. */
+  xpGap?: number;
+  replay?: boolean;
 }
 
 /**
@@ -323,7 +351,7 @@ export interface BattleEnd extends Result {
  * is closed in the same write, so a second call (a double tap, a late timer,
  * a reload) finds nothing open and pays nothing.
  */
-export function finishBattle(won: boolean): BattleEnd {
+export function finishBattle(won: boolean, foeLevel?: number): BattleEnd {
   const c = C();
   const b = c.battle;
   if (!b) return { ...no('NO BATTLE IS ON.'), paid: 0 };
@@ -332,18 +360,27 @@ export function finishBattle(won: boolean): BattleEnd {
   // the ladder step this battle was -- and only if it still is the run's step
   const ladder = b.mode === 'ladder' && c.ladder && b.level === c.ladder.level ? c.ladder : null;
   // the story stage this battle was -- and only if it still is that world's next
-  const story = b.mode === 'story' && b.world !== undefined && c.story.stage[b.world] === b.stage ? { w: b.world, stage: b.stage ?? 0 } : null;
+  // (a replay is always settled as one -- it moves nothing on; a first go
+  // only if it is still that world's next fight)
+  const storyAt = b.mode === 'story' && b.world !== undefined ? { w: b.world, stage: b.stage ?? 0 } : null;
+  const replayed = !!storyAt && b.replay === true;
+  const story = storyAt && (replayed || (c.story.best[storyAt.w] ?? 0) === storyAt.stage) ? storyAt : null;
+  const advance = !!story && !replayed;
   const storyBoss = !!story && story.stage >= STAGES;
   const boss = (!!ladder && ladder.level > LADDER_LEVELS) || storyBoss;
+  // HOW MUCH IT LEARNT: by the gap between its level and the foe's (see
+  // battleXp) -- the story's foes at their stage's level, a zone's matched
+  // to yours (never more than one above), the ladder's as even.
+  const myLv = levelOf(fighter?.xp ?? 0);
+  const foeLv = storyAt ? stageLevel(storyAt.w, storyAt.stage) : b.mode === 'zone' ? Math.max(1, Math.min(myLv + 1, Math.round(foeLevel ?? myLv))) : myLv;
   if (won) {
-    // experience for the one that fought (none past level 3)
     const before = fighter?.xp ?? 0;
-    const gain = fighter && levelOf(before) < MAX_LEVEL ? Math.min(MAX_XP - before, boss ? XP_BOSS : XP_WIN) : 0;
+    const gain = fighter && levelOf(before) < MAX_LEVEL ? Math.min(MAX_XP - before, Math.round(battleXp(myLv, foeLv, { boss, won: true }) * cfgPct('clash.xp'))) : 0;
     const lvBefore = levelOf(before);
     const lvAfter = levelOf(before + gain);
-    const prize = b.mode === 'zone' ? BATTLE_WIN : ladder ? (boss ? LADDER_BOSS_WIN : LADDER_WIN) : story ? storyPrice(story.w, isReplay(story.w, c)).win : 0;
+    const prize = b.mode === 'zone' ? BATTLE_WIN : ladder ? (boss ? LADDER_BOSS_WIN : LADDER_WIN) : story ? storyPrice(story.w, replayed).win : 0;
     // a world's boss beaten for the first time opens the next (and the last opens the ladder)
-    const opens = storyBoss && story!.w === c.story.cleared;
+    const opens = advance && storyBoss && story!.w === c.story.cleared;
     const cleared = ladder?.level;
     const runDone = !!ladder && boss;
     const bossId = runDone ? ladder.boss : null;
@@ -355,8 +392,9 @@ export function finishBattle(won: boolean): BattleEnd {
         f.wins += 1;
         f.xp = Math.min(MAX_XP, (f.xp ?? 0) + gain);
       }
-      if (story) {
-        s.story.stage[story.w] = storyBoss ? 0 : story.stage + 1;
+      if (advance && story) {
+        s.story.best[story.w] = Math.min(STAGES + 1, story.stage + 1);
+        s.story.stage[story.w] = Math.min(STAGES, story.stage + 1);
         if (opens) s.story.cleared = Math.min(WORLDS.length, s.story.cleared + 1);
       }
       if (ladder && s.ladder) {
@@ -389,11 +427,11 @@ export function finishBattle(won: boolean): BattleEnd {
     const up = lvAfter > lvBefore ? lvAfter : undefined;
     const head = prize ? `YOU WIN ${prize} TOKENS.` : 'YOU WIN.';
     const opened = opens ? (WORLDS[story!.w + 1] ? ` ${WORLDS[story!.w + 1].name} IS OPEN!` : ' THE STORY IS DONE - THE LADDER IS OPEN!') : '';
-    return { ...ok(`${head}${up ? ` ${name} IS NOW LEVEL ${up}!` : ''}${opened}`), paid: prize, xp: gain, levelUp: up, cleared, runDone, worldOpened: opens };
+    return { ...ok(`${head}${up ? ` ${name} IS NOW LEVEL ${up}!` : ''}${opened}`), paid: prize, xp: gain, levelUp: up, cleared, runDone, worldOpened: opens, xpGap: foeLv - myLv, replay: replayed };
   }
   // A LOSS STILL TEACHES IT SOMETHING: a quarter of a win's experience
   const lostBefore = fighter?.xp ?? 0;
-  const lostGain = fighter && levelOf(lostBefore) < MAX_LEVEL ? Math.min(MAX_XP - lostBefore, XP_LOSS) : 0;
+  const lostGain = fighter && levelOf(lostBefore) < MAX_LEVEL ? Math.min(MAX_XP - lostBefore, Math.max(1, Math.round(battleXp(myLv, foeLv, { boss, won: false }) * cfgPct('clash.xp')))) : 0;
   const lostUp = levelOf(lostBefore + lostGain) > levelOf(lostBefore) ? levelOf(lostBefore + lostGain) : undefined;
   if (lostGain) {
     edit((s) => {
@@ -412,20 +450,18 @@ export function finishBattle(won: boolean): BattleEnd {
       s.ladder = null;
     });
     store.flush();
-    return { ...ok(`DEFEATED. THE LADDER RUN IS OVER. ${name} LIMPS HOME.${lostXp}`), paid: 0, runOver: true, xp: lostGain, levelUp: lostUp };
+    return { ...ok(`DEFEATED. THE LADDER RUN IS OVER. ${name} LIMPS HOME.${lostXp}`), paid: 0, runOver: true, xp: lostGain, levelUp: lostUp, xpGap: foeLv - myLv };
   }
   edit((s) => {
     s.battle = null;
     s.losses += 1;
-    // FAINTED, AND STILL YOURS (log #3): it keeps its slot and rests; the
-    // other one, if it is fit, steps into the ring
+    // IT FAINTED, AND IT IS ALREADY BACK UP (user, 2 Nov): no reviving, it
+    // stays your main creature and can fight again at once
     const f = s.owned.find((o) => o.uid === s.active);
-    if (f) f.faintedAt = Date.now();
-    const fit = s.owned.find((o) => o.uid !== s.active && !restLeft(o));
-    if (fit) s.active = fit.uid;
+    if (f) delete f.faintedAt;
   });
   store.flush();
-  return { ...ok(`${name} FAINTED. REVIVE IT ON THE TEAM SCREEN.${lostXp}`), paid: 0, lost: fighter?.id, xp: lostGain, levelUp: lostUp };
+  return { ...ok(`${name} FAINTED - AND IS BACK ON ITS FEET.${lostXp}`), paid: 0, lost: fighter?.id, xp: lostGain, levelUp: lostUp, xpGap: foeLv - myLv };
 }
 
 /**

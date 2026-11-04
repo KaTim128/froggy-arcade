@@ -81,9 +81,14 @@ export interface WallSpec {
 }
 export const WALL_SPECS: Record<string, WallSpec> = {
   kelp_weave: { shape: 'curve', life: 9, hp: 12 },
+  // (user, 3 Nov: walls creatures put up can be shot down -- all but the ice
+  // slab, which pays for being unbreakable by standing only 4 seconds)
   glacier_slab: { shape: 'long', life: 4, hp: 0 },
+  leaf_wall: { shape: 'line', life: WALL_S, hp: 10 },
+  dam_wall: { shape: 'line', life: WALL_S, hp: 18 },
+  rime_wall: { shape: 'line', life: WALL_S, hp: 14 },
 };
-export const WALL_DEFAULT: WallSpec = { shape: 'line', life: WALL_S, hp: 0 };
+export const WALL_DEFAULT: WallSpec = { shape: 'line', life: WALL_S, hp: 12 };
 /** A laid mine waits this long before it fizzles. */
 export const MINE_S = 8;
 
@@ -182,7 +187,7 @@ function rawInfo(a: Attack, el: Element, scale: number): AttackInfo {
   switch (a.kind) {
     case 'bolt': {
       const r = Math.round(a.reach * SHOT_LIFE);
-      return { ...base, type: 'PROJECTILE', target: 'SINGLE TARGET', range: `LONG RANGE ${r}PX`, reachPx: r, use: 'FAST, CHEAP POKE. AIM AND LEAD THE TARGET.' };
+      return { ...base, type: 'PROJECTILE', target: 'SINGLE TARGET', range: `LONG RANGE ${r}PX`, reachPx: r, use: 'FAST, CHEAP POKE. AIMS ITSELF; DODGE SIDEWAYS SO THEIRS MISS.' };
     }
     case 'spread': {
       const r = Math.round(a.reach * SHOT_LIFE);
@@ -230,14 +235,15 @@ function rawInfo(a: Attack, el: Element, scale: number): AttackInfo {
  */
 export function attackCard(a: Attack, el: Element, scale = 1): string[] {
   const i = attackInfo(a, el, scale);
-  const out = [`TYPE: ${i.type}`, `HITS: ${i.target}`, `RANGE: ${i.range}`];
-  out.push(`DAMAGE: ${a.dmg > 0 ? `${a.dmg}` : 'NONE'} - COOLDOWN: ${a.cd}S`);
+  // (user, 3 Nov: in more detail -- each line one fact, so the card can space them)
+  const out = [`TYPE: ${i.type} - HITS: ${i.target}`, `RANGE: ${i.range}`];
+  const perSec = a.dmg > 0 ? ` (ABOUT ${Math.round((a.dmg / Math.max(0.1, a.cd)) * 10) / 10} A SECOND)` : '';
+  out.push(`DAMAGE: ${a.dmg > 0 ? `${a.dmg}` : 'NONE'}${perSec} - READY AGAIN AFTER ${a.cd}S`);
   const dur = durationOf(a);
-  if (dur) out.push(`DURATION: ${dur}`);
-  out.push(a.sp ? `SPECIAL: ${i.special}` : 'PLAIN ATTACK - NO SPECIAL');
-  if (i.effect) out.push(`ELEMENT: ${i.effect}`);
-  // (a special's line already says what it is for; a plain attack gets the kind's advice)
-  if (!a.sp) out.push(`USE: ${i.use}`);
+  if (dur) out.push(`LASTS: ${dur}`);
+  out.push(a.sp ? `WHAT IT DOES: ${i.special}` : 'A PLAIN ATTACK: NO SPECIAL EFFECT');
+  if (i.effect) out.push(`ELEMENT BONUS: ${i.effect}`);
+  out.push(`HOW TO USE IT: ${i.use}`);
   return out.map(plainWords);
 }
 

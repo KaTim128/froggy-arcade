@@ -4,7 +4,7 @@
  */
 
 /** One TILE, the length players read distances in: about a creature's width (log #60: TILE, not STEP). */
-const TILE_PX = 14;
+export const TILE_PX = 14;
 
 /**
  * PLAIN WORDS.  The numbers underneath are in pixels and seconds, which is

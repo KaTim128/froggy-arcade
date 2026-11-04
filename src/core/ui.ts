@@ -99,10 +99,22 @@ function fitInside(t: Phaser.GameObjects.BitmapText): void {
   let ox = 0;
   let oy = 0;
   let top: Phaser.GameObjects.Components.ScrollFactor = t;
+  // A line in a masked window -- a list that scrolls -- is clipped there on
+  // purpose: one that starts below the window is not "off the picture", and
+  // nudging it up left it out of line with its row once the list scrolled
+  // (the CLAIM labels on the achievements list).
+  let masked = !!t.mask;
   for (let c = t.parentContainer; c; c = c.parentContainer) {
     ox += c.x;
     oy += c.y;
     top = c;
+    if (c.mask) masked = true;
+  }
+  if (masked) {
+    placed.set(t, { ax, ay, x: ax, y: ay });
+    if (t.x !== ax) t.x = ax;
+    if (t.y !== ay) t.y = ay;
+    return;
   }
   // A line out in a room the camera scrolls along is part of the room: it
   // comes into view as you walk to it, and is never slid off where it was

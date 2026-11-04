@@ -257,15 +257,21 @@ export function paintSideAlley(g: Ctx, variant: number, light: AlleyLight): void
 
   // ---- the side walls, in shadow, and the shadow they throw in
   const [lw, rw] = L.sides;
-  for (const [x, w] of [[0, lw], [W - rw, rw]] as const) {
-    rect(x, 0, w, H, c(0x1c1418));
-    for (let y = 0; y < H; y += 6) rect(x + ((y / 6) % 2 ? 2 : 6), y + 1, w - 8, 4, c(0x2a1e22));
-  }
-  const shl = g.createLinearGradient(lw, 0, lw + 18, 0);
-  shl.addColorStop(0, 'rgba(0,0,0,0.45)');
+  // (the right-hand wall: the alley's blind end, in shadow)
+  rect(W - rw, 0, rw, H, c(0x1c1418));
+  for (let y = 0; y < H; y += 6) rect(W - rw + ((y / 6) % 2 ? 2 : 6), y + 1, rw - 8, 4, c(0x2a1e22));
+  // ---- THE MOUTH, on the left (user list: "remove the left wall"): not a
+  // wall but the opening on to the street -- the shopfronts across the road,
+  // the road, the pavement -- in the street's own light, with the end of the
+  // alley's wall standing at its edge.  Officers going by out there walk
+  // across it (game/patrol alleyWatch).
+  paintMouth(g, lw, ground, light, c, rect, variant);
+  const shl = g.createLinearGradient(lw, 0, lw + 22, 0);
+  // the street's light spilling in at the mouth, then the alley's shade
+  shl.addColorStop(0, light === 'night' ? 'rgba(255,214,150,0.10)' : 'rgba(255,250,235,0.16)');
   shl.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = shl;
-  g.fillRect(lw, 0, 18, H);
+  g.fillRect(lw, 0, 22, H);
   const shr = g.createLinearGradient(W - rw, 0, W - rw - 18, 0);
   shr.addColorStop(0, 'rgba(0,0,0,0.45)');
   shr.addColorStop(1, 'rgba(0,0,0,0)');
@@ -304,4 +310,56 @@ export function paintSideAlley(g: Ctx, variant: number, light: AlleyLight): void
   mouth.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = mouth;
   g.fillRect(0, 0, 26, H);
+}
+
+/**
+ * The alley's open end: what is out there, seen through the gap.  The far
+ * side of the street (a shopfront, its window lit after dark), the road,
+ * the pavement at the mouth -- brighter than the alley, the street's light --
+ * and the cut end of the alley wall standing at the edge of it.
+ */
+function paintMouth(
+  g: Ctx,
+  lw: number,
+  ground: number,
+  light: AlleyLight,
+  c: (n: number) => string,
+  rect: (x: number, y: number, w: number, h: number, col: string) => void,
+  variant: number,
+): void {
+  const ow = lw - 4;
+  const night = light === 'night';
+  // the shopfront across the road
+  const fronts = [0x9a8470, 0x7a8a96, 0xa89a7a];
+  rect(0, 8, ow, ground - 30, c(fronts[variant % fronts.length]));
+  for (let y = 12; y < ground - 24; y += 5) rect(0, y, ow, 1, c(0x6a5a4a));
+  // its window, and a strip of its sign
+  rect(3, ground - 54, ow - 8, 3, c(0xc84a3a));
+  rect(4, ground - 48, ow - 10, 22, night ? '#f0c878' : c(0x8ab4c8));
+  rect(4, ground - 48, ow - 10, 1, c(0xdcdcdc));
+  for (let x = 4 + 7; x < ow - 6; x += 8) rect(x, ground - 48, 1, 22, c(0x4a4a50));
+  if (night) {
+    const glow = g.createRadialGradient(ow / 2, ground - 36, 2, ow / 2, ground - 36, 30);
+    glow.addColorStop(0, 'rgba(255,214,140,0.35)');
+    glow.addColorStop(1, 'rgba(255,214,140,0)');
+    g.fillStyle = glow;
+    g.fillRect(0, ground - 70, ow, 60);
+  }
+  // the far pavement and kerb
+  rect(0, ground - 30, ow, 8, c(0xa8a8a8));
+  rect(0, ground - 22, ow, 1, c(0x6a6a6e));
+  // the road
+  rect(0, ground - 21, ow, 17, c(0x3a3a42));
+  for (let x = 2; x < ow; x += 9) rect(x, ground - 13, 5, 1, c(0xd8d0a0));
+  // the near pavement, out to the alley's floor
+  rect(0, ground - 4, ow, 1, c(0x6a6a6e));
+  rect(0, ground - 3, ow, 180 - ground + 3, c(0x9a9aa0));
+  for (let y = ground + 4; y < 180; y += 8) rect(0, y, ow, 1, c(0x84848a));
+  // the street's light: brighter out there than in here
+  g.fillStyle = night ? 'rgba(255,220,160,0.06)' : 'rgba(255,255,240,0.10)';
+  g.fillRect(0, 0, ow, 180);
+  // the cut end of the alley's wall, at the edge of the opening
+  rect(ow, 0, 4, 180, c(0x2a1e22));
+  for (let y = 0; y < 180; y += 6) rect(ow + 1, y + ((y / 6) % 2 ? 1 : 3), 2, 2, c(0x3a2a2e));
+  rect(ow + 3, 0, 1, 180, c(0x120c0e));
 }

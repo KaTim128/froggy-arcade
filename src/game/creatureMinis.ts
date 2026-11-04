@@ -1,0 +1,157 @@
+/**
+ * ---- CREATURE CLASH MINI GAMES (user, 4 Nov).
+ *
+ *   MELEE VS MELEE    pick one of three melee creatures; the other side is a
+ *                     melee creature of about the same strength
+ *   RANGED VS RANGED  the same, for shooters
+ *   3V3 BATTLE        pick three of ten, a mix of roles; the other side gets
+ *                     three of its own in the same roles.  One at a time: when
+ *                     one faints the next comes in, and the survivor keeps the
+ *                     health it had.  Last team standing wins.
+ *
+ * FIVE TOKENS IN, TEN FOR A WIN, NOTHING FOR A LOSS.  The five is taken once,
+ * when the battle is confirmed; the ten is paid once, when the run is won.
+ * Mini games use the creatures here, not your own, and give no XP: Story Mode
+ * and the Ladder are untouched.
+ */
+
+import { ledger } from '../core/ledger';
+import { CREATURES, creatureById, type Creature } from './creatures';
+import { traitsOf } from './creatureTraits';
+
+export type MiniKind = 'melee' | 'ranged' | 'team';
+export const MINI_COST = 5;
+export const MINI_WIN = 10;
+/** Every creature in a mini game fights at this level, so a pick is about the creature. */
+export const MINI_LEVEL = 8;
+
+export const MINI_INFO: Record<MiniKind, { title: string; rules: string[] }> = {
+  melee: { title: 'MELEE VS MELEE', rules: ['PICK 1 OF 3 MELEE FIGHTERS.', 'YOUR FOE IS MELEE TOO.'] },
+  ranged: { title: 'RANGED VS RANGED', rules: ['PICK 1 OF 3 SHOOTERS.', 'YOUR FOE SHOOTS TOO.'] },
+  team: { title: '3V3 BATTLE', rules: ['PICK 3 OF 10. ONE AT A TIME:', 'WHEN ONE FAINTS, THE NEXT GOES IN.'] },
+};
+
+/** A creature's combat role, read off its kit. */
+export type Role = 'melee' | 'ranged' | 'support';
+export function roleOf(c: Creature): Role {
+  const t = traitsOf(c);
+  const support = c.attacks.slice(1).some((a) => a.kind === 'mend' || a.kind === 'shield' || a.kind === 'aura');
+  if (t.style.startsWith('MELEE')) return support && c.hp >= 120 ? 'support' : 'melee';
+  return support ? 'support' : 'ranged';
+}
+const isMelee = (c: Creature): boolean => traitsOf(c).style.startsWith('MELEE');
+
+/** A rough number for how strong a creature is: health times hitting power. */
+export function powerOf(c: Creature): number {
+  const n = c.attacks[0];
+  const dps = n.dmg / Math.max(0.2, n.cd);
+  const sp = c.attacks.slice(1).reduce((a, x) => a + x.dmg / Math.max(1, x.cd), 0);
+  return c.hp * (dps + sp * 0.6) * (0.8 + c.speed / 400);
+}
+
+const shuffle = <T>(a: T[], rng: () => number): T[] => {
+  const out = a.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+};
+
+/** The creatures a mode draws from. */
+function eligible(kind: MiniKind): Creature[] {
+  if (kind === 'melee') return CREATURES.filter(isMelee);
+  if (kind === 'ranged') return CREATURES.filter((c) => !isMelee(c));
+  return CREATURES.slice();
+}
+
+/**
+ * The choice on offer: three for a duel, ten for 3v3 -- and for 3v3 at least
+ * three of each role, so a team can be built rather than taken.
+ */
+export function drawPool(kind: MiniKind, rng: () => number = Math.random): string[] {
+  const pool = shuffle(eligible(kind), rng);
+  if (kind !== 'team') return pool.slice(0, 3).map((c) => c.id);
+  const by: Record<Role, Creature[]> = { melee: [], ranged: [], support: [] };
+  for (const c of pool) by[roleOf(c)].push(c);
+  const out = [...by.melee.slice(0, 4), ...by.ranged.slice(0, 4), ...by.support.slice(0, 2)];
+  for (const c of pool) if (out.length < 10 && !out.includes(c)) out.push(c);
+  return out.slice(0, 10).map((c) => c.id);
+}
+
+/**
+ * THE OTHER SIDE, MATCHED.  For each of yours: one of the same role (melee for
+ * melee, shooter for shooter), not one of yours, and the nearest in strength
+ * among a few drawn at random -- so it is a fair fight and not always the
+ * same one.
+ */
+export function drawFoes(kind: MiniKind, mine: string[], rng: () => number = Math.random): string[] {
+  const out: string[] = [];
+  for (const id of mine) {
+    const me = creatureById(id);
+    if (!me) continue;
+    const role = roleOf(me);
+    const same = eligible(kind).filter((c) => !mine.includes(c.id) && !out.includes(c.id) && (kind !== 'team' || roleOf(c) === role));
+    const field = same.length ? same : eligible(kind).filter((c) => !mine.includes(c.id) && !out.includes(c.id));
+    const few = shuffle(field, rng).slice(0, 6);
+    const p = powerOf(me);
+    few.sort((a, b) => Math.abs(powerOf(a) - p) - Math.abs(powerOf(b) - p));
+    if (few[0]) out.push(few[0].id);
+  }
+  return out;
+}
+
+/** The run in progress: paid once at the start, paid out once at the end. */
+export interface MiniRun {
+  kind: MiniKind;
+  /** Still to fight, in order: the front of each list is in the arena. */
+  me: string[];
+  foe: string[];
+  /** The health the one still standing walks into the next bout with. */
+  myHp?: number;
+  foeHp?: number;
+  /** Bouts fought so far. */
+  bout: number;
+  done: boolean;
+}
+
+let run: MiniRun | null = null;
+export const currentMini = (): MiniRun | null => run;
+
+/** Confirm a pick: five tokens, and the run is on. */
+export function startMini(kind: MiniKind, picks: string[]): { ok: boolean; msg: string; run?: MiniRun } {
+  const want = kind === 'team' ? 3 : 1;
+  if (picks.length !== want || picks.some((p) => !creatureById(p))) return { ok: false, msg: kind === 'team' ? 'PICK THREE.' : 'PICK ONE.' };
+  if (!ledger.debit(MINI_COST, 'creature')) return { ok: false, msg: `A MINI GAME COSTS ${MINI_COST} TOKENS.` };
+  run = { kind, me: picks.slice(), foe: drawFoes(kind, picks), bout: 0, done: false };
+  return { ok: true, msg: 'FIGHT!', run };
+}
+
+/**
+ * A bout is over.  The loser's creature leaves; the winner keeps its health.
+ * The run ends when one side has nobody left, and the ten is paid then, once.
+ */
+export function boutOver(won: boolean, survivorHp: number): { over: boolean; won: boolean; paid: number } {
+  if (!run || run.done) return { over: true, won: false, paid: 0 };
+  run.bout++;
+  if (won) {
+    run.foe.shift();
+    run.myHp = survivorHp;
+    run.foeHp = undefined;
+  } else {
+    run.me.shift();
+    run.foeHp = survivorHp;
+    run.myHp = undefined;
+  }
+  if (run.me.length && run.foe.length) return { over: false, won, paid: 0 };
+  run.done = true;
+  const victory = run.foe.length === 0;
+  if (victory) ledger.credit(MINI_WIN, 'game.reward');
+  return { over: true, won: victory, paid: victory ? MINI_WIN : 0 };
+}
+
+/** Walk away: the five is gone, nothing is paid. */
+export function abandonMini(): void {
+  if (run) run.done = true;
+  run = null;
+}

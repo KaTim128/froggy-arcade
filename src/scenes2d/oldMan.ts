@@ -18,6 +18,7 @@ import { Player } from '../art/player';
 import { HOMELESS_LOOK } from '../art/staffLooks';
 import { earnBadge } from '../game/badges';
 import { donate, HOMELESS_GOAL } from '../game/life';
+import { nightify } from '../render/palette';
 import { openTalkPanel, speak } from '../ui/talkPanel';
 
 export const OLD_SPEAKER = { name: 'OLD MAN', color: 0xe8a050, well: 0x2a1a10, look: HOMELESS_LOOK };
@@ -72,16 +73,20 @@ export class OldMan {
     // everything of his sits on the wall line, BEHIND the pavement: the
     // player and people walking past (depthFor ~50.1) go in front of him,
     // his bench and his sign, never under them
+    // (after dark, his things go into the street's night colours like
+    // everything else on it: the bench, and the sign -- which stayed bright
+    // tan at night, lit by nothing)
+    const n = (c: number): number => (dark ? nightify(c, 0.55) : c);
     const g = s.add.graphics().setDepth(49.5);
     g.fillStyle(0x14100c, 1).fillRect(x - 16, y - 2, 24, 5);
-    g.fillStyle(0x5a5a66, 1).fillRect(x - 15, y - 1, 22, 3);
-    g.fillStyle(0x7a7a86, 1).fillRect(x - 15, y - 1, 22, 1);
-    for (let k = x - 13; k < x + 6; k += 5) g.fillStyle(0x3a3a46, 1).fillRect(k, y, 1, 2);
+    g.fillStyle(n(0x5a5a66), 1).fillRect(x - 15, y - 1, 22, 3);
+    g.fillStyle(n(0x7a7a86), 1).fillRect(x - 15, y - 1, 22, 1);
+    for (let k = x - 13; k < x + 6; k += 5) g.fillStyle(n(0x3a3a46), 1).fillRect(k, y, 1, 2);
     // his sign, propped against the wall behind him
     const sg = s.add.graphics().setDepth(49.4);
-    sg.fillStyle(0x14100c, 1).fillRect(x + 1, y - 24, 12, 11);
-    sg.fillStyle(0xb08a58, 1).fillRect(x + 2, y - 23, 10, 9);
-    sg.fillStyle(0x3a2a18, 1).fillRect(x + 4, y - 21, 6, 1).fillRect(x + 3, y - 19, 8, 1).fillRect(x + 4, y - 17, 5, 1);
+    sg.fillStyle(n(0x14100c), 1).fillRect(x + 1, y - 24, 12, 11);
+    sg.fillStyle(n(0xb08a58), 1).fillRect(x + 2, y - 23, 10, 9);
+    sg.fillStyle(n(0x3a2a18), 1).fillRect(x + 4, y - 21, 6, 1).fillRect(x + 3, y - 19, 8, 1).fillRect(x + 4, y - 17, 5, 1);
     this.fig = new Player(s, x, y, dark, HOMELESS_LOOK);
     this.fig.sit('floor', { facing: -1 });
     this.fig.sprite.setDepth(49.6);
@@ -136,6 +141,7 @@ export class OldMan {
         speaker: OLD_SPEAKER,
         line,
         depth: 950,
+        grid: true,
         options: [
           { label: `GIVE $${step(5)}`, fn: give(5) },
           { label: `GIVE $${step(20)}`, fn: give(20) },

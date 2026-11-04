@@ -380,7 +380,7 @@ export class Player {
   private dir = 1;
   private blinkT = 2.5;
   /** Sitting: how, and the folded legs (and the can) drawn for it. */
-  private seat: { kind: SeatKind; can: boolean } | null = null;
+  private seat: { kind: SeatKind; can: boolean; lift: number } | null = null;
   private lap: Phaser.GameObjects.Container | null = null;
   /** What the lap holds out in front of the body (the can). */
   private lapFront: Phaser.GameObjects.Container | null = null;
@@ -482,7 +482,8 @@ export class Player {
     // seated: the body comes down onto the seat, the legs are folded
     // forward and drawn separately (see `sit`)
     // (facing out of a chair you sit taller: the thighs come towards you, not down)
-    const drop = this.seat ? (this.seat.kind === 'floor' ? 8 : this.seat.kind === 'front' ? 2 : 5) : 0;
+    // (`lift`: a seat higher than a chair's -- a sofa's deep cushion -- sits the body up on it)
+    const drop = this.seat ? (this.seat.kind === 'floor' ? 8 : this.seat.kind === 'front' ? 2 : 5) - this.seat.lift : 0;
     for (const [name, p] of this.parts) {
       const [ox, oy] = off[name];
       const leg = name === 'backLeg' || name === 'frontLeg';
@@ -502,9 +503,9 @@ export class Player {
    * With `can`, a tin held out in the front hand.  Any walk or `stand` gets
    * back up.
    */
-  sit(kind: SeatKind, opts: { can?: boolean; facing?: number } = {}): void {
+  sit(kind: SeatKind, opts: { can?: boolean; facing?: number; lift?: number } = {}): void {
     if (opts.facing) this.dir = opts.facing > 0 ? 1 : -1;
-    this.seat = { kind, can: !!opts.can };
+    this.seat = { kind, can: !!opts.can, lift: Math.max(0, Math.round(opts.lift ?? 0)) };
     this.bobT = 0;
     this.pose(0, 0);
   }
@@ -518,10 +519,15 @@ export class Player {
     return this.seat?.kind ?? null;
   }
 
+  /** How far up a high seat sits them (see `sit`). */
+  get seatRaise(): number {
+    return this.seat?.lift ?? 0;
+  }
+
   private drawLap(): void {
     const s = this.seat;
     if (!s) return;
-    const key = `${s.kind}${s.can}${this.dir}`;
+    const key = `${s.kind}${s.can}${this.dir}${s.lift}`;
     if (this.lap && this.lapKey === key) return;
     this.lapKey = key;
     const scene = this.sprite.scene;
@@ -551,21 +557,34 @@ export class Player {
       // facing you: the thighs foreshortened to a short block across the lap,
       // lit along its top, a shadow between the knees; then both shins
       // straight down from the edge of the seat, and the boots on the floor
-      block(-4, -6, 8, 2, this.colOf('J'));
-      lap.add(scene.add.rectangle(-4, -6, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
-      lap.add(scene.add.rectangle(0, -5, 1, 1, c(this.colOf('j'))).setOrigin(0, 0));
-      block(-3, -4, 2, 3, this.colOf('j'));
-      block(1, -4, 2, 3, this.colOf('J'));
+      // (up on a high seat -- a sofa's cushion -- the lap goes up with the
+      // body and the shins are longer, down to the floor)
+      const up = s.lift;
+      block(-4, -6 - up, 8, up > 0 ? 3 : 2, this.colOf('J'));
+      lap.add(scene.add.rectangle(-4, -6 - up, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
+      lap.add(scene.add.rectangle(0, -5 - up, 1, 1, c(this.colOf('j'))).setOrigin(0, 0));
+      block(-3, -4 - up, 2, 3 + up, this.colOf('j'));
+      block(1, -4 - up, 2, 3 + up, this.colOf('J'));
       block(-4, -1, 3, 1, this.colOf('K'));
       block(1, -1, 3, 1, this.colOf('K'));
       lap.add(scene.add.rectangle(d > 0 ? -4 : -1, -1, 1, 1, c(this.colOf('k'))).setOrigin(0, 0));
       lap.add(scene.add.rectangle(d > 0 ? 1 : 3, -1, 1, 1, c(this.colOf('k'))).setOrigin(0, 0));
     } else {
-      // knees forward at seat height, shins straight down
-      block(-1, -9, 8, 3, this.colOf('J'));
-      lap.add(scene.add.rectangle(d > 0 ? -1 : -7, -9, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
-      block(5, -6, 3, 5, this.colOf('j'));
-      block(5, -1, 4, 1, this.colOf('K'));
+      // knees forward at seat height, shins straight down (to the floor,
+      // however high the seat)
+      // Up on a sofa's cushion (`lift`) the thigh runs further forward out
+      // from under the jacket, so a clear length of it shows to the knee and
+      // the shin hangs from that knee -- not from nowhere off the seat
+      // (user, 4 Nov).  Drawn behind the body, as a chair's is: in front of
+      // it the thigh came out of the chest.
+      const up = s.lift;
+      const reach = up > 0 ? 4 : 0;
+      // (and the thigh at the jacket's hem, where the lap is, not up at the waist)
+      const ty = -9 - up + (up > 0 ? 5 : 0);
+      block(-1, ty, 8 + reach, 3, this.colOf('J'));
+      lap.add(scene.add.rectangle(d > 0 ? -1 : -7 - reach, ty, 8 + reach, 1, c(this.colOf('H'))).setOrigin(0, 0));
+      block(5 + reach, ty + 3, 3, -1 - (ty + 3), this.colOf('j'));
+      block(5 + reach, -1, 4, 1, this.colOf('K'));
     }
     // (the legs go behind the body, as the old man's do -- the can alone in front of it)
     this.sprite.addAt(lap, 0);

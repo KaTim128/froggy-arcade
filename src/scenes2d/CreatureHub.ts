@@ -16,6 +16,7 @@
  * what is true.
  */
 
+import { ultimateOf } from '../game/ultimates';
 import { STAGES, WORLDS, lineupFoe, stageLevel, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import { isTouch } from '../core/device';
@@ -33,15 +34,18 @@ import { drawAbilityIcon } from '../art/abilityIcons';
 import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
 import { drawFrogToken, floatDeduct } from '../ui/hud';
-import { levelOf, xpProgress } from '../game/creatureLevel';
+import { battleXp, levelOf, xpProgress } from '../game/creatureLevel';
+import { traitsOf } from '../game/creatureTraits';
+import { MINI_COST, MINI_INFO, MINI_WIN, drawPool, roleOf, startMini, type MiniKind } from '../game/creatureMinis';
+import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, BOSSES, bossById, creatureById, type Attack, type Creature,
+  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { REVIVE_COST, abandonLadder, activeCreature, activeOwned, isReplay, worldOpen, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
+import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, retreat, setActive, startLadder } from '../game/creatureClash';
 
-type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'ladder' | 'controls';
-const SCREENS: Screen[] = ['home', 'story', 'ladder', 'recruit', 'controls'];
+type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick';
+const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls', 'minis'];
 
 interface Shown {
   c: { element: Creature['element']; body: Creature['body'] };
@@ -62,6 +66,25 @@ const WORLD_AT: Array<[number, number]> = [
   [176, 124],
 ];
 
+/**
+ * ---- EACH WORLD'S OWN TRAIL (user, 2 Nov): its five fights as stops along
+ * a path of its own shape across its own ground -- Mosswood's winds up
+ * through the trees, the Sunken Ruins' sinks down into the deep, Emberfall's
+ * circles the crater's rim, the Crystal Depths' zigzags between the shards,
+ * and the Void Citadel's is a straight stair up to its throne.  Node 4 is
+ * the boss.  (In the left 198 pixels, under the header; the panel is on the right.)
+ */
+const TRAIL_AT: Array<Array<[number, number]>> = [
+  [[26, 150], [76, 132], [44, 96], [104, 74], [160, 46]],
+  [[24, 44], [76, 72], [140, 52], [158, 112], [86, 148]],
+  [[34, 156], [150, 150], [168, 92], [60, 96], [104, 50]],
+  [[100, 158], [36, 122], [164, 112], [50, 64], [156, 44]],
+  [[22, 160], [62, 132], [102, 104], [142, 76], [176, 44]],
+];
+
+/** Where your creature stands at stop `k` of world `w`'s trail: beside it, on its left (the marker is drawn 20 above this). */
+const trailMark = (w: number, k: number): [number, number] => [TRAIL_AT[w][k][0] - (k === STAGES ? 19 : 16), TRAIL_AT[w][k][1] + 22];
+
 /** `s` broken into lines of at most `n` characters, at the spaces. */
 function wrapWords(s: string, n: number): string[] {
   const out: string[] = [];
@@ -76,6 +99,9 @@ function wrapWords(s: string, n: number): string[] {
   return out;
 }
 
+/** Team tiles on a page: two across, four down (the page arrows go under them). */
+const TEAM_PAGE = 8;
+
 export class CreatureHub extends Phaser.Scene {
   private screen: Screen = 'home';
   /** A move's card, when one is open: over the screen and its creatures. */
@@ -89,6 +115,10 @@ export class CreatureHub extends Phaser.Scene {
   /** The story map: the world picked, and where the marker is now. */
   private storyW = 0;
   private mark = { x: WORLD_AT[0][0], y: WORLD_AT[0][1] - 20 };
+  /** Where the marker is headed: a world on the map, or a stop on a world's trail. */
+  private markTo: [number, number] = WORLD_AT[0];
+  /** The stop picked on the world's trail. */
+  private trailSel = 0;
   private msg = '';
   private from = 'ArcadeLounge';
   private biome = BIOMES[0].id;
@@ -108,7 +138,11 @@ export class CreatureHub extends Phaser.Scene {
     // (back from a story fight: on the world it was in)
     if (typeof data.world === 'number' && WORLD_AT[data.world]) {
       this.storyW = data.world;
-      this.mark = { x: WORLD_AT[data.world][0], y: WORLD_AT[data.world][1] - 20 };
+      // (back from a fight: on that world's trail, at its next stop)
+      this.trailSel = trailNode(data.world);
+      const at = data.screen === 'trail' ? trailMark(data.world, this.trailSel) : WORLD_AT[data.world];
+      this.markTo = at;
+      this.mark = { x: at[0], y: at[1] - 20 };
     }
     this.msg = data.msg ?? '';
     this.want = SCREENS.includes(data.screen as Screen) ? (data.screen as Screen) : null;
@@ -117,6 +151,8 @@ export class CreatureHub extends Phaser.Scene {
   }
 
   create(): void {
+    // its own music (user, 1 Nov: every arcade game has its own)
+    audio.setScene({ music: 'game_clash_hub', ambience: ['cabinet_bleeps'] });
     // a page that went away mid-fight comes back as a retreat
     if (store.get().creatures.battle) {
       const r = retreat();
@@ -130,10 +166,9 @@ export class CreatureHub extends Phaser.Scene {
     const c = store.get().creatures;
     // (no starter, log #3: an empty team goes straight to recruiting its first)
     this.screen = c.pending ? 'pack' : needsRecovery() ? 'recruit' : this.want ?? 'home';
-    // a resting creature's clock, kept current on the team screen
-    this.time.addEvent({ delay: 1000, loop: true, callback: () => {
-      if (this.screen === 'home' && !this.dialog && store.get().creatures.owned.some((o) => restLeft(o) > 0)) this.draw();
-    } });
+    // (no clock to keep current: a fainted creature waits for REVIVE, it
+    // does not rest.  The once-a-second redraw that ran while one was down
+    // shut a STATS or move card a moment after it opened.)
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x10142a).setOrigin(0, 0);
     // a starfield of tiny element sparks behind everything
     const bg = this.add.graphics();
@@ -145,7 +180,15 @@ export class CreatureHub extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.dialog) return;
       // (on the top screens Esc is the pause menu's, where LEAVE is)
-      if (this.screen !== 'home' && this.screen !== 'recruit') this.go(store.get().creatures.owned.length ? 'home' : 'recruit');
+      if (this.screen !== 'home' && this.screen !== 'recruit') this.back();
+    });
+    // the trail by keyboard: LEFT / RIGHT between its stops, ENTER to fight
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
+      if (this.dialog || this.modal || this.screen !== 'trail') return;
+      const best = trailNode(this.storyW);
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowDown') this.pickStop(Math.max(0, this.trailSel - 1));
+      else if (e.code === 'ArrowRight' || e.code === 'ArrowUp') this.pickStop(Math.min(best, this.trailSel + 1));
+      else if (e.code === 'Enter' || e.code === 'Space') this.trailFight();
     });
     this.cameras.main.fadeIn(250, 0, 0, 0);
     this.draw();
@@ -157,7 +200,7 @@ export class CreatureHub extends Phaser.Scene {
     for (const s of this.shown) {
       if (s.hop) {
         // the marker: glides along to the world picked, hopping as it goes
-        const [tx, ty] = WORLD_AT[this.storyW];
+        const [tx, ty] = this.markTo;
         const k = Math.min(1, (delta / 1000) * 5);
         this.mark.x += (tx - this.mark.x) * k;
         this.mark.y += (ty - 20 - this.mark.y) * k;
@@ -179,6 +222,21 @@ export class CreatureHub extends Phaser.Scene {
 
   private leave(): void {
     fadeToScene(this, this.from, { fromClash: true });
+  }
+
+  /** BACK: a world's trail goes back to the map of worlds; everything else to the team. */
+  private back(): void {
+    if (this.screen === 'minipick') {
+      this.go('minis');
+      return;
+    }
+    if (this.screen === 'trail') {
+      this.markTo = WORLD_AT[this.storyW];
+      this.mark = { x: WORLD_AT[this.storyW][0], y: WORLD_AT[this.storyW][1] - 20 };
+      this.go('story');
+      return;
+    }
+    this.go(store.get().creatures.owned.length ? 'home' : 'recruit');
   }
 
   private go(s: Screen): void {
@@ -217,21 +275,20 @@ export class CreatureHub extends Phaser.Scene {
     const top = this.screen === 'home' || (this.screen === 'recruit' && needsRecovery());
     if (top) {
       // (LEAVE is in the pause menu: Esc on a keyboard, the gear on a phone)
-    } else if (!(this.screen === 'pack' && this.picked)) L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.go(store.get().creatures.owned.length ? 'home' : 'recruit'), { width: 44, height: 11 }));
-    ({ home: () => this.home(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), story: () => this.story(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
+    } else if (!(this.screen === 'pack' && this.picked)) L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.back(), { width: 44, height: 11 }));
+    ({ home: () => this.home(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), story: () => this.story(), trail: () => this.trail(), ladder: () => this.ladder(), controls: () => this.controls(), minis: () => this.minis(), minipick: () => this.miniPick() })[this.screen]();
     // (on the pack screen the line keeps to the right-hand column, clear of
     // the cards; once one is picked its own panel says who joined)
     const packMsg = this.screen === 'pack';
     // (on the story map the line keeps under the map, clear of the panel)
-    const storyMsg = this.screen === 'story';
+    const storyMsg = this.screen === 'story' || this.screen === 'trail';
     if (this.msg && !(packMsg && this.picked)) {
       const m = centerText(this, packMsg ? 239 : storyMsg ? 98 : GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
       if (storyMsg) m.setMaxWidth(186);
       L.add(m);
       backPlate(this, m, PALETTE.gold);
     } else if (this.screen === 'home') {
-      const tired = store.get().creatures.owned.some((o) => restLeft(o) > 0);
-      L.add(text(this, 8, GAME_H - 10, tired ? 'FAINTED: PRESS REVIVE TO GET IT BACK UP' : 'TAP A MOVE (?) TO READ WHAT IT DOES', tired ? PALETTE.ash : 0x8a90b0));
+      L.add(text(this, 8, GAME_H - 10, 'TAP A MOVE (?) TO READ WHAT IT DOES', 0x8a90b0));
     }
   }
 
@@ -251,8 +308,10 @@ export class CreatureHub extends Phaser.Scene {
     g.fillStyle(0x0a0d1e, 1).fillRect(7, (h - 18) / 2, 18, 18);
     g.lineStyle(1, well, 0.7).strokeRect(7.5, (h - 18) / 2 + 0.5, 17, 17);
     icon(g, 16, h / 2, disabled ? PALETTE.ash : col);
-    const t1 = text(this, 30, h / 2 - 9, label, disabled ? PALETTE.ash : PALETTE.cream);
-    const t2 = text(this, 30, h / 2 + 2, sub, disabled ? 0x4a4e68 : PALETTE.fog);
+    // (a short tile has room for one line of the big type and one of the small)
+    const short = h < 24;
+    const t1 = text(this, 30, short ? h / 2 - 8 : h / 2 - 9, label, disabled ? PALETTE.ash : PALETTE.cream);
+    const t2 = short ? smallText(this, 30, h / 2 + 3, sub, disabled ? 0x4a4e68 : PALETTE.fog) : text(this, 30, h / 2 + 2, sub, disabled ? 0x4a4e68 : PALETTE.fog);
     c.add([bg, edge, shine, g, t1, t2]);
     L.add(c);
     if (disabled) return;
@@ -294,7 +353,7 @@ export class CreatureHub extends Phaser.Scene {
    * Its level is in a chip on the picture; with `xp` (one you own), the
    * experience towards the next level as a bar, or MAX at the top level.
    */
-  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number): void {
+  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number, tall = false): void {
     const L = this.layer;
     const el = ELEMENTS[c.element];
     const artH = big ? 36 : 26;
@@ -370,19 +429,23 @@ export class CreatureHub extends Phaser.Scene {
       // (laid out so the longest name there is -- eleven letters, 66px, see
       // creatures MOVE_NAME_MAX -- sits clear of the icon and the "?")
       // (taller rows now the stat bars are off the card: easier to hit)
-      const chip = this.add.rectangle(x + 2, ty - 2, w - 4, 12, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
+      // (user, 2 Nov: on the team screen the rows are taller -- there was
+      // room under the card -- so each is an easier target)
+      const ch = tall ? 17 : 12;
+      const mid = Math.floor((ch - 12) / 2);
+      const chip = this.add.rectangle(x + 2, ty - 2, w - 4, ch, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
       L.addAt(chip, L.getIndex(g));
       // (an icon is 11px wide, centred: x+3..x+13; the name starts after it)
-      drawAbilityIcon(g, a, x + 8, ty + 4, el.light);
-      const name = text(this, x + 15, ty + 1, a.name, PALETTE.cream);
+      drawAbilityIcon(g, a, x + 8, ty + 4 + mid, el.light);
+      const name = text(this, x + 15, ty + 1 + mid, a.name, PALETTE.cream);
       L.add(name);
       // the "?" that says there is more to read
       const qx = x + w - 9;
-      L.add(this.add.rectangle(qx - 1, ty - 1, 7, 10, 0x3a4470).setOrigin(0, 0));
-      L.add(text(this, qx, ty + 1, '?', PALETTE.gold));
+      L.add(this.add.rectangle(qx - 1, ty - 1 + mid, 7, 10, 0x3a4470).setOrigin(0, 0));
+      L.add(text(this, qx, ty + 1 + mid, '?', PALETTE.gold));
       // the damage, left of the "?" -- where the name leaves room for it
       if (a.dmg) {
-        const d = text(this, qx - 4, ty + 1, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
+        const d = text(this, qx - 4, ty + 1 + mid, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
         if (name.x + name.width + 2 <= d.x - d.width) L.add(d);
         else d.destroy();
       }
@@ -390,7 +453,7 @@ export class CreatureHub extends Phaser.Scene {
       chip.on('pointerover', () => (chip.setFillStyle(0x34407a).setStrokeStyle(1, PALETTE.gold), name.setTint(PALETTE.gold), audio.sfx('ui_hover')));
       chip.on('pointerout', () => (chip.setFillStyle(0x232a4a).setStrokeStyle(1, 0x3a4470), name.setTint(PALETTE.cream)));
       chip.on('pointerdown', () => (audio.sfx('ui_blip'), this.showMove(c, a)));
-      ty += 13;
+      ty += ch + 1;
     }
   }
 
@@ -409,7 +472,7 @@ export class CreatureHub extends Phaser.Scene {
     const lines = attackCard(a, c.element);
     // (user, 28 Oct: the move only -- the creature's strengths are on its
     // STATS page -- in the bigger house font, wrapped inside the box)
-    const w = 280;
+    const w = 300;
     const close = (): void => this.draw();
     const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
@@ -418,13 +481,16 @@ export class CreatureHub extends Phaser.Scene {
     // element and a long weakness ran the card off the bottom of the screen
     // and took the CLOSE button with it; in the 3x5 face, wrapped, every
     // move fits with room to spare.
+    // (user, 3 Nov: more detail, the small face, a clear gap between facts)
     const rows: Array<{ s: string; col: number; gap: boolean }> = [];
-    const per = Math.floor((w - 16) / 6);
+    const per = Math.floor((w - 20) / 4);
     const lineOf = (ln: string, col: number): void => {
       wrapWords(ln, per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
     };
-    lines.forEach((ln, i) => lineOf(ln, i === 0 ? PALETTE.cream : ln.startsWith('SPECIAL') ? PALETTE.gold : PALETTE.fog));
-    const LH = 9;
+    lines.forEach((ln) =>
+      lineOf(ln, ln.startsWith('WHAT IT DOES') ? PALETTE.gold : ln.startsWith('ELEMENT') ? el.light : ln.startsWith('HOW TO USE') ? 0x9ad0ff : ln.startsWith('DAMAGE') ? 0xffb08a : PALETTE.fog),
+    );
+    const LH = 7;
     const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
     // (and never taller than the screen: the button always shows)
     const h = Math.min(GAME_H - 4, 27 + textH + 22);
@@ -439,9 +505,9 @@ export class CreatureHub extends Phaser.Scene {
     M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
     let ly = y + 28;
     for (const r of rows) {
-      if (r.gap) ly += 2;
-      if (ly + 8 > y + h - 20) break;
-      M.add(text(this, x + 8, ly, r.s, r.col));
+      if (r.gap) ly += 3;
+      if (ly + 6 > y + h - 20) break;
+      M.add(smallText(this, x + 8, ly, r.s, r.col));
       ly += LH;
     }
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
@@ -467,54 +533,70 @@ export class CreatureHub extends Phaser.Scene {
     const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
     M.add(veil);
-    const w = 284;
-    const h = 146;
+    // (user, 3 Nov: more detail, clearly spaced -- nearly the whole screen,
+    // the points in the small face as bullets in two columns)
+    const w = 312;
+    const h = 172;
     const x = (GAME_W - w) / 2;
     const y = (GAME_H - h) / 2;
     M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
     // the creature, big, on its element's ground
-    M.add(this.add.rectangle(x + 4, y + 4, 70, 56, el.dark, 0.6).setOrigin(0, 0));
+    M.add(this.add.rectangle(x + 4, y + 4, 66, 50, el.dark, 0.6).setOrigin(0, 0));
     const pic = this.add.graphics();
     M.add(pic);
-    drawCreature(pic, c, x + 39, y + 34, 2, 1, 0);
+    drawCreature(pic, c, x + 37, y + 30, 1.9, 1, 0);
     const lvl = xp !== undefined ? `LV ${levelOf(xp)}` : 'LV 1';
-    M.add(text(this, x + 80, y + 6, c.name.toUpperCase(), PALETTE.gold));
-    M.add(text(this, x + w - 6, y + 6, lvl, PALETTE.cream).setOrigin(1, 0));
-    M.add(text(this, x + 80, y + 16, `${c.role} - ${el.name}`, el.light));
+    M.add(text(this, x + 76, y + 5, c.name.toUpperCase(), PALETTE.gold));
+    M.add(text(this, x + w - 6, y + 5, lvl, PALETTE.cream).setOrigin(1, 0));
+    M.add(smallText(this, x + 76, y + 15, `${c.role} - ${el.name} - ${c.moves}`.slice(0, 58), el.light));
     // ---- the four stats
     const n = c.attacks[0];
     const atk = Math.round(n.dmg / Math.max(0.1, n.cd));
     const guards = c.attacks.some((a) => a.kind === 'shield' || ['guard', 'reflect', 'thorns'].includes(a.mod));
     const heals = c.attacks.some((a) => a.kind === 'mend' || ['regen', 'drain'].includes(a.mod));
     const def = Phaser.Math.Clamp(Math.round(c.hp / 17) + (guards ? 1 : 0) + (heals ? 1 : 0) + (c.element === 'stone' ? 1 : 0), 1, 10);
-    const melee = (n.kind === 'beam' && n.reach < 50) || n.kind === 'dash';
-    let sy = y + 28;
+    let sy = y + 24;
     const stat = (label: string, value: string, frac: number, col: number): void => {
-      M.add(text(this, x + 80, sy, label, PALETTE.ash));
-      const v = text(this, x + w - 6, sy, value, PALETTE.cream).setOrigin(1, 0);
+      M.add(smallText(this, x + 76, sy, label, PALETTE.ash));
+      const v = smallText(this, x + w - 6, sy, value, PALETTE.cream).setOrigin(1, 0);
       M.add(v);
-      const bx = x + 80 + 8 * 6;
+      const bx = x + 76 + 8 * 4;
       const bw = x + w - 6 - Math.ceil(v.width) - 4 - bx;
-      M.add(this.add.rectangle(bx, sy + 2, bw, 4, 0x0a0d1e).setOrigin(0, 0));
-      M.add(this.add.rectangle(bx, sy + 2, Math.max(1, bw * Phaser.Math.Clamp(frac, 0, 1)), 4, col).setOrigin(0, 0));
-      sy += 9;
+      M.add(this.add.rectangle(bx, sy + 1, bw, 4, 0x0a0d1e).setOrigin(0, 0));
+      M.add(this.add.rectangle(bx, sy + 1, Math.max(1, bw * Phaser.Math.Clamp(frac, 0, 1)), 4, col).setOrigin(0, 0));
+      sy += 8;
     };
     stat('ATTACK', `${atk}/SEC`, atk / 24, 0xff8a6a);
     stat('DEFENCE', `${def}/10`, def / 10, 0xc8b890);
     stat('SPEED', String(c.speed), c.speed / 90, 0x6ac8e8);
     stat('HP', String(c.hp), c.hp / 160, 0x6ad86a);
-    let ly = y + 66;
-    const line = (s: string, col: number): void => {
-      for (const ln of wrapWords(s, Math.floor((w - 16) / 6))) {
-        M.add(text(this, x + 8, ly, ln, col));
-        ly += 9;
+    // ---- how it fights, and its element
+    const t = traitsOf(c);
+    M.add(smallText(this, x + 6, y + 58, t.style, 0x9ad0ff));
+    M.add(smallText(this, x + 6, y + 66, t.element.slice(0, 76), el.light));
+    // ---- its ULTIMATE (game/ultimates): up 30s into a fight, then every 30s
+    const ult = ultimateOf(c.id);
+    const ulines = ult ? wrapWords(`ULTIMATE - ${ult.name}: ${ult.desc}`.toUpperCase(), 75).slice(0, 3) : [];
+    ulines.forEach((ln, i) => M.add(smallText(this, x + 6, y + 74 + i * 7, ln, i ? 0xf0d890 : 0xffd45e)));
+    const top = y + 74 + ulines.length * 7 + 1;
+    M.add(this.add.rectangle(x + 4, top, w - 8, 1, 0x2a3050).setOrigin(0, 0));
+    // ---- strengths | weaknesses, side by side, a bullet each
+    const colW = (w - 18) / 2;
+    const per = Math.floor((colW - 8) / 4);
+    const column = (cx: number, title: string, col: number, items: string[]): void => {
+      M.add(text(this, cx, top + 3, title, col));
+      let ly = top + 14;
+      for (const item of items) {
+        const lines = wrapWords(item.toUpperCase(), per);
+        if (ly + lines.length * 7 > y + h - 18) break;
+        M.add(this.add.rectangle(cx + 1, ly + 2, 2, 2, col).setOrigin(0, 0));
+        lines.forEach((ln, i) => M.add(smallText(this, cx + 6, ly + i * 7, ln, PALETTE.cream)));
+        ly += lines.length * 7 + 3;
       }
     };
-    line(melee ? 'FIGHTS UP CLOSE: A MELEE FIGHTER' : `FIGHTS FROM RANGE: SHOTS UP TO ${Math.max(1, Math.round(n.reach / 16))} TILES`, melee ? 0xffb08a : 0x9ad0ff);
-    line(`${el.name}: ${el.effect}`, el.light);
-    ly += 2;
-    line(`GOOD AT: ${c.strong}`, PALETTE.mossLight);
-    line(`WEAK: ${c.weak}`, 0xff9a9a);
+    column(x + 6, 'GOOD AT', PALETTE.mossLight, t.strengths);
+    M.add(this.add.rectangle(x + w / 2, top + 3, 1, y + h - 19 - top - 3, 0x2a3050).setOrigin(0, 0));
+    column(x + w / 2 + 5, 'WEAK AGAINST', 0xff9a9a, t.weaknesses);
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
   }
 
@@ -524,49 +606,74 @@ export class CreatureHub extends Phaser.Scene {
     const L = this.layer;
     const c = store.get().creatures;
     const act = activeOwned(c);
-    // ---- your two, on the left
-    L.add(text(this, 8, 23, `YOUR TEAM  ${c.owned.length}/${MAX_OWNED}`, PALETTE.gold));
-    L.add(text(this, 164, 23, `W ${c.wins}`, PALETTE.mossLight).setOrigin(1, 0));
-    L.add(text(this, 196, 23, `L ${c.losses}`, 0xff8a8a).setOrigin(1, 0));
-    for (let i = 0; i < MAX_OWNED; i++) {
-      const o = c.owned[i];
-      // (96 wide: room on a move's row for the longest name between its icon and its "?")
-      const x = 4 + i * 98;
-      const y = 33;
-      const w = 96;
-      const h = 116;
-      if (!o) {
-        const slot = this.add.rectangle(x, y, w, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a2e48);
-        L.add(slot);
-        const g = this.add.graphics();
-        g.lineStyle(1, 0x3a3e58, 1).strokeCircle(x + w / 2, y + 46, 12);
-        g.fillStyle(0x3a3e58, 1).fillRect(x + w / 2 - 5, y + 45, 11, 2).fillRect(x + w / 2 - 1, y + 41, 2, 11);
-        L.add(g);
-        L.add(centerText(this, x + w / 2, y + 70, 'EMPTY SLOT', PALETTE.ash));
-        L.add(centerText(this, x + w / 2, y + 80, 'RECRUIT TO FILL', 0x4a4e68));
-        continue;
+    // ---- YOUR MAIN CREATURE, on the left (user, 2 Nov): one card -- or,
+    // with nobody yet, one empty slot -- and in the space beside it the
+    // team: every creature you have recruited, tap one to make it the one
+    // that fights.  (Nothing faints for long: a loss leaves it on its feet.)
+    L.add(text(this, 8, 23, 'MAIN CREATURE', PALETTE.gold));
+    L.add(text(this, 196, 23, `W ${c.wins}  L ${c.losses}`, PALETTE.fog).setOrigin(1, 0));
+    const x = 4;
+    const y = 33;
+    const w = 96;
+    const h = 126;
+    if (!act) {
+      L.add(this.add.rectangle(x, y, w, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a2e48));
+      const g = this.add.graphics();
+      g.lineStyle(1, 0x3a3e58, 1).strokeCircle(x + w / 2, y + 46, 12);
+      g.fillStyle(0x3a3e58, 1).fillRect(x + w / 2 - 5, y + 45, 11, 2).fillRect(x + w / 2 - 1, y + 41, 2, 11);
+      L.add(g);
+      L.add(centerText(this, x + w / 2, y + 70, 'EMPTY SLOT', PALETTE.ash));
+      L.add(centerText(this, x + w / 2, y + 80, 'RECRUIT TO FILL', 0x4a4e68));
+    } else {
+      const cr = ownedCreature(act)!;
+      this.card(cr, x, y, w, h, true, true, act.xp ?? 0, true);
+    }
+    // ---- the team, where the second card used to be
+    const tx = 104;
+    L.add(this.add.rectangle(tx, y, 94, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
+    L.add(text(this, tx + 4, y + 3, `TEAM ${c.owned.length}`, PALETTE.cream));
+    L.add(smallText(this, tx + 4, y + 13, c.owned.length > 1 ? 'TAP ONE: MAKE IT MAIN' : 'RECRUIT TO ADD MORE', 0x6a7090));
+    const page0 = Phaser.Math.Clamp(this.teamPage, 0, Math.max(0, Math.ceil(c.owned.length / TEAM_PAGE) - 1)) * TEAM_PAGE;
+    c.owned.slice(page0, page0 + TEAM_PAGE).forEach((o, i) => {
+      const cr = ownedCreature(o);
+      if (!cr) return;
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const bx = tx + 3 + col * 45;
+      const bw = 43;
+      const bh = 20;
+      const byy = y + 21 + row * (bh + 1);
+      const main = o.uid === act?.uid;
+      const el = ELEMENTS[cr.element];
+      const tile = this.add.rectangle(bx, byy, bw, bh, main ? 0x3a2e10 : 0x1c2142).setOrigin(0, 0).setStrokeStyle(main ? 2 : 1, main ? PALETTE.gold : el.col);
+      L.add(tile);
+      this.shown.push({ c: cr, x: bx + 11, y: byy + 9, s: 0.85, f: 1 });
+      L.add(smallText(this, bx + 22, byy + 3, `LV ${levelOf(o.xp ?? 0)}`, main ? PALETTE.gold : PALETTE.cream));
+      L.add(smallText(this, bx + 22, byy + 11, main ? 'MAIN' : el.name.slice(0, 5), main ? PALETTE.gold : el.light));
+      if (!main) {
+        tile.setInteractive({ useHandCursor: true });
+        tile.on('pointerover', () => tile.setFillStyle(0x2a3060));
+        tile.on('pointerout', () => tile.setFillStyle(0x1c2142));
+        tile.on('pointerdown', () => {
+          const r = setActive(o.uid);
+          if (r.ok) {
+            this.msg = '';
+            audio.sfx('ui_blip', 0.5);
+          } else this.say(r);
+          this.draw();
+        });
       }
-      const cr = ownedCreature(o)!;
-      const on = o.uid === act?.uid;
-      this.card(cr, x, y, w, h, true, on, o.xp ?? 0);
-      const rest = restLeft(o);
-      if (rest > 0) {
-        // FAINTED: still in its slot (log #3), out of sight under the band, with its clock
-        this.shown.pop();
-        // (a band across the picture, under its level and element tags)
-        L.add(this.add.rectangle(x + 1, y + 16, w - 2, 21, 0x0a0c18, 0.82).setOrigin(0, 0));
-        L.add(centerText(this, x + w / 2, y + 21, 'FAINTED', 0xff8a8a));
-        L.add(centerText(this, x + w / 2, y + 31, 'PRESS REVIVE', PALETTE.cream));
-      }
-      if (rest > 0) {
-        // (what reviving costs is on the button's own line under the cards: RELEASE has the rest of the row)
-        L.add(button(this, x + 23, y + h + 10, 'REVIVE', () => (this.say(revive(o.uid)), this.draw()), { width: 44, height: 12, disabled: REVIVE_COST > 0 && ledger.balance() < REVIVE_COST }));
-      } else if (on) {
-        // the one that fights: a gold chip where USE would be
-        L.add(this.add.rectangle(x + 2, y + h + 4, 42, 12, 0x3a2e10).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
-        L.add(centerText(this, x + 23, y + h + 10, 'ACTIVE', PALETTE.gold));
-      } else L.add(button(this, x + 23, y + h + 10, 'USE', () => (this.say(setActive(o.uid)), this.draw()), { width: 42, height: 12 }));
-      L.add(button(this, x + w - 24, y + h + 10, 'RELEASE', () => this.confirmRelease(o.uid, cr), { width: 44, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
+    });
+    // (no RELEASE: a creature recruited is yours for good -- user, 4 Nov)
+    // ---- MORE THAN FIT: the team is unlimited, so it goes in pages of
+    // TEAM_PAGE, with arrows and the page between them
+    const pages = Math.max(1, Math.ceil(c.owned.length / TEAM_PAGE));
+    this.teamPage = Phaser.Math.Clamp(this.teamPage, 0, pages - 1);
+    if (pages > 1) {
+      const py = y + h - 9;
+      L.add(button(this, tx + 12, py, '<', () => ((this.teamPage = (this.teamPage + pages - 1) % pages), this.draw()), { width: 18, height: 12 }));
+      L.add(centerText(this, tx + 47, py, `${this.teamPage + 1} / ${pages}`, PALETTE.cream));
+      L.add(button(this, tx + 82, py, '>', () => ((this.teamPage = (this.teamPage + 1) % pages), this.draw()), { width: 18, height: 12 }));
     }
     // ---- the menu, on the right
     const mx = 207;
@@ -579,21 +686,27 @@ export class CreatureHub extends Phaser.Scene {
     // STORY MODE, in place of the zone battles (user, 28 Oct)
     const sw = Math.min(c.story.cleared, WORLDS.length - 1);
     const storySub = c.story.cleared >= WORLDS.length ? 'ALL WORLDS DONE' : `WORLD ${sw + 1} OF ${WORLDS.length}`;
-    this.tile(mx, 34, mw, 24, 'STORY MODE', resting ? 'FAINTED' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
+    // (six tiles now, 20 high on a 22 step, so MINI GAMES fits without crowding)
+    this.tile(mx, 33, mw, 20, 'STORY MODE', resting ? 'FAINTED' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.markTo = WORLD_AT[sw]), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
     const ladderOpen = c.story.cleared >= WORLDS.length || !!run;
-    this.tile(mx, 61, mw, 24, 'LADDER', !ladderOpen ? 'AFTER STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
+    this.tile(mx, 55, mw, 20, 'LADDER', !ladderOpen ? 'AFTER STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
       for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
     }, () => this.go('ladder'), !act && !run);
     // TRAINING: free, no stake, a dummy that cannot hurt you -- in the place
     // last picked on the zone map
-    this.tile(mx, 88, mw, 24, 'TRAINING', act ? 'FREE, SAFE' : 'NO CREATURE', 0x6ad8f0, (g, x, y, col) => {
+    this.tile(mx, 77, mw, 20, 'TRAINING', act ? 'FREE, SAFE' : 'NO CREATURE', 0x6ad8f0, (g, x, y, col) => {
       // a straw dummy on its post
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 3, 3).fillRect(x - 3, y - 3, 7, 5).fillRect(x, y + 2, 1, 5).fillRect(x - 5, y - 2, 11, 1);
     }, () => this.train(this.biome), !act);
-    const full = c.owned.length >= MAX_OWNED && !busy;
-    this.tile(mx, 115, mw, 24, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : `${PACK_COST} TOKENS`, 0x8a6aff, (g, x, y, col) => {
+    // MINI GAMES: duels and 3v3 with creatures of the game's own (user, 4 Nov)
+    this.tile(mx, 99, mw, 20, 'MINI GAMES', `${MINI_COST} IN, ${MINI_WIN} TO WIN`, 0xff9a3c, (g, x, y, col) => {
+      // two crossed claws
+      g.fillStyle(col, 1);
+      for (let k = -4; k <= 4; k++) g.fillRect(x + k, y + k * 0.8, 2, 2).fillRect(x + k, y - k * 0.8, 2, 2);
+    }, () => this.go('minis'));
+    this.tile(mx, 121, mw, 20, 'RECRUIT', busy ? 'PACK WAITING' : packPrice() ? `${packPrice()} TOKENS` : 'FIRST ONE FREE', 0x8a6aff, (g, x, y, col) => {
       g.fillStyle(0x14100c, 1).fillRect(x - 6, y - 5, 9, 12).fillRect(x - 2, y - 7, 9, 12);
       g.fillStyle(col, 0.6).fillRect(x - 5, y - 4, 7, 10);
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
@@ -601,30 +714,114 @@ export class CreatureHub extends Phaser.Scene {
     }, () => this.go(busy ? 'pack' : 'recruit'));
     // (the keys, on a keyboard only: a phone's controls are on the screen -- C7)
     if (!isTouch())
-      this.tile(mx, 142, mw, 24, 'HOW TO PLAY', 'MOVES, STATS, EFFECTS', 0x4ad0c0, (g, x, y, col) => {
+      this.tile(mx, 143, mw, 20, 'HOW TO PLAY', 'THE BASICS', 0x4ad0c0, (g, x, y, col) => {
         g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
         g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
       }, () => this.go('controls'));
   }
 
-  private confirmRelease(uid: number, cr: Creature): void {
-    if (this.dialog) return;
-    const last = store.get().creatures.owned.length === 1;
-    this.dialog = confirmDialog(this, {
-      lines: [`RELEASE ${cr.name.toUpperCase()}?`, 'IT WILL NOT COME BACK.', ...(last ? ['IT IS YOUR LAST ONE.'] : [])],
-      confirm: 'RELEASE',
-      onConfirm: () => {
-        this.dialog = null;
-        this.say(release(uid));
-        this.screen = needsRecovery() ? 'recruit' : 'home';
-        this.draw();
-      },
-      onCancel: () => {
-        this.dialog?.destroy();
-        this.dialog = null;
-      },
+  // ------------------------------------------------------------ mini games
+
+  /** Which page of the team is showing (it is unlimited). */
+  private teamPage = 0;
+  private miniKind: MiniKind = 'melee';
+  private miniPool: string[] = [];
+  private miniPicks: string[] = [];
+
+  /** THE MINI GAMES MENU: the three modes, what each is, and what it costs. */
+  private minis(): void {
+    const L = this.layer;
+    L.add(text(this, 8, 20, 'MINI GAMES', PALETTE.gold));
+    L.add(smallText(this, 8, 30, `EVERY MODE: ${MINI_COST} TOKENS IN, ${MINI_WIN} FOR A WIN, NOTHING FOR A LOSS.`, PALETTE.fog));
+    L.add(smallText(this, 8, 37, 'YOU FIGHT WITH THE CREATURES ON OFFER, ALL AT THE SAME LEVEL. NO XP.', PALETTE.fog));
+    const kinds: Array<[MiniKind, number, string, (g: Phaser.GameObjects.Graphics, x: number, y: number, col: number) => void]> = [
+      ['melee', 0xff5a6a, 'PICK 1 OF 3 - UP CLOSE', (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col)],
+      ['ranged', 0x6ad8f0, 'PICK 1 OF 3 - AT RANGE', (g, x, y, col) => drawAttackIcon(g, 'bolt', x, y, col)],
+      ['team', PALETTE.gold, 'PICK 3 OF 10 - ONE AT A TIME', (g, x, y, col) => {
+        g.fillStyle(col, 1).fillCircle(x - 5, y + 2, 3).fillCircle(x, y - 2, 3).fillCircle(x + 5, y + 2, 3);
+      }],
+    ];
+    kinds.forEach(([k, col, sub, icon], i) => {
+      const y = 48 + i * 34;
+      this.tile(16, y, GAME_W - 32, 28, MINI_INFO[k].title, `${sub}  -  ${MINI_COST} TOKENS`, col, icon, () => {
+        this.miniKind = k;
+        this.miniPool = drawPool(k);
+        this.miniPicks = [];
+        this.go('minipick');
+      }, ledger.balance() < MINI_COST);
     });
-    this.dialog.setDepth(3000);
+    if (ledger.balance() < MINI_COST) L.add(centerSmall(this, GAME_W / 2, 152, `YOU NEED ${MINI_COST} TOKENS TO PLAY.`, 0xff9a9a));
+  }
+
+  /**
+   * THE PICK.  The pool on cards -- the creature, its role, its health and
+   * reach -- tap to choose (tap again to drop it), STATS to read it in full,
+   * and FIGHT once the pick is complete.  The cards are sized to fit their
+   * words: a long name shrinks to the small type rather than run off.
+   */
+  private miniPick(): void {
+    const L = this.layer;
+    const kind = this.miniKind;
+    const want = kind === 'team' ? 3 : 1;
+    L.add(text(this, 8, 20, MINI_INFO[kind].title, PALETTE.gold));
+    // (two short lines, never one that wraps into the cards)
+    L.add(smallText(this, 8, 30, MINI_INFO[kind].rules.join(' '), PALETTE.fog));
+    L.add(smallText(this, 8, 37, `${MINI_COST} TOKENS IN, ${MINI_WIN} FOR A WIN.`, PALETTE.gold));
+    const team = kind === 'team';
+    const cols = team ? 5 : 3;
+    const cw = team ? 58 : 92;
+    const ch = team ? 54 : 100;
+    const gap = team ? 4 : 10;
+    const x0 = Math.round((GAME_W - (cols * cw + (cols - 1) * gap)) / 2);
+    const y0 = team ? 46 : 46;
+    this.miniPool.forEach((id, i) => {
+      const c = creatureById(id);
+      if (!c) return;
+      const x = x0 + (i % cols) * (cw + gap);
+      const y = y0 + Math.floor(i / cols) * (ch + 4);
+      const on = this.miniPicks.indexOf(id);
+      const el = ELEMENTS[c.element];
+      const bg = this.add.rectangle(x, y, cw, ch, on >= 0 ? 0x2a2a14 : 0x181c36).setOrigin(0, 0).setStrokeStyle(on >= 0 ? 2 : 1, on >= 0 ? PALETTE.gold : el.col);
+      L.add(bg);
+      const artH = team ? 24 : 44;
+      L.add(this.add.rectangle(x + 2, y + 2, cw - 4, artH, el.dark, 0.55).setOrigin(0, 0));
+      this.shown.push({ c, x: x + cw / 2, y: y + artH * 0.62, s: team ? 1.05 : 1.7, f: 1 });
+      // the name: the big type if it fits, the small one if not
+      const nm = c.name.toUpperCase();
+      const big = nm.length * 6 <= cw - 6;
+      L.add(big ? centerText(this, x + cw / 2, y + artH + 7, nm, PALETTE.cream) : centerSmall(this, x + cw / 2, y + artH + 5, nm, PALETTE.cream));
+      const role = roleOf(c).toUpperCase();
+      const t = traitsOf(c);
+      L.add(centerSmall(this, x + cw / 2, y + artH + 13, team ? `${role} ${c.hp}HP` : `${role} - ${c.hp} HP`, el.light));
+      if (!team) {
+        L.add(centerSmall(this, x + cw / 2, y + artH + 21, t.style.split(':')[0], PALETTE.fog));
+        L.add(centerSmall(this, x + cw / 2, y + artH + 29, `SPEED ${c.speed}`, PALETTE.fog));
+        L.add(button(this, x + cw / 2, y + ch - 10, 'STATS', () => this.showStats(c), { width: 46, height: 11, fill: 0x1c2142 }));
+      }
+      if (on >= 0 && team) L.add([this.add.circle(x + 7, y + 7, 5, PALETTE.gold), centerSmall(this, x + 7, y + 5, `${on + 1}`, 0x1a1a22)]);
+      bg.setInteractive({ useHandCursor: true });
+      bg.on('pointerdown', () => {
+        audio.sfx('ui_blip', 0.5);
+        const at = this.miniPicks.indexOf(id);
+        if (at >= 0) this.miniPicks.splice(at, 1);
+        else if (want === 1) this.miniPicks = [id];
+        else if (this.miniPicks.length < want) this.miniPicks.push(id);
+        this.draw();
+      });
+    });
+    const ready = this.miniPicks.length === want;
+    const label = ready ? `FIGHT - ${MINI_COST} TOKENS` : team ? `PICK ${want - this.miniPicks.length} MORE` : 'PICK ONE';
+    L.add(button(this, GAME_W / 2, GAME_H - 12, label, () => {
+      if (!ready) return;
+      const r = startMini(kind, this.miniPicks);
+      if (!r.ok) {
+        this.say(r);
+        this.draw();
+        return;
+      }
+      audio.sfx('cha_ching', 0.5);
+      this.scene.start('CreatureArena', { mode: 'mini', from: this.from, biome: BIOMES[Phaser.Math.Between(0, BIOMES.length - 1)].id });
+    }, { width: 120, height: 13, disabled: !ready }));
   }
 
   /** THE PACK: one price, nine different creatures face down, every one as likely as any other. */
@@ -647,7 +844,7 @@ export class CreatureHub extends Phaser.Scene {
     L.add(g);
     L.add(centerText(this, x + 41, 70, '?', PALETTE.gold));
     L.add(text(this, x + 70, 42, 'CREATURE PACK', PALETTE.cream));
-    L.add(text(this, x + 70, 52, `${PACK_COST} TOKENS`, PALETTE.gold));
+    L.add(text(this, x + 70, 52, packPrice() ? `${packPrice()} TOKENS` : 'FREE', PALETTE.gold));
     L.add(text(this, x + 70, 66, 'NINE DIFFERENT', PALETTE.fog));
     L.add(text(this, x + 70, 75, 'CREATURES, FACE', PALETTE.fog));
     L.add(text(this, x + 70, 84, 'DOWN. KEEP ONE.', PALETTE.fog));
@@ -658,8 +855,8 @@ export class CreatureHub extends Phaser.Scene {
       L.add(button(this, GAME_W / 2, 132, 'YOUR PACK', () => this.go('pack'), { width: 96, height: 13 }));
       return;
     }
-    const can = ledger.balance() >= PACK_COST && c.owned.length < MAX_OWNED;
-    L.add(button(this, GAME_W / 2, 132, `OPEN  ${PACK_COST} TOK`, () => {
+    const can = ledger.balance() >= packPrice();
+    L.add(button(this, GAME_W / 2, 132, packPrice() ? `OPEN  ${packPrice()} TOK` : 'OPEN - FREE', () => {
       const r = openPack();
       this.say(r);
       if (r.ok) {
@@ -668,8 +865,7 @@ export class CreatureHub extends Phaser.Scene {
       }
       this.draw();
     }, { width: 96, height: 13, disabled: !can }));
-    if (c.owned.length >= MAX_OWNED) L.add(centerText(this, GAME_W / 2, 154, 'YOU HAVE TWO. RELEASE ONE BEFORE YOU RECRUIT.', PALETTE.gold));
-    else if (ledger.balance() < PACK_COST) L.add(centerText(this, GAME_W / 2, 154, `YOU HAVE ${ledger.balance()} TOKENS.`, PALETTE.ash));
+    if (ledger.balance() < packPrice()) L.add(centerText(this, GAME_W / 2, 154, `YOU HAVE ${ledger.balance()} TOKENS.`, PALETTE.ash));
   }
 
   /** The nine cards.  Face down until one is chosen; then that one, then the rest. */
@@ -855,7 +1051,10 @@ export class CreatureHub extends Phaser.Scene {
       L.add(pic);
       const ring = this.add.circle(x, y, 13, 0x000000, open ? 0.001 : 0.6).setStrokeStyle(i === this.storyW ? 2 : 1, done ? PALETTE.gold : open ? PALETTE.cream : 0x3a4060);
       ring.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        // a second tap on the world picked goes in, to its trail
+        if (this.storyW === i && open) return this.enterWorld(i);
         this.storyW = i;
+        this.markTo = WORLD_AT[i];
         audio.sfx('ui_blip', 0.4);
         this.draw();
       });
@@ -876,21 +1075,20 @@ export class CreatureHub extends Phaser.Scene {
     const w = WORLDS[this.storyW];
     const i = this.storyW;
     const open = worldOpen(i, c);
-    const replay = isReplay(i, c);
-    const stage = c.story.stage[i] ?? 0;
     const px = 198;
     L.add(this.add.rectangle(px, 26, 116, 140, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, open ? PALETTE.gold : 0x2a3050));
     wrapWords(w.name, 18).slice(0, 2).forEach((ln, k) => L.add(text(this, px + 4, 30 + k * 9, ln, PALETTE.gold)));
     L.add(text(this, px + 4, 49, `LEVELS ${w.lo}-${w.hi}`, PALETTE.cream));
     wrapWords(w.blurb, 27).slice(0, 2).forEach((ln, k) => L.add(smallText(this, px + 4, 60 + k * 7, ln, PALETTE.ash)));
-    // the five stages: four battles and the boss
+    // how far along its own trail it is (each world's kept apart)
+    const best = storyBest(i, c);
     const sg = this.add.graphics();
     for (let k = 0; k <= STAGES; k++) {
       const x = px + 14 + k * 20;
       const yy = 84;
       const boss = k === STAGES;
-      const past = open && k < stage;
-      const next = open && k === stage;
+      const past = open && k < best;
+      const next = open && k === best;
       if (k > 0) sg.fillStyle(past ? PALETTE.gold : 0x3a4060, 1).fillRect(x - 16, yy, 12, 1);
       sg.fillStyle(past ? PALETTE.gold : 0x12152a, 1).fillCircle(x, yy, boss ? 6 : 4);
       sg.lineStyle(next ? 2 : 1, next ? PALETTE.cream : boss ? 0xff5a6a : 0x3a4060, 1).strokeCircle(x, yy, boss ? 6 : 4);
@@ -902,20 +1100,161 @@ export class CreatureHub extends Phaser.Scene {
       wrapWords(`BEAT ${WORLDS[i - 1].bossName} TO OPEN IT.`, 18).forEach((ln, k) => L.add(text(this, px + 4, 108 + k * 9, ln, PALETTE.ash)));
       return;
     }
-    const nextLine = stage >= STAGES ? `BOSS: ${w.bossName}` : `BATTLE ${stage + 1}/${STAGES}: ${creatureById(lineupFoe(i, stage))!.name.toUpperCase()} LV ${stageLevel(i, stage)}`;
-    wrapWords(nextLine, 18).slice(0, 2).forEach((ln, k) => L.add(text(this, px + 4, 96 + k * 9, ln, stage >= STAGES ? 0xff9a9a : PALETTE.cream)));
-    const price = storyPrice(i, replay);
-    L.add(text(this, px + 4, 113, `WIN: +${price.win} TOKENS`, PALETTE.mossLight));
-    // (no loss line: the user's call, 28 Oct; a replay says why it pays less)
-    if (replay) L.add(smallText(this, px + 4, 123, 'REPLAY: BOSS ALREADY BEATEN', PALETTE.ash));
-    const act = activeOwned();
-    const resting = !!act && restLeft(act) > 0;
-    L.add(button(this, px + 58, 146, `FIGHT  ${price.cost} TOK`, () => this.storyFight(i), { width: 106, height: 14, disabled: !act || resting || ledger.balance() < price.cost }));
-    if (resting) L.add(smallText(this, px + 4, 157, 'FAINTED - REVIVE IT FIRST', 0xff9a9a));
+    L.add(text(this, px + 4, 98, best > STAGES ? 'ALL 5 CLEARED' : `${best}/5 CLEARED`, best > STAGES ? PALETTE.gold : PALETTE.cream));
+    L.add(smallText(this, px + 4, 110, best > STAGES ? 'REPLAY ANY FIGHT FOR XP' : 'REPLAY BEATEN FIGHTS', PALETTE.ash));
+    L.add(button(this, px + 58, 146, 'ENTER WORLD', () => this.enterWorld(i), { width: 106, height: 14 }));
   }
 
-  private storyFight(w: number): void {
-    this.scene.start('CreatureArena', { mode: 'story', world: w, from: this.from });
+  /** Into world `w`: its own trail, the marker on its next stop. */
+  private enterWorld(w: number): void {
+    if (!worldOpen(w)) return;
+    this.storyW = w;
+    this.trailSel = trailNode(w);
+    const at = trailMark(w, this.trailSel);
+    this.markTo = at;
+    this.mark = { x: at[0], y: at[1] - 20 };
+    audio.sfx('ui_blip', 0.5);
+    this.go('trail');
+  }
+
+  private pickStop(k: number): void {
+    if (k === this.trailSel) return;
+    this.trailSel = k;
+    this.markTo = trailMark(this.storyW, k);
+    audio.sfx('ui_hover', 0.5);
+    this.draw();
+  }
+
+  /**
+   * ---- A WORLD'S TRAIL.  Its ground, its scenery, its path, and on the path
+   * its five stops: beaten ones in gold with a tick (tap one to fight it
+   * again -- a replay, for the experience), the next one ringed and
+   * breathing, the rest dark and padlocked.  Your creature hops along to
+   * the stop picked.  On the right, that stop: who, what level, what it
+   * pays, roughly what it teaches, and FIGHT (or REPLAY).
+   */
+  private trail(): void {
+    const L = this.layer;
+    const c = store.get().creatures;
+    const i = this.storyW;
+    const w = WORLDS[i];
+    const pts = TRAIL_AT[i];
+    const best = storyBest(i, c);
+    const b = BIOMES.find((q) => q.id === w.biome)!;
+    const area = { x: 4, y: 19, w: 190, h: 156 };
+    // the world's own ground, darkened so the path reads over it
+    const ground = this.add.graphics();
+    paintFloor(ground, w.biome, area, b.ground, b.groundDark, `${w.id}-trail`, 0.5);
+    ground.fillStyle(0x05070f, 0.35).fillRect(area.x, area.y, area.w, area.h);
+    L.add(ground);
+    L.add(this.add.rectangle(area.x, area.y, area.w, area.h).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
+    // its scenery, kept off the path
+    const deco = this.add.graphics();
+    paintTrailScenery(deco, i, area, pts);
+    L.add(deco);
+    // the path: dotted, gold as far as you have got
+    const path = this.add.graphics();
+    for (let k = 0; k < pts.length - 1; k++) {
+      const [x0, y0] = pts[k];
+      const [x1, y1] = pts[k + 1];
+      // bowed a little to one side, each leg its own way
+      const mx = (x0 + x1) / 2 + (y1 - y0) * 0.18 * (k % 2 ? 1 : -1);
+      const my = (y0 + y1) / 2 - (x1 - x0) * 0.18 * (k % 2 ? 1 : -1);
+      const n = Math.max(6, Math.round(Math.hypot(x1 - x0, y1 - y0) / 7));
+      for (let j = 1; j < n; j++) {
+        const t = j / n;
+        const x = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * mx + t * t * x1;
+        const y = (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * my + t * t * y1;
+        path.fillStyle(0x000000, 0.5).fillCircle(x + 0.5, y + 1, 1.8);
+        path.fillStyle(k < best ? PALETTE.gold : 0x5a6080, 1).fillCircle(x, y, 1.5);
+      }
+    }
+    L.add(path);
+    // the stops
+    pts.forEach(([x, y], k) => {
+      const boss = k === STAGES;
+      const state = nodeState(i, k, c);
+      const r = boss ? 13 : 10;
+      const g = this.add.graphics();
+      g.fillStyle(0x000000, 0.45).fillEllipse(x, y + r - 1, r * 2.2, 6);
+      g.fillStyle(state === 'done' ? 0x3a2e10 : state === 'next' ? 0x1c2142 : 0x0c0e1a, 0.95).fillCircle(x, y, r);
+      g.lineStyle(k === this.trailSel ? 2 : 1, state === 'done' ? PALETTE.gold : state === 'next' ? PALETTE.cream : 0x3a4060, 1).strokeCircle(x, y, r);
+      if (boss) g.lineStyle(1, state === 'locked' ? 0x4a2030 : 0xff5a6a, 1).strokeCircle(x, y, r + 3);
+      L.add(g);
+      if (state === 'locked') {
+        // a padlock
+        const lk = this.add.graphics();
+        lk.lineStyle(1.5, 0x6a7090, 1).strokeCircle(x, y - 2, 3);
+        lk.fillStyle(0x6a7090, 1).fillRect(x - 4, y - 1, 8, 6);
+        L.add(lk);
+      } else {
+        // who waits there, small inside its stop
+        const foe = boss ? bossById(w.boss) : creatureById(lineupFoe(i, k));
+        if (foe) this.shown.push({ c: foe, x, y: y - 1, s: boss ? 1.05 : 0.9, f: -1 });
+        if (state === 'done') {
+          // the tick of a fight already won
+          const tk = this.add.graphics();
+          tk.fillStyle(PALETTE.gold, 1).fillCircle(x + r - 2, y - r + 2, 3.5);
+          tk.lineStyle(1.2, 0x1a1408, 1).lineBetween(x + r - 4, y - r + 2, x + r - 2.5, y - r + 3.5).lineBetween(x + r - 2.5, y - r + 3.5, x + r, y - r);
+          L.add(tk);
+        }
+      }
+      if (state === 'next') {
+        // the one to beat breathes
+        const halo = this.add.circle(x, y, r + 2).setStrokeStyle(1, PALETTE.cream, 0.8);
+        this.tweens.add({ targets: halo, scale: 1.25, alpha: 0, duration: 900, repeat: -1 });
+        L.add(halo);
+      }
+      L.add(centerSmall(this, x, y + r + 4, boss ? 'BOSS' : `${k + 1}`, state === 'done' ? PALETTE.gold : state === 'next' ? PALETTE.cream : 0x5a6080));
+      if (state !== 'locked') {
+        const hit = this.add.circle(x, y, r + 3, 0x000000, 0.001).setInteractive({ useHandCursor: true });
+        hit.on('pointerdown', () => (k === this.trailSel ? this.trailFight() : this.pickStop(k)));
+        L.add(hit);
+      }
+    });
+    // your creature, on the stop picked
+    const me = activeCreature();
+    if (me) this.shown.push({ c: me, x: this.mark.x, y: this.mark.y, s: 1.1, f: 1, hop: true });
+    // ---- the stop picked
+    const k = this.trailSel;
+    const state = nodeState(i, k, c);
+    const boss = k === STAGES;
+    const foe = boss ? bossById(w.boss) : creatureById(lineupFoe(i, k));
+    const lv = stageLevel(i, k);
+    const px = 198;
+    L.add(this.add.rectangle(px, 26, 116, 140, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
+    wrapWords(w.name, 18).slice(0, 2).forEach((ln, j) => L.add(smallText(this, px + 4, 30 + j * 7, ln, PALETTE.gold)));
+    L.add(text(this, px + 4, 46, boss ? 'THE BOSS' : `BATTLE ${k + 1} OF ${STAGES}`, boss ? 0xff9a9a : PALETTE.cream));
+    const who = boss ? w.bossName : (foe?.name ?? '???').toUpperCase();
+    wrapWords(`${who} LV ${lv}`, 18).slice(0, 2).forEach((ln, j) => L.add(text(this, px + 4, 57 + j * 9, ln, PALETTE.gold)));
+    L.add(text(this, px + 4, 78, state === 'done' ? 'CLEARED' : 'NEXT FIGHT', state === 'done' ? PALETTE.mossLight : PALETTE.cream));
+    const replay = state === 'done';
+    const price = storyPrice(i, replay);
+    L.add(text(this, px + 4, 90, `WIN: +${price.win} TOKENS`, PALETTE.mossLight));
+    // roughly what it teaches: by the gap between your level and its
+    const act = activeOwned();
+    const myLv = levelOf(act?.xp ?? 0);
+    const xp = battleXp(myLv, lv, { boss, won: true });
+    const gap = lv - myLv;
+    L.add(text(this, px + 4, 102, `XP: ABOUT +${xp}`, 0x8ae88a));
+    L.add(smallText(this, px + 4, 113, gap <= -3 ? 'WELL BELOW YOU: LITTLE XP' : gap >= 2 ? 'ABOVE YOU: EXTRA XP' : 'A FAIR MATCH', gap <= -3 ? 0xff9a9a : PALETTE.ash));
+    if (replay) L.add(smallText(this, px + 4, 121, 'REPLAY: FOR XP ONLY', PALETTE.ash));
+    const resting = !!act && restLeft(act) > 0;
+    L.add(button(this, px + 58, 146, `${replay ? 'REPLAY' : 'FIGHT'}  ${price.cost} TOK`, () => this.trailFight(), { width: 106, height: 14, disabled: !act || resting || ledger.balance() < price.cost }));
+    if (resting) L.add(smallText(this, px + 4, 157, 'FAINTED - REVIVE IT FIRST', 0xff9a9a));
+    else if (!isTouch()) L.add(smallText(this, px + 4, 157, 'ARROWS: PICK  ENTER: FIGHT', 0x6a7090));
+  }
+
+  private trailFight(): void {
+    const act = activeOwned();
+    const replay = nodeState(this.storyW, this.trailSel) === 'done';
+    if (!act || restLeft(act) > 0 || nodeState(this.storyW, this.trailSel) === 'locked') return;
+    if (ledger.balance() < storyPrice(this.storyW, replay).cost) {
+      this.say({ ok: false, msg: 'NOT ENOUGH TOKENS.' });
+      this.draw();
+      return;
+    }
+    this.scene.start('CreatureArena', { mode: 'story', world: this.storyW, node: this.trailSel, from: this.from });
   }
 
   private ladder(): void {
@@ -1020,7 +1359,7 @@ export class CreatureHub extends Phaser.Scene {
     const key = (k: string): string => capLabel(codeFor(`creatureclash:${k}`));
     const touch = isTouch();
     const steps: Array<{ demo: string; say: string }> = [
-      { demo: 'clash.move', say: touch ? 'THE STICK MOVES YOUR CREATURE. EACH MOVE BUTTON FIRES THAT MOVE STRAIGHT AT THE FOE.' : 'W A S D MOVES YOUR CREATURE. AIM WITH THE MOUSE AND CLICK TO FIRE THE MOVE YOU HAVE PICKED.' },
+      { demo: 'clash.move', say: touch ? 'THE STICK MOVES YOUR CREATURE. EACH MOVE BUTTON FIRES THAT MOVE STRAIGHT AT THE FOE.' : 'W A S D MOVES YOUR CREATURE. EVERY MOVE AIMS ITSELF AT THE FOE: NO MOUSE NEEDED.' },
       { demo: 'clash.moves', say: 'EVERY CREATURE HAS THREE MOVES: A PLAIN ATTACK AND TWO SPECIALS. AFTER A MOVE IS USED IT HAS TO RECHARGE - ITS COOLDOWN. THE RING ROUND ITS BUTTON FILLS BACK UP, AND THEN IT IS READY.' },
       { demo: 'clash.stats', say: "TAP A CREATURE'S CARD FOR ITS STATS. HP: HOW MUCH IT CAN TAKE. ATTACK: HOW HARD IT HITS. DEFENCE: HOW WELL IT LASTS. SPEED: HOW FAST IT MOVES. MELEE FIGHTS UP CLOSE, RANGED FROM AFAR." },
       { demo: 'clash.elements', say: 'EACH CREATURE HAS AN ELEMENT, AND EVERY HIT IT LANDS CARRIES ITS EDGE: EMBER BURNS, TIDE KNOCKS BACK, FROST SLOWS, VOLT STUNS, STONE TAKES LESS. TAP ? BY A MOVE TO READ JUST WHAT IT DOES.' },
@@ -1032,7 +1371,7 @@ export class CreatureHub extends Phaser.Scene {
         demo: 'clash.keys',
         say: touch
           ? 'ON A PHONE THE CONTROLS SIT BESIDE OR UNDER THE ARENA: THE STICK MOVES, AND EACH MOVE BUTTON FIRES ITS MOVE AT THE FOE.'
-          : `${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} FIRE MOVES 1, 2 AND 3 STRAIGHT AT THE FOE. 1 2 3 FIRE THEM AT THE MOUSE. W A S D MOVES. ${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} CAN BE MOVED IN THE SETTINGS, UNDER CHANGE KEYS.`,
+          : `${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} (OR 1 2 3) FIRE MOVES 1, 2 AND 3 STRAIGHT AT THE FOE. SPACE FIRES THE ONE PICKED. W A S D MOVES. ${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} CAN BE MOVED IN THE SETTINGS, UNDER CHANGE KEYS.`,
       },
     ];
     this.howStep = Phaser.Math.Clamp(this.howStep, 0, steps.length - 1);

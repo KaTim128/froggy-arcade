@@ -905,17 +905,21 @@ export class Hotel extends Phaser.Scene {
     this.locked = true;
     this.inLift = true;
     audio.sfx('bell_ding', 0.4);
-    this.landing?.open(700, () => {
+    const walkIn = (): void => {
       this.autoWalk = {
         x: cx,
         then: () => {
           const p = this.player;
           if (!p) return;
           this.tweens.add({ targets: p.sprite, y: p.sprite.y - 4, scale: 0.9, alpha: 0, duration: 380 });
-          this.time.delayedCall(420, () => this.landing?.close(650, () => fadeToScene(this, 'Hotel', { area: 'lift', up, level })));
+          const go = (): void => fadeToScene(this, 'Hotel', { area: 'lift', up, level });
+          this.time.delayedCall(420, () => (this.landing ? this.landing.close(650, go) : go()));
         },
       };
-    });
+    };
+    // (no doors drawn on this landing: straight in, rather than wait on them for ever)
+    if (this.landing) this.landing.open(700, walkIn);
+    else walkIn();
   }
 
   // ------------------------------------------------------------- talking
@@ -1677,11 +1681,18 @@ export class Hotel extends Phaser.Scene {
       const w = this.autoWalk;
       const d = w.x - p.x;
       this.prompt.setVisible(false);
-      if (Math.abs(d) <= 1.5) {
+      const lane = new Phaser.Geom.Rectangle(0, p.y, this.area === 'lobby' ? LOBBY_W : GAME_W, 0);
+      // (THE LIFT FREEZE: a step can be longer than the 1.5 it had to land
+      // within -- a slow frame, or SHIFT held -- and it walked back and
+      // forth over the mark for ever with the keys locked.  Arriving is now
+      // reaching OR passing the mark, put exactly on it.)
+      if (Math.abs(d) > 1.5) p.move(Math.sign(d), 0, delta, lane);
+      if (Math.abs(d) <= 1.5 || Math.sign(w.x - p.x) !== Math.sign(d)) {
         this.autoWalk = null;
-        p.move(0, 0, delta, new Phaser.Geom.Rectangle(0, p.y, this.area === 'lobby' ? LOBBY_W : GAME_W, 0));
+        p.setPosition(w.x, p.y);
+        p.move(0, 0, delta, lane);
         w.then();
-      } else p.move(Math.sign(d), 0, delta, new Phaser.Geom.Rectangle(0, p.y, this.area === 'lobby' ? LOBBY_W : GAME_W, 0));
+      }
       if (this.area === 'lobby') this.cameras.main.scrollX = Phaser.Math.Clamp(p.x - 250, 0, LOBBY_W - GAME_W);
       return;
     }

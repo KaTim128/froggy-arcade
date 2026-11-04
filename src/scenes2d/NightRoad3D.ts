@@ -104,6 +104,13 @@ const OPENING = {
 };
 /** A retry starts here, past the reveal. */
 const REVEAL_Z = -ROAD_LEN * 0.2;
+/**
+ * ---- THE SHED (M8): deep in the woods on the left, at the far end of the
+ * second footpath -- past where the path gives out, through the pines.  Go
+ * far enough in and you find it: a plank shack, its door gone, a bulb still
+ * buzzing inside, and what he keeps in there.  The doorway faces the road.
+ */
+const HUT = { x: -30, z: -59.5, w: 4.4, d: 3.6, h: 2.5, door: 1.2 };
 const RIVER_Z = -112;
 const RIVER_HALF = 3.4;
 const LAMP_ZS = [4, -20, -46, -74, -104, -132, -158];
@@ -113,6 +120,8 @@ const TOUCH_LAMP_LIGHTS = 2;
 const EYE = 1.6;
 /** Eye height crouched, as a share of standing. */
 const CROUCH_EYE = 0.6;
+/** After RUN!, the seconds before he comes after you. */
+const HEAD_START = 2.5;
 const CROUCH_SPEED = 0.55;
 const PLAYER_R = 0.35;
 const WALK = 2.9;
@@ -192,6 +201,29 @@ function canvasTex(w: number, h: number, paint: (g: CanvasRenderingContext2D) =>
   return t;
 }
 
+/** Does the segment a-b pass through the box (on the ground plane)? (slab test) */
+function segHitsBox(ax: number, az: number, bx: number, bz: number, b: Box): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const d = [bx - ax, bz - az];
+  const o = [ax, az];
+  const lo = [b.x0, b.z0];
+  const hi = [b.x1, b.z1];
+  for (let i = 0; i < 2; i++) {
+    if (Math.abs(d[i]) < 1e-9) {
+      if (o[i] < lo[i] || o[i] > hi[i]) return false;
+      continue;
+    }
+    let ta = (lo[i] - o[i]) / d[i];
+    let tb = (hi[i] - o[i]) / d[i];
+    if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta);
+    t1 = Math.min(t1, tb);
+    if (t0 > t1) return false;
+  }
+  return t0 > 0.001 && t0 < 0.999;
+}
+
 /**
  * Pull a flat thing towards the camera in the depth buffer, so it is drawn
  * over whatever it lies on and never flickers through it at a distance.
@@ -238,6 +270,10 @@ export class NightRoad3D extends Phaser.Scene {
   private heardSnap = false;
   private shake = 0;
   private boxes: Box[] = [];
+  /** The shed's four walls (for sight), and whether you have been in it yet. */
+  private hutWalls: Box[] = [];
+  private hutSeen = false;
+  private hutBulb: THREE.PointLight | null = null;
   private posts: Circle[] = [];
   private waterMats: THREE.Texture[] = [];
   private sky: THREE.Group | null = null;
@@ -343,6 +379,9 @@ export class NightRoad3D extends Phaser.Scene {
     this.twigs = [];
     this.crows = [];
     this.boxes = [];
+    this.hutWalls = [];
+    this.hutSeen = false;
+    this.hutBulb = null;
     this.posts = [];
     this.skirts = [];
     this.thickets = [];
@@ -717,6 +756,7 @@ export class NightRoad3D extends Phaser.Scene {
     this.buildBusStop(S);
     this.buildHotel(S);
     this.buildTown(S, R);
+    this.buildHut(S);
 
     this.monster = new FroggyMonster(FROGGY_SCALE);
     S.add(this.monster.root);
@@ -860,6 +900,8 @@ export class NightRoad3D extends Phaser.Scene {
   /** Nothing grows on the footpaths, the bus stop's pad or the water. */
   private clearGround(x: number, z: number, margin: number): boolean {
     if (Math.abs(x) < RAIL_X + margin) return false;
+    // (the shed, and a clearing round it)
+    if (Math.abs(x - HUT.x) < HUT.w / 2 + 2.2 + margin && Math.abs(z - HUT.z) < HUT.d / 2 + 2.2 + margin) return false;
     if (Math.abs(z - RIVER_Z) < RIVER_HALF + 1.2) return false;
     if (z < HOTEL_Z + 12 && Math.abs(x) < 20) return false;
     for (const p of this.ponds) if (Math.hypot(x - p.x, z - p.z) < p.r + 1.4) return false;
@@ -2041,6 +2083,228 @@ gl_Position = projectionMatrix * mvPosition;`,
     this.sky.add(skirt);
   }
 
+  /**
+   * THE SHED.  Weathered planks, a rusted tin roof pitched over it, the door
+   * long gone.  Inside, a single bulb on its flex, buzzing and dropping out;
+   * the floor black with old blood, and against the back wall, stacked like
+   * firewood, the wrapped bodies -- a hand out of one sheet, a bare foot out
+   * of another -- with the wall behind smeared where they were dragged.
+   * Walls you cannot walk through, and that hide you from him.
+   */
+  private buildHut(S: THREE.Scene): void {
+    const { x, z, w, d, h, door } = HUT;
+    const x0 = x - w / 2;
+    const x1 = x + w / 2;
+    const z0 = z - d / 2;
+    const z1 = z + d / 2;
+    const T = 0.12;
+    let seed = 913;
+    const R = (): number => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const planks = canvasTex(64, 64, (g) => {
+      g.fillStyle = '#3a3026';
+      g.fillRect(0, 0, 64, 64);
+      for (let px = 0; px < 64; px += 8) {
+        const tone = 44 + Math.floor(R() * 18);
+        g.fillStyle = `rgb(${tone + 10},${tone},${tone - 10})`;
+        g.fillRect(px + 1, 0, 6, 64);
+        // grain, knots, a nail head top and bottom
+        g.fillStyle = 'rgba(20,14,10,0.35)';
+        for (let k = 0; k < 6; k++) g.fillRect(px + 1 + Math.floor(R() * 6), Math.floor(R() * 64), 1, 4 + Math.floor(R() * 10));
+        g.fillStyle = '#1a140e';
+        g.fillRect(px + 3, 4, 1, 1);
+        g.fillRect(px + 3, 58, 1, 1);
+        // the gap between boards
+        g.fillStyle = '#0c0a08';
+        g.fillRect(px, 0, 1, 64);
+      }
+      // damp coming up from the ground
+      const damp = g.createLinearGradient(0, 64, 0, 40);
+      damp.addColorStop(0, 'rgba(10,16,8,0.6)');
+      damp.addColorStop(1, 'rgba(10,16,8,0)');
+      g.fillStyle = damp;
+      g.fillRect(0, 40, 64, 24);
+    });
+    planks.wrapS = planks.wrapT = THREE.RepeatWrapping;
+    const wallMat = (len: number): THREE.MeshLambertMaterial => {
+      const t = planks.clone();
+      t.repeat.set(len / 1.6, h / 1.6);
+      t.needsUpdate = true;
+      return new THREE.MeshLambertMaterial({ map: t });
+    };
+    const slab = (bx: number, bz: number, sx: number, sz: number, sy = h, y = 0): void => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), wallMat(Math.max(sx, sz)));
+      m.position.set(bx, y + sy / 2, bz);
+      S.add(m);
+    };
+    const wall = (b: Box): void => {
+      this.boxes.push(b);
+      this.hutWalls.push(b);
+    };
+    // the back (west) wall and the two sides
+    slab(x0, z, T, d);
+    wall({ x0: x0 - T / 2, x1: x0 + T / 2, z0, z1 });
+    slab(x, z0, w, T);
+    wall({ x0, x1, z0: z0 - T / 2, z1: z0 + T / 2 });
+    slab(x, z1, w, T);
+    wall({ x0, x1, z0: z1 - T / 2, z1: z1 + T / 2 });
+    // the front (east, to the road): either side of the doorway, and the lintel over it
+    const side = (d - door) / 2;
+    slab(x1, z0 + side / 2, T, side);
+    wall({ x0: x1 - T / 2, x1: x1 + T / 2, z0, z1: z0 + side });
+    slab(x1, z1 - side / 2, T, side);
+    wall({ x0: x1 - T / 2, x1: x1 + T / 2, z0: z1 - side, z1 });
+    slab(x1, z, T, door, h - 2.0, 2.0);
+    // the roof: rusted corrugated tin, pitched from the front down to the back
+    const tin = canvasTex(64, 32, (g) => {
+      g.fillStyle = '#4a3a30';
+      g.fillRect(0, 0, 64, 32);
+      for (let px = 0; px < 64; px += 4) {
+        g.fillStyle = '#2e241e';
+        g.fillRect(px, 0, 1, 32);
+        g.fillStyle = 'rgba(160,110,70,0.25)';
+        g.fillRect(px + 2, 0, 1, 32);
+      }
+      g.fillStyle = 'rgba(120,60,30,0.45)';
+      for (let k = 0; k < 14; k++) g.fillRect(Math.floor(R() * 64), Math.floor(R() * 32), 2 + Math.floor(R() * 5), 1 + Math.floor(R() * 3));
+    });
+    tin.wrapS = tin.wrapT = THREE.RepeatWrapping;
+    tin.repeat.set(2, 1);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.06, d + 0.6), new THREE.MeshLambertMaterial({ map: tin }));
+    roof.position.set(x, h + 0.18, z);
+    roof.rotation.z = -0.1;
+    S.add(roof);
+    // the floor inside: packed earth, black where it has soaked in
+    const floorTex = canvasTex(64, 64, (g) => {
+      g.fillStyle = '#241c16';
+      g.fillRect(0, 0, 64, 64);
+      for (let k = 0; k < 120; k++) {
+        g.fillStyle = R() < 0.5 ? 'rgba(50,40,30,0.5)' : 'rgba(10,8,6,0.5)';
+        g.fillRect(Math.floor(R() * 64), Math.floor(R() * 64), 1, 1);
+      }
+      // the pool under the pile, spreading out across the floor
+      const pool = g.createRadialGradient(10, 32, 2, 10, 32, 34);
+      pool.addColorStop(0, 'rgba(70,4,6,0.95)');
+      pool.addColorStop(0.6, 'rgba(50,4,6,0.7)');
+      pool.addColorStop(1, 'rgba(40,4,6,0)');
+      g.fillStyle = pool;
+      g.fillRect(0, 0, 64, 64);
+      // drag marks from the door to the pile
+      g.fillStyle = 'rgba(60,4,6,0.55)';
+      for (let k = 0; k < 3; k++) g.fillRect(14, 26 + k * 4, 50, 2);
+    });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(w - T, d - T), new THREE.MeshLambertMaterial({ map: floorTex }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(x, 0.012, z);
+    S.add(floor);
+    // smears on the back wall, where they were dragged up on to the pile
+    const smear = canvasTex(64, 32, (g) => {
+      g.clearRect(0, 0, 64, 32);
+      for (let k = 0; k < 7; k++) {
+        const sx = 6 + R() * 52;
+        const sy = 4 + R() * 14;
+        g.fillStyle = `rgba(${80 + Math.floor(R() * 30)},6,8,${0.55 + R() * 0.35})`;
+        g.fillRect(Math.floor(sx), Math.floor(sy), 3 + Math.floor(R() * 4), 2);
+        // and it ran
+        for (let r = 0; r < 3; r++) g.fillRect(Math.floor(sx + R() * 4), Math.floor(sy + 2), 1, 4 + Math.floor(R() * 12));
+      }
+      // a hand, dragged down the boards
+      g.fillStyle = 'rgba(90,6,8,0.8)';
+      for (let f = 0; f < 4; f++) g.fillRect(40 + f * 2, 8, 1, 10);
+      g.fillRect(39, 16, 9, 4);
+    });
+    const smearM = new THREE.Mesh(new THREE.PlaneGeometry(d - 0.4, 1.8), new THREE.MeshLambertMaterial({ map: smear, transparent: true, depthWrite: false }));
+    smearM.rotation.y = Math.PI / 2;
+    smearM.position.set(x0 + T / 2 + 0.01, 1.05, z);
+    S.add(smearM);
+    // ---- the pile: wrapped bodies, stacked against the back wall
+    const sheet = [0x6e665a, 0x5a5448, 0x7a6e5e, 0x4e4a42, 0x665a4c];
+    const skin = new THREE.MeshLambertMaterial({ color: 0x9a8c84 });
+    const stain = new THREE.MeshLambertMaterial({ color: 0x4a0608 });
+    const body = (bx: number, by: number, bz: number, len: number, yaw: number, k: number): void => {
+      const grp = new THREE.Group();
+      const mat = new THREE.MeshLambertMaterial({ color: sheet[k % sheet.length] });
+      const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, len, 4, 8), mat);
+      torso.rotation.z = Math.PI / 2;
+      torso.scale.set(1, 1, 0.8);
+      grp.add(torso);
+      // where it has soaked through
+      const blot = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), stain);
+      blot.scale.set(1.4, 0.35, 1);
+      blot.position.set((R() - 0.5) * len * 0.6, 0.15, 0.02);
+      grp.add(blot);
+      // the cord round it, twice
+      for (const c of [-0.25, 0.22]) {
+        const cord = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.012, 4, 10), new THREE.MeshLambertMaterial({ color: 0x2a221a }));
+        cord.rotation.y = Math.PI / 2;
+        cord.position.x = c * len;
+        grp.add(cord);
+      }
+      grp.position.set(bx, by, bz);
+      grp.rotation.y = yaw;
+      S.add(grp);
+      return void grp;
+    };
+    const px = x0 + 0.5;
+    body(px, 0.2, z - 0.55, 1.2, Math.PI / 2 + 0.05, 0);
+    body(px + 0.42, 0.2, z - 0.4, 1.25, Math.PI / 2 - 0.08, 1);
+    body(px, 0.2, z + 0.75, 1.15, Math.PI / 2 + 0.12, 2);
+    body(px + 0.2, 0.56, z - 0.35, 1.2, Math.PI / 2 + 0.2, 3);
+    body(px + 0.15, 0.56, z + 0.5, 1.1, Math.PI / 2 - 0.15, 4);
+    body(px + 0.1, 0.9, z + 0.05, 1.15, Math.PI / 2 + 0.06, 0);
+    // a hand out of one sheet, a bare foot out of another
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.14), skin);
+    hand.position.set(px + 0.62, 0.3, z - 1.0);
+    hand.rotation.y = 0.4;
+    S.add(hand);
+    for (let f = 0; f < 4; f++) {
+      const fing = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.06), skin);
+      fing.position.set(px + 0.6 + f * 0.016 - 0.024, 0.29, z - 1.09);
+      S.add(fing);
+    }
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.2), skin);
+    foot.position.set(px + 0.25, 0.62, z + 1.08);
+    S.add(foot);
+    // ---- the bulb: on its flex from the ridge, buzzing, now and then out
+    const flex = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.7), new THREE.MeshBasicMaterial({ color: 0x0a0a0a }));
+    flex.position.set(x + 0.3, h - 0.35, z);
+    S.add(flex);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffc070 }));
+    bulb.position.set(x + 0.3, h - 0.72, z);
+    S.add(bulb);
+    this.hutBulb = new THREE.PointLight(0xff9a50, 6, 6.5, 1.6);
+    this.hutBulb.position.copy(bulb.position);
+    this.hutBulb.userData.bulb = bulb;
+    S.add(this.hutBulb);
+  }
+
+  /**
+   * In the shed: the first time, it lands -- the bulb flares, the sting, the
+   * screen jolts, and what you would say.  And the bulb's flicker, always.
+   */
+  private checkHut(dt: number): void {
+    const L = this.hutBulb;
+    if (L) {
+      // a bad bulb: a steady buzz, and every so often it drops out
+      const out = Math.sin(this.clock * 23) > 0.93 || Math.sin(this.clock * 3.1 + 1) > 0.985;
+      L.intensity = out ? 0.4 : 5.5 + Math.sin(this.clock * 60) * 0.4;
+      const b = L.userData.bulb as THREE.Mesh | undefined;
+      if (b) (b.material as THREE.MeshBasicMaterial).color.setHex(out ? 0x3a2a1a : 0xffc070);
+    }
+    void dt;
+    if (this.hutSeen) return;
+    const inX = this.pos.x > HUT.x - HUT.w / 2 && this.pos.x < HUT.x + HUT.w / 2 + 0.3;
+    const inZ = Math.abs(this.pos.y - HUT.z) < HUT.d / 2;
+    if (!inX || !inZ) return;
+    this.hutSeen = true;
+    this.shake = Math.max(this.shake, 0.45);
+    audio.sfx('stinger', 0.9);
+    audio.sfx('eerie_swell', 0.7);
+    this.sayNow('...', 1.2);
+    this.say('Oh god. Oh god.', 2.2, true);
+    this.say('How many people has he...', 2.6);
+    this.say("I can't stay here.", 2.2);
+  }
+
   private buildLamps(S: THREE.Scene): void {
     const pole = new THREE.MeshLambertMaterial({ color: 0x3a3e44 });
     const bulb = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
@@ -2420,6 +2684,7 @@ gl_Position = projectionMatrix * mvPosition;`,
     this.movePlayer(dt);
     this.chaseHints(dt);
     this.story(dt);
+    this.checkHut(dt);
     this.moveFroggy(dt);
     this.ambience(dt);
     this.updateCamera(dt);
@@ -2891,12 +3156,13 @@ gl_Position = projectionMatrix * mvPosition;`,
         this.phase = 'chase';
         this.phaseT = 0;
         this.fMode = 'wait';
-        this.sayNow('RUN.', 1.8, true);
+        this.sayNow('RUN!', 1.8, true);
         this.say(CHASE_HOW, 6);
         audio.sfx('froggy_screech', 0.8, this.placeOf(this.froggy.x, this.froggy.y));
       }
     }
-    if (this.phase === 'chase' && this.fMode === 'wait' && this.phaseT > 1.6) {
+    // (a 2.5 s head start, as asked: he screams, and only then comes)
+    if (this.phase === 'chase' && this.fMode === 'wait' && this.phaseT > HEAD_START) {
       this.fMode = 'hunt';
       this.lostT = 0;
       this.lastKnown.copy(this.pos);
@@ -3024,6 +3290,8 @@ gl_Position = projectionMatrix * mvPosition;`,
   }
 
   private lineClear(ax: number, az: number, bx: number, bz: number): boolean {
+    // (the shed's walls hide you as well as the trunks do)
+    for (const w of this.hutWalls) if (segHitsBox(ax, az, bx, bz, w)) return false;
     const len = Math.hypot(bx - ax, bz - az);
     const steps = Math.ceil(len / 3);
     const seen = new Set<Circle>();
