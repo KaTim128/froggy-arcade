@@ -31,6 +31,7 @@
 import { plainWords } from './plainWords';
 import { BOSSES, CREATURES, ELEMENTS, type Creature } from './creatures';
 import { roleOf } from './creatureMinis';
+import { AURA_POWER, HASTE_SPEED, LINGER_DMG, LINGER_S } from './attackInfo';
 
 export const ULT_UNLOCK_S = 30;
 export const ULT_COOLDOWN_S = 25;
@@ -56,7 +57,10 @@ export type UltFx =
 
 export interface Ultimate {
   name: string;
+  /** In a line, for the STATS page. */
   desc: string;
+  /** Step by step, in full, for its own card (user, 4 Nov: clearer, more detail). */
+  steps: string[];
   fx: UltFx[];
   /** How close the target should be for the AI to fire it (px). */
   range: number;
@@ -182,6 +186,35 @@ function words(f: UltFx): string {
   }
 }
 
+/**
+ * THE SAME, IN FULL (user, 4 Nov: "make people understand it more, it is ok
+ * to have more words but be clear"): one sentence for each step, saying who
+ * it hits, how far it reaches, how much, and how long -- the arena's own
+ * numbers (CreatureArena `ultFx`).
+ */
+const pct = (k: number): number => Math.round((k - 1) * 100);
+function fullWords(f: UltFx): string {
+  switch (f.k) {
+    case 'charge': return `RUSHES STRAIGHT AT THE ENEMY, UP TO ${f.dist}PX, AND DEALS ${f.dmg} DAMAGE IF IT RUNS INTO THEM.`;
+    case 'blink': return `VANISHES AND REAPPEARS RIGHT BEHIND THE ENEMY, WHEREVER THEY ARE, AND HITS THEM AT ONCE FOR ${f.dmg} DAMAGE.`;
+    case 'nova': return `A BLAST ALL AROUND ITSELF: AN ENEMY WITHIN ${f.r}PX TAKES ${f.dmg} DAMAGE AND IS THROWN BACK.`;
+    case 'rage': return `A FRENZY FOR ${f.t}S: IT GROWS A QUARTER BIGGER, MOVES MUCH FASTER, AND ITS HITS DEAL ${pct(AURA_POWER)}% MORE DAMAGE.`;
+    case 'pull': return `IF THE ENEMY IS WITHIN ${f.r}PX, IT YANKS THEM RIGHT UP CLOSE, THEN SLAMS THEM FOR ${f.dmg} DAMAGE.`;
+    case 'barrage': return `FIRES ${f.n} SHOTS IN A FAN AT THE ENEMY. EACH ONE THAT HITS DEALS ${f.dmg} DAMAGE (UP TO ${f.n * f.dmg} IF EVERY SHOT LANDS). THE CLOSER THEY ARE, THE MORE LAND.`;
+    case 'beam': return `AN INSTANT BEAM, ${f.len}PX LONG, STRAIGHT AT THE ENEMY. IT GOES THROUGH COVER AND DEALS ${f.dmg} DAMAGE.`;
+    case 'meteor': return `${f.n} STRIKES FALL ON AND AROUND THE ENEMY. A CIRCLE SHOWS WHERE EACH WILL LAND JUST BEFORE IT DOES, AND EACH ONE THAT HITS DEALS ${f.dmg} DAMAGE.`;
+    case 'zone': return `LEAVES ${f.n} PATCHES OF HARMFUL GROUND AROUND THE ENEMY FOR ${LINGER_S}S. STANDING IN ONE COSTS ${LINGER_DMG * 2} HEALTH A SECOND.`;
+    case 'shield': return `A SHIELD THAT BLOCKS EVERY HIT ON IT FOR ${f.t}S.`;
+    case 'heal': return `HEALS ${Math.round(f.frac * 100)}% OF ITS FULL HEALTH AT ONCE.`;
+    case 'drain': return `FOR ${f.t}S, DRAINS ${f.dps} HEALTH A SECOND FROM THE ENEMY AND HEALS ITSELF BY THE SAME, AS LONG AS THEY STAY WITHIN 150PX.`;
+    case 'slowfield': return `IF THE ENEMY IS WITHIN ${f.r}PX, THEY MOVE ALMOST AT HALF SPEED FOR ${f.t}S.`;
+    case 'clones': return `MAKES ${f.n} COPIES OF ITSELF NEARBY FOR 3S. THE ENEMY AIMS AT WHICHEVER IS NEAREST, SO THEIR SHOTS CAN HIT A COPY INSTEAD. EACH COPY BREAKS AFTER 6 DAMAGE.`;
+    case 'invuln': return `FOR ${f.t}S NOTHING CAN HURT IT: EVERY HIT AND SHOT DOES NO DAMAGE.`;
+    case 'stun': return `IF THE ENEMY IS WITHIN ${f.r}PX, THEY ARE STUNNED FOR ${f.t}S: THEY CANNOT MOVE OR ATTACK.`;
+    case 'haste': return `MOVES ${pct(HASTE_SPEED)}% FASTER FOR ${f.t}S.`;
+  }
+}
+
 /** How close the AI waits to be before firing, by the lead effect. */
 const RANGE: Record<K, number> = {
   charge: 90, blink: 200, nova: 40, rage: 70, pull: 100, barrage: 160, beam: 200, meteor: 220, zone: 200,
@@ -189,38 +222,89 @@ const RANGE: Record<K, number> = {
 };
 
 /**
- * ---- POWERFUL, NOT A WIN BUTTON.  The damage an ultimate can expect to do
- * -- counting that half a barrage and most of a meteor rain land, and a drain
- * runs its course -- is brought to a budget: about a third of a typical
- * creature's health, half again for a boss.  What is left (shields, stuns,
- * speed, heals) is capped by its own numbers above.
+ * ---- POWERFUL, NOT A WIN BUTTON, AND NONE WEAKER THAN ANOTHER (user, 4 Nov:
+ * "all ultimates should be balanced ensuring none are weaker than the other
+ * in terms of their advantages -- attack damage, defences, buffs").
+ *
+ * Every effect is given a worth in the same coin, HEALTH: what it takes off
+ * the enemy, what it gives back, what it stops from landing, or what the
+ * enemy cannot do while it lasts --
+ *
+ *   damage        what can be expected to land (half a barrage, most of a
+ *                 meteor rain, a nova or pull when they are close)
+ *   drain         the damage, and the same again healed
+ *   heal          the health it gives back
+ *   shield,       the hits it stops: an enemy deals about ENEMY_DPS a second
+ *   untouchable
+ *   stun          they neither hit you nor dodge you while it lasts
+ *   slow, haste,  the hits a speed edge wins or dodges
+ *   frenzy
+ *   decoys        the shots they soak
+ *
+ * -- and every ultimate is then scaled, effect by effect, until its total is
+ * the same budget as everyone else's (a boss's is half again).  Times and
+ * sizes have sane limits; whatever one effect cannot take for its limit, the
+ * others make up.
  */
-// (32 / 48 at first: in mirror fights the side with its ultimate ready won
-// 7 of 8 -- one ultimate decided the fight.  Brought down to be an edge, not a win.)
-const BUDGET = 22;
-const BOSS_BUDGET = 34;
-function expected(f: UltFx): number {
+const BUDGET = 40;
+const BOSS_BUDGET = 60;
+/** What an enemy deals in a second when it is free to (the plain attacks average 16; not every one lands). */
+const ENEMY_DPS = 12;
+function worth(f: UltFx, hp: number): number {
   switch (f.k) {
     case 'charge': case 'blink': case 'beam': return f.dmg;
     case 'nova': return f.dmg * 0.9;
-    case 'pull': return f.dmg;
+    case 'pull': return f.dmg * 1.1; // and they are now beside you
     case 'barrage': return f.n * f.dmg * 0.5;
     case 'meteor': return f.n * f.dmg * 0.6;
-    case 'drain': return f.t * f.dps;
-    case 'zone': return f.n * 4;
-    default: return 0;
+    case 'drain': return 2 * f.t * f.dps * 0.8;
+    case 'zone': return f.n * f.r * 0.2; // most step out of one quickly
+    case 'heal': return f.frac * hp;
+    case 'shield': return f.t * ENEMY_DPS * 0.9;
+    case 'invuln': return f.t * ENEMY_DPS;
+    case 'stun': return f.t * ENEMY_DPS * 1.6;
+    case 'slowfield': return f.t * 4;
+    case 'haste': return f.t * 3;
+    case 'rage': return f.t * 4.5;
+    case 'clones': return f.n * 6 * 0.7;
   }
 }
-function balance(fx: UltFx[], boss: boolean): UltFx[] {
-  const total = fx.reduce((a, f) => a + expected(f), 0);
+const lim = (v: number, lo: number, hi: number, step: number): number => Number((Math.round(Math.min(hi, Math.max(lo, v)) / step) * step).toFixed(2));
+/** The same effect, k times as strong, within its limits. */
+function scaled(f: UltFx, k: number): UltFx {
+  switch (f.k) {
+    case 'charge': case 'blink': case 'nova': case 'pull': case 'beam': return { ...f, dmg: lim(f.dmg * k, 3, 60, 1) };
+    case 'barrage': case 'meteor': return { ...f, dmg: lim(f.dmg * k, 2, 30, 1) };
+    case 'drain': return { ...f, dps: lim(f.dps * k, 2, 20, 1) };
+    case 'zone': return { ...f, r: lim(f.r * k, 8, 26, 0.5) };
+    case 'heal': return { ...f, frac: lim(f.frac * k, 0.05, 0.4, 0.01) };
+    case 'shield': return { ...f, t: lim(f.t * k, 0.8, 4, 0.1) };
+    case 'invuln': return { ...f, t: lim(f.t * k, 0.5, 3, 0.1) };
+    case 'stun': return { ...f, t: lim(f.t * k, 0.4, 1.6, 0.1) };
+    case 'slowfield': return { ...f, t: lim(f.t * k, 1, 6, 0.1) };
+    case 'haste': return { ...f, t: lim(f.t * k, 1.5, 8, 0.1) };
+    case 'rage': return { ...f, t: lim(f.t * k, 2, 9, 0.1) };
+    case 'clones': return f;
+  }
+}
+/** Its total worth, in health. */
+export function ultWorth(fx: UltFx[], hp: number): number {
+  return fx.reduce((a, f) => a + worth(f, hp), 0);
+}
+function balance(fx: UltFx[], boss: boolean, hp: number): UltFx[] {
   const want = boss ? BOSS_BUDGET : BUDGET;
-  if (total <= 0) return fx;
-  const k = Math.min(1.6, want / total);
-  return fx.map((f) => {
-    if ('dmg' in f) return { ...f, dmg: Math.max(3, Math.round(f.dmg * k)) } as UltFx;
-    if (f.k === 'drain') return { ...f, dps: Math.max(2, Math.round(f.dps * k)) };
-    return f;
-  });
+  // the fixed part (decoys come in whole numbers) stays; the rest is scaled,
+  // a few rounds so what one effect's limit refuses, the others take
+  let out = fx;
+  for (let round = 0; round < 8; round++) {
+    const fixed = out.filter((f) => f.k === 'clones').reduce((a, f) => a + worth(f, hp), 0);
+    const free = ultWorth(out, hp) - fixed;
+    if (free <= 0) break;
+    const k = (want - fixed) / free;
+    if (Math.abs(k - 1) < 0.01) break;
+    out = out.map((f) => scaled(f, k));
+  }
+  return out;
 }
 
 let table: Map<string, Ultimate> | null = null;
@@ -253,7 +337,7 @@ function build(): Map<string, Ultimate> {
         const extra = (['meteor', 'nova', 'stun', 'zone', 'drain'] as K[]).find((k) => !kinds.includes(k));
         if (extra) kinds.push(extra);
       }
-      fx = balance(kinds.map((k, i) => make(k, c, (h + tries * 7919) >>> 0, i === 0 ? big : 1)), boss);
+      fx = balance(kinds.map((k, i) => make(k, c, (h + tries * 7919) >>> 0, i === 0 ? big : 1)), boss, c.hp);
       sig = JSON.stringify(fx);
       if (!sigs.has(sig)) break;
     }
@@ -269,7 +353,8 @@ function build(): Map<string, Ultimate> {
     names.add(name);
     // (in TILES and SEC, as every other line of Clash text is: game/plainWords)
     const desc = plainWords(fx.map(words).join('. ') + '.');
-    out.set(c.id, { name, desc, fx, range: RANGE[fx[0].k] });
+    const steps = fx.map((f) => plainWords(fullWords(f)));
+    out.set(c.id, { name, desc, steps, fx, range: RANGE[fx[0].k] });
   }
   return out;
 }

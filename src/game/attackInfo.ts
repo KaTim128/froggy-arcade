@@ -187,44 +187,44 @@ function rawInfo(a: Attack, el: Element, scale: number): AttackInfo {
   switch (a.kind) {
     case 'bolt': {
       const r = Math.round(a.reach * SHOT_LIFE);
-      return { ...base, type: 'PROJECTILE', target: 'SINGLE TARGET', range: `LONG RANGE ${r}PX`, reachPx: r, use: 'FAST, CHEAP POKE. AIMS ITSELF; DODGE SIDEWAYS SO THEIRS MISS.' };
+      return { ...base, type: 'PROJECTILE', target: 'SINGLE TARGET', range: `THE SHOT FLIES UP TO ${r}PX`, reachPx: r, use: 'FAST, CHEAP POKE. AIMS ITSELF; DODGE SIDEWAYS SO THEIRS MISS.' };
     }
     case 'spread': {
       const r = Math.round(a.reach * SHOT_LIFE);
-      return { ...base, type: 'PROJECTILE X3', target: 'FAN, CAN MULTI-HIT', range: `MID RANGE ${r}PX`, reachPx: r, use: 'HARD TO DODGE. BEST AT MID RANGE.' };
+      return { ...base, type: 'PROJECTILE X3', target: 'FAN, CAN MULTI-HIT', range: `THE SHOTS FLY UP TO ${r}PX`, reachPx: r, use: 'HARD TO DODGE. BEST AT MID RANGE.' };
     }
     case 'nova': {
       const r = Math.round(a.reach * scale);
-      return { ...base, type: 'AREA OF EFFECT', target: 'ALL AROUND YOU', range: `CLOSE, ${r}PX RING`, reachPx: r, use: 'GET CLOSE FIRST. CANNOT MISS INSIDE THE RING.' };
+      return { ...base, type: 'AREA OF EFFECT', target: 'ALL AROUND YOU', range: `EVERYTHING WITHIN ${r}PX OF IT`, reachPx: r, use: 'GET CLOSE FIRST. CANNOT MISS INSIDE THE RING.' };
     }
     case 'dash': {
       const r = Math.round(a.reach * DASH_T);
-      return { ...base, type: 'MELEE CHARGE', target: 'SINGLE TARGET', range: `SHORT, DASH ${r}PX`, reachPx: r, use: 'CLOSE THE GAP AND HIT IN ONE MOVE.' };
+      return { ...base, type: 'MELEE CHARGE', target: 'SINGLE TARGET', range: `CHARGES UP TO ${r}PX`, reachPx: r, use: 'CLOSE THE GAP AND HIT IN ONE MOVE.' };
     }
     case 'beam': {
       const r = Math.round(a.reach * scale);
-      return { ...base, type: 'INSTANT LINE', target: 'SINGLE TARGET', range: `${r < 80 ? 'SHORT' : 'MID'}, ${r}PX LINE`, reachPx: r, use: 'HITS AT ONCE - NO TRAVEL TIME TO DODGE.' };
+      return { ...base, type: 'INSTANT LINE', target: 'SINGLE TARGET', range: `A LINE ${r}PX LONG, STRAIGHT AT THE ENEMY`, reachPx: r, use: 'HITS AT ONCE - NO TRAVEL TIME TO DODGE.' };
     }
     case 'mine':
-      return { ...base, type: 'TRAP (AREA)', target: 'WHOEVER STEPS ON IT', range: `THROWN ${MINE_THROW}PX, LASTS 8S`, reachPx: MINE_THROW, use: 'LAY IT WHERE THEY WILL WALK.' };
+      return { ...base, type: 'TRAP (AREA)', target: 'WHOEVER STEPS ON IT', range: `THROWN UP TO ${MINE_THROW}PX AWAY`, reachPx: MINE_THROW, use: 'LAY IT WHERE THEY WILL WALK.' };
     case 'shield':
-      return { ...base, type: 'DEFENCE', target: 'YOU', range: `BLOCKS ALL HITS ${a.reach}S`, reachPx: 0, use: 'POP IT WHEN A BIG ATTACK IS COMING.' };
+      return { ...base, type: 'DEFENCE', target: 'YOU', range: `ITSELF`, reachPx: 0, use: 'POP IT WHEN A BIG ATTACK IS COMING.' };
     case 'blink':
-      return { ...base, type: 'MOVEMENT', target: 'YOU', range: `TELEPORT ${a.reach}PX`, reachPx: a.reach, use: 'ESCAPE, OR GET BEHIND COVER. NO DAMAGE.' };
+      return { ...base, type: 'MOVEMENT', target: 'YOU', range: `TELEPORTS UP TO ${a.reach}PX`, reachPx: a.reach, use: 'ESCAPE, OR GET BEHIND COVER. NO DAMAGE.' };
     case 'arc': {
       const r = Math.round(a.reach * ARC_T);
-      return { ...base, type: 'LOBBED (AREA)', target: 'BURSTS WHERE IT LANDS', range: `OVER COVER, UP TO ${r}PX`, reachPx: r, use: 'THE ONE SHOT THAT IGNORES COVER. LEAD THEM.' };
+      return { ...base, type: 'LOBBED (AREA)', target: 'BURSTS WHERE IT LANDS', range: `LOBBED OVER COVER, UP TO ${r}PX`, reachPx: r, use: 'THE ONE SHOT THAT IGNORES COVER. LEAD THEM.' };
     }
     case 'snare': {
       const r = Math.round(a.reach * SHOT_LIFE);
-      return { ...base, type: 'PROJECTILE (HOLD)', target: 'SINGLE TARGET', range: `LONG RANGE ${r}PX`, reachPx: r, use: `ROOTS THEM FOR ${ROOT_S}S. SET UP YOUR BIG ONE.` };
+      return { ...base, type: 'PROJECTILE (HOLD)', target: 'SINGLE TARGET', range: `THE SHOT FLIES UP TO ${r}PX`, reachPx: r, use: `ROOTS THEM FOR ${ROOT_S}S. SET UP YOUR BIG ONE.` };
     }
     case 'aura':
-      return { ...base, type: 'BUFF (SELF)', target: 'YOU', range: `${AURA_S}S OF IT`, reachPx: 0, use: `+${Math.round((AURA_SPEED - 1) * 100)}% SPEED, +${Math.round((AURA_POWER - 1) * 100)}% DAMAGE. OPEN WITH IT.` };
+      return { ...base, type: 'BUFF (SELF)', target: 'YOU', range: `ITSELF`, reachPx: 0, use: `+${Math.round((AURA_SPEED - 1) * 100)}% SPEED, +${Math.round((AURA_POWER - 1) * 100)}% DAMAGE. OPEN WITH IT.` };
     case 'mend':
-      return { ...base, type: 'HEAL (SELF)', target: 'YOU', range: `${Math.round(MEND_FRAC * 100)}% OF FULL HEALTH`, reachPx: 0, use: 'BREAK AWAY FIRST - IT TAKES A MOMENT.' };
+      return { ...base, type: 'HEAL (SELF)', target: 'YOU', range: `ITSELF`, reachPx: 0, use: 'BREAK AWAY FIRST - IT TAKES A MOMENT.' };
     case 'wall':
-      return { ...base, type: 'COVER (PLACED)', target: 'BLOCKS SHOTS', range: `DROPPED ${a.reach}PX AWAY`, reachPx: a.reach, use: 'PUT IT BETWEEN YOU AND THEIR BIG MOVE.' };
+      return { ...base, type: 'COVER (PLACED)', target: 'BLOCKS SHOTS', range: `PLACED ${a.reach}PX AWAY`, reachPx: a.reach, use: 'PUT IT BETWEEN YOU AND THEIR BIG MOVE.' };
   }
 }
 
@@ -235,16 +235,50 @@ function rawInfo(a: Attack, el: Element, scale: number): AttackInfo {
  */
 export function attackCard(a: Attack, el: Element, scale = 1): string[] {
   const i = attackInfo(a, el, scale);
-  // (user, 3 Nov: in more detail -- each line one fact, so the card can space them)
-  const out = [`TYPE: ${i.type} - HITS: ${i.target}`, `RANGE: ${i.range}`];
-  const perSec = a.dmg > 0 ? ` (ABOUT ${Math.round((a.dmg / Math.max(0.1, a.cd)) * 10) / 10} A SECOND)` : '';
-  out.push(`DAMAGE: ${a.dmg > 0 ? `${a.dmg}` : 'NONE'}${perSec} - READY AGAIN AFTER ${a.cd}S`);
+  // (user, 4 Nov: easier to understand -- no HOW TO USE, nothing said twice,
+  // and WHAT IT DOES in full sentences, first)
+  const main = plainWords(a.sp ? i.special.replace(/\.?\s*$/, '.') : plainSentence(a, scale));
+  const out = [`WHAT IT DOES: ${main}`];
+  // a line only says something new: one whose every number the sentence
+  // above already gives (its reach, its damage, how long) is left out
+  const nums = (t: string): string[] => plainWords(t).match(/\d+(?:\.\d+)?/g) ?? [];
+  const has = new Set(nums(main));
+  const add = (ln: string): void => {
+    const n = nums(ln);
+    if (n.some((v) => !has.has(v))) out.push(ln);
+  };
+  add(`REACH: ${i.range}`);
+  const dmgSaid = new RegExp(`\\b(DEALS|TAKES) ${a.dmg}\\b|\\b${a.dmg} DAMAGE`).test(main);
+  out.push(a.dmg > 0 && !dmgSaid ? `DAMAGE: ${a.dmg} A HIT. READY AGAIN EVERY ${a.cd}S.` : `READY AGAIN EVERY ${a.cd}S.`);
   const dur = durationOf(a);
-  if (dur) out.push(`LASTS: ${dur}`);
-  out.push(a.sp ? `WHAT IT DOES: ${i.special}` : 'A PLAIN ATTACK: NO SPECIAL EFFECT');
-  if (i.effect) out.push(`ELEMENT BONUS: ${i.effect}`);
-  out.push(`HOW TO USE IT: ${i.use}`);
+  if (dur) add(`LASTS: ${dur}`);
+  if (i.effect) out.push(`ELEMENT BONUS: ${i.effect}.`);
   return out.map(plainWords);
+}
+
+/** A plain attack, said as a sentence: how it reaches and what it deals. */
+function plainSentence(a: Attack, scale: number): string {
+  const d = a.dmg;
+  switch (a.kind) {
+    case 'bolt': return `FIRES A SHOT AT THE ENEMY. IT FLIES UP TO ${Math.round(a.reach * SHOT_LIFE)}PX AND DEALS ${d} DAMAGE TO THE FIRST THING IT HITS. COVER STOPS IT.`;
+    case 'spread': return `FIRES 3 SHOTS IN A FAN, EACH FLYING UP TO ${Math.round(a.reach * SHOT_LIFE)}PX. EACH ONE THAT HITS DEALS ${d} DAMAGE, AND THE CLOSER THE ENEMY IS, THE MORE OF THEM LAND.`;
+    case 'nova': return `A BLAST ALL AROUND ITSELF. AN ENEMY WITHIN ${Math.round(a.reach * scale)}PX TAKES ${d} DAMAGE. IT CANNOT MISS INSIDE THAT RING.`;
+    case 'dash': return `CHARGES UP TO ${Math.round(a.reach * DASH_T)}PX AT THE ENEMY AND DEALS ${d} DAMAGE IF IT REACHES THEM.`;
+    case 'beam': {
+      const r = Math.round(a.reach * scale);
+      return r < 60
+        ? `A QUICK STRIKE AT WHATEVER IS WITHIN ${r}PX IN FRONT OF IT, FOR ${d} DAMAGE. IT LANDS AT ONCE, SO IT CANNOT BE DODGED UP CLOSE.`
+        : `AN INSTANT LINE, ${r}PX LONG, STRAIGHT AT THE ENEMY, FOR ${d} DAMAGE. IT LANDS AT ONCE, WITH NO SHOT TO DODGE.`;
+    }
+    case 'arc': return `LOBS A SHOT HIGH OVER COVER, UP TO ${Math.round(a.reach * ARC_T)}PX, THAT BURSTS WHERE IT LANDS FOR ${d} DAMAGE.`;
+    case 'snare': return `A SHOT THAT FLIES UP TO ${Math.round(a.reach * SHOT_LIFE)}PX. IF IT HITS, IT DEALS ${d} DAMAGE AND HOLDS THE ENEMY IN PLACE FOR ${ROOT_S}S.`;
+    case 'mine': return `THROWS A TRAP UP TO ${MINE_THROW}PX AWAY. WHEN THE ENEMY STEPS ON IT, IT GOES OFF FOR ${d} DAMAGE. IT FIZZLES AFTER ${MINE_S}S.`;
+    case 'shield': return `GUARDS ITSELF: EVERY HIT ON IT IS BLOCKED FOR ${a.reach}S.`;
+    case 'blink': return `TELEPORTS UP TO ${a.reach}PX AWAY IN AN INSTANT, OUT OF DANGER OR BEHIND COVER.`;
+    case 'aura': return `POWERS ITSELF UP FOR ${AURA_S}S: IT MOVES ${Math.round((AURA_SPEED - 1) * 100)}% FASTER AND ITS HITS DEAL ${Math.round((AURA_POWER - 1) * 100)}% MORE DAMAGE.`;
+    case 'mend': return `HEALS ${Math.round(MEND_FRAC * 100)}% OF ITS FULL HEALTH. IT TAKES A MOMENT, SO DO IT AWAY FROM THE ENEMY.`;
+    case 'wall': return `DROPS A PIECE OF COVER ${a.reach}PX AWAY THAT BLOCKS SHOTS FOR ${WALL_S}S.`;
+  }
 }
 
 /**

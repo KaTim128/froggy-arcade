@@ -516,39 +516,14 @@ export class CreatureHub extends Phaser.Scene {
   private showUlt(c: Creature): void {
     const ult = ultimateOf(c.id);
     if (!ult) return;
-    this.modal?.destroy(true);
-    const M = this.add.container(0, 0).setDepth(600);
-    this.modal = M;
-    const el = ELEMENTS[c.element];
-    const w = 300;
-    const close = (): void => this.draw();
-    const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
-    veil.setInteractive().on('pointerdown', close);
-    M.add(veil);
-    const per = Math.floor((w - 20) / 4);
-    const rows: Array<{ s: string; col: number; gap: boolean }> = [];
-    const lineOf = (ln: string, col: number): void => wrapWords(ln.toUpperCase(), per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
-    lineOf(`ULTIMATE: UNLOCKS ${ULT_UNLOCK_S} SEC INTO A FIGHT, THEN READY AGAIN ${ULT_COOLDOWN_S} SEC AFTER EACH USE.`, PALETTE.fog);
-    lineOf(`WHAT IT DOES: ${ult.desc}`, PALETTE.gold);
-    lineOf(isTouch() ? 'HOW TO USE: TAP THE ULT BUTTON WHEN IT LIGHTS UP.' : 'HOW TO USE: PRESS Q WHEN THE ULT BADGE TURNS GOLD.', 0x9ad0ff);
-    lineOf(`ELEMENT: ${el.name}`, el.light);
-    const LH = 7;
-    const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
-    const h = Math.min(GAME_H - 4, 27 + textH + 22);
-    const x = (GAME_W - w) / 2;
-    const y = Math.max(2, (GAME_H - h) / 2);
-    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, 0xffd45e));
-    M.add(text(this, x + 8, y + 8, `ULTIMATE - ${ult.name}`, PALETTE.gold));
-    M.add(text(this, x + w - 6, y + 8, c.name.toUpperCase(), PALETTE.fog).setOrigin(1, 0));
-    M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
-    let ly = y + 28;
-    for (const r of rows) {
-      if (r.gap) ly += 3;
-      if (ly + 6 > y + h - 20) break;
-      M.add(smallText(this, x + 8, ly, r.s, r.col));
-      ly += LH;
-    }
-    M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
+    // (user, 4 Nov: each step in its own clear sentence, in order; no HOW TO
+    // USE, no ELEMENT -- the card already says both)
+    const rows: Array<[string, number]> =
+      ult.steps.length === 1
+        ? [[`WHAT IT DOES: ${ult.steps[0]}`, PALETTE.gold]]
+        : [['WHAT IT DOES, IN ORDER:', PALETTE.gold], ...ult.steps.map((st, i): [string, number] => [`${i + 1}. ${st}`, PALETTE.cream])];
+    rows.push([`READY ${ULT_UNLOCK_S} SEC INTO A FIGHT, THEN AGAIN ${ULT_COOLDOWN_S} SEC AFTER EACH USE.`, 0x8a90b0]);
+    this.infoCard(c, `ULTIMATE - ${ult.name}`, rows, 0xffd45e);
   }
 
   /**
@@ -556,51 +531,58 @@ export class CreatureHub extends Phaser.Scene {
    * anything outside it, or the button, puts it away again.
    */
   private showMove(c: Creature, a: Attack): void {
-    // ITS OWN LAYER, OVER EVERYTHING.  It used to go into the screen's layer,
-    // which sits under the creatures' drawing -- so the creatures on the cards
-    // were painted on top of the card that was meant to cover them.
+    const el = ELEMENTS[c.element];
+    const rows = attackCard(a, c.element).map((ln): [string, number] => [
+      ln,
+      ln.startsWith('WHAT IT DOES') ? PALETTE.gold : ln.startsWith('ELEMENT') ? el.light : ln.startsWith('DAMAGE') || ln.startsWith('READY') ? 0xffb08a : PALETTE.fog,
+    ]);
+    this.infoCard(c, a.name, rows, el.col, a);
+  }
+
+  /**
+   * THE CARD FOR A MOVE OR AN ULTIMATE.  Its own layer over everything; the
+   * body in the small face, wrapped, each fact apart from the next (user,
+   * 4 Nov: more height between them), and never taller than the screen.  The
+   * creature's name sits top right only where it fits beside the title.
+   */
+  private infoCard(c: Creature, title: string, lines: Array<[string, number]>, edge: number, a?: Attack): void {
     this.modal?.destroy(true);
     const M = this.add.container(0, 0).setDepth(600);
     this.modal = M;
-    const el = ELEMENTS[c.element];
-    const lines = attackCard(a, c.element);
-    // (user, 28 Oct: the move only -- the creature's strengths are on its
-    // STATS page -- in the bigger house font, wrapped inside the box)
-    const w = 300;
+    const w = 308;
     const close = (): void => this.draw();
     const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
     M.add(veil);
-    // THE BODY IN THE SMALL FACE.  In the house font a move with a long
-    // element and a long weakness ran the card off the bottom of the screen
-    // and took the CLOSE button with it; in the 3x5 face, wrapped, every
-    // move fits with room to spare.
-    // (user, 3 Nov: more detail, the small face, a clear gap between facts)
+    const per = Math.floor((w - 18) / 4);
     const rows: Array<{ s: string; col: number; gap: boolean }> = [];
-    const per = Math.floor((w - 20) / 4);
-    const lineOf = (ln: string, col: number): void => {
-      wrapWords(ln, per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
-    };
-    lines.forEach((ln) =>
-      lineOf(ln, ln.startsWith('WHAT IT DOES') ? PALETTE.gold : ln.startsWith('ELEMENT') ? el.light : ln.startsWith('HOW TO USE') ? 0x9ad0ff : ln.startsWith('DAMAGE') ? 0xffb08a : PALETTE.fog),
-    );
-    const LH = 7;
-    const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
-    // (and never taller than the screen: the button always shows)
-    const h = Math.min(GAME_H - 4, 27 + textH + 22);
+    for (const [ln, col] of lines) wrapWords(ln.toUpperCase(), per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
+    // roomy if it fits, a little tighter if not
+    const room = GAME_H - 4 - 27 - 22;
+    const height = (lh: number, gap: number): number => rows.reduce((t, r) => t + lh + (r.gap ? gap : 0), 0);
+    const [LH, GAP] = ([[9, 6], [8, 5], [8, 3], [7, 3]] as const).find(([lh, g]) => height(lh, g) <= room) ?? [7, 2];
+    const h = Math.min(GAME_H - 4, 27 + height(LH, GAP) + 20);
     const x = (GAME_W - w) / 2;
     const y = Math.max(2, (GAME_H - h) / 2);
-    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
-    const g = this.add.graphics();
-    drawAbilityIcon(g, a, x + 13, y + 13, el.light);
-    M.add(g);
-    M.add(text(this, x + 24, y + 8, a.name, PALETTE.gold));
-    M.add(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));
+    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, edge));
+    let tx = x + 8;
+    if (a) {
+      const g = this.add.graphics();
+      drawAbilityIcon(g, a, x + 13, y + 13, ELEMENTS[c.element].light);
+      M.add(g);
+      tx = x + 24;
+    }
+    const head = text(this, tx, y + 8, title, PALETTE.gold);
+    M.add(head);
+    const nm = c.name.toUpperCase();
+    const right = x + w - 7;
+    if (head.x + head.width + 8 + nm.length * 6 <= right) M.add(text(this, right, y + 8, nm, PALETTE.fog).setOrigin(1, 0));
+    else if (head.x + head.width + 8 + nm.length * 4 <= right) M.add(smallText(this, right, y + 10, nm, PALETTE.fog).setOrigin(1, 0));
     M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
     let ly = y + 28;
     for (const r of rows) {
-      if (r.gap) ly += 3;
-      if (ly + 6 > y + h - 20) break;
+      if (r.gap) ly += GAP;
+      if (ly + 6 > y + h - 18) break;
       M.add(smallText(this, x + 8, ly, r.s, r.col));
       ly += LH;
     }
