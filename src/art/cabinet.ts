@@ -6,7 +6,7 @@
 import Phaser from 'phaser';
 import { PALETTE, nightify } from '../render/palette';
 import type { CabinetDef } from '../game/content';
-import { centerText } from '../core/ui';
+import { centerText, smallText } from '../core/ui';
 import { depthFor } from './player';
 import { grain, seeded, tone } from './surface';
 import { playScreen } from './cabinetScreens';
@@ -120,7 +120,9 @@ export class Cabinet {
     mq.fillStyle(0x000000, 0.35).fillRect(L + 1, T + 5, CAB_W - 2, 1);
     if (!night) mq.fillStyle(def.color, 0.18).fillRect(L - 2, T - 3, CAB_W + 4, 3); // the glow off its top
     if (!night && def.symbol) {
-      centerText(scene, x, T + 3, def.symbol, PALETTE.ink).setDepth(d + 0.0001);
+      // (the small type: the house font is taller than the 6px marquee, and
+      // its letters ran off the top and bottom of it)
+      smallText(scene, x, T + 3, def.symbol, PALETTE.ink).setOrigin(0.5, 0.5).setDepth(d + 0.0001);
     }
 
     // ---- the screen, set in a black bezel with a bevelled inner edge, a
@@ -185,11 +187,13 @@ export class Cabinet {
     // floating cost badge
     this.badgeBox = scene.add.rectangle(0, 0, 12, 11, PALETTE.black, 0.75).setStrokeStyle(1, PALETTE.gold);
     this.badgeText = centerText(scene, 0, 0, String(def.cost), PALETTE.gold);
-    this.badge = scene.add.container(x, y - CAB_H - 8, [this.badgeBox, this.badgeText]).setDepth(500);
+    // (off to the top right corner: over the middle it sat on the marquee's
+    // letters, and higher up it ran into room 4's GAME CORNER sign)
+    this.badge = scene.add.container(x + CAB_W / 2 + 1, y - CAB_H - 6, [this.badgeBox, this.badgeText]).setDepth(500);
     this.badge.setVisible(!night);
 
     if (!night) {
-      scene.tweens.add({ targets: this.badge, y: y - CAB_H - 10, duration: 1200, yoyo: true, repeat: -1 });
+      scene.tweens.add({ targets: this.badge, y: y - CAB_H - 8, duration: 1200, yoyo: true, repeat: -1 });
     }
   }
 
