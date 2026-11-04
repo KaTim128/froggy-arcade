@@ -156,20 +156,26 @@ export function openPack(rng: () => number = Math.random): Result {
 /** The admin's test zone, CHOOSE ANY RECRUIT on: recruiting lets them pick any creature. */
 export const canChooseRecruit = (): boolean => cfgStr('clash.pickRecruit') === 'yes';
 
-/** That pick: the creature chosen joins the team, free (a test, not a pull). */
-export function recruitChosen(id: string): Result {
+/**
+ * That pick: every creature chosen joins the team, free (a test, not a
+ * pull) -- one, or several at once (user, 4 Nov: "admin can recruit
+ * multiple at once").
+ */
+export function recruitChosen(ids: string | string[]): Result {
   const c = C();
+  const list = (Array.isArray(ids) ? ids : [ids]).filter((id) => creatureById(id));
   if (!canChooseRecruit()) return no('NOT AVAILABLE.');
   if (c.battle) return no('FINISH THE BATTLE FIRST.');
-  const cr = creatureById(id);
-  if (!cr) return no('NO SUCH CREATURE.');
+  if (!list.length) return no('PICK AT LEAST ONE.');
   edit((s) => {
-    const uid = s.nextUid++;
-    s.owned.push({ uid, id, wins: 0, xp: 0 });
-    if (!s.owned.some((o) => o.uid === s.active)) s.active = uid;
+    for (const id of list) {
+      const uid = s.nextUid++;
+      s.owned.push({ uid, id, wins: 0, xp: 0 });
+      if (!s.owned.some((o) => o.uid === s.active)) s.active = uid;
+    }
   });
   store.flush();
-  return ok(`${cr.name.toUpperCase()} JOINS YOU.`);
+  return ok(list.length === 1 ? `${creatureById(list[0])!.name.toUpperCase()} JOINS YOU.` : `${list.length} CREATURES JOIN YOU.`);
 }
 
 /** Turn over one of the nine: it is yours, and the pack is spent. */

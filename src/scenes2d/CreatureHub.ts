@@ -106,6 +106,8 @@ export class CreatureHub extends Phaser.Scene {
   private screen: Screen = 'home';
   /** Which page of every creature the admin's recruit is on. */
   private choosePage = 0;
+  /** The creatures ticked on that screen, to recruit together. */
+  private chosen = new Set<string>();
   /** A move's card, when one is open: over the screen and its creatures. */
   private modal: Phaser.GameObjects.Container | null = null;
   private layer!: Phaser.GameObjects.Container;
@@ -976,6 +978,7 @@ export class CreatureHub extends Phaser.Scene {
     if (canChooseRecruit()) {
       L.add(button(this, GAME_W / 2, 132, 'CHOOSE ONE', () => {
         this.choosePage = 0;
+        this.chosen.clear();
         this.go('choose');
       }, { width: 96, height: 13 }));
       L.add(centerSmall(this, GAME_W / 2, 150, 'ADMIN TEST: PICK ANY CREATURE, FREE', PALETTE.gold));
@@ -1001,7 +1004,7 @@ export class CreatureHub extends Phaser.Scene {
    */
   private chooseAny(): void {
     const L = this.layer;
-    L.add(centerText(this, GAME_W / 2, 22, 'CHOOSE A CREATURE', PALETTE.cream));
+    L.add(centerText(this, GAME_W / 2, 22, 'TAP TO PICK - AS MANY AS YOU LIKE', PALETTE.cream));
     const cols = 8;
     const rows = 3;
     const per = cols * rows;
@@ -1014,16 +1017,26 @@ export class CreatureHub extends Phaser.Scene {
       const x = x0 + (i % cols) * (cw + 3);
       const y = 30 + Math.floor(i / cols) * (ch + 3);
       const el = ELEMENTS[cr.element];
-      const cell = this.add.rectangle(x, y, cw, ch, 0x161a2c).setOrigin(0, 0).setStrokeStyle(1, el.col);
+      // ticked: gold, filled, with a tick in the corner; tap again to untick
+      const on = this.chosen.has(cr.id);
+      const fill = on ? 0x3a3418 : 0x161a2c;
+      const cell = this.add.rectangle(x, y, cw, ch, fill).setOrigin(0, 0).setStrokeStyle(on ? 2 : 1, on ? PALETTE.gold : el.col);
       cell.setInteractive({ useHandCursor: true });
-      cell.on('pointerover', () => (cell.setFillStyle(0x2a3050).setStrokeStyle(1, PALETTE.gold), audio.sfx('ui_hover')));
-      cell.on('pointerout', () => cell.setFillStyle(0x161a2c).setStrokeStyle(1, el.col));
+      cell.on('pointerover', () => (cell.setFillStyle(on ? 0x4a4420 : 0x2a3050), audio.sfx('ui_hover')));
+      cell.on('pointerout', () => cell.setFillStyle(fill));
       cell.on('pointerdown', () => {
         audio.sfx('ui_blip');
-        this.say(recruitChosen(cr.id));
-        this.go('home');
+        if (on) this.chosen.delete(cr.id);
+        else this.chosen.add(cr.id);
+        this.draw();
       });
       L.add(cell);
+      if (on) {
+        L.add(this.add.rectangle(x + cw - 9, y + 2, 7, 7, PALETTE.gold).setOrigin(0, 0));
+        const tick = this.add.graphics();
+        tick.lineStyle(1.5, 0x141834, 1).beginPath().moveTo(x + cw - 8, y + 5.5).lineTo(x + cw - 6, y + 7.5).lineTo(x + cw - 3, y + 3.5).strokePath();
+        L.add(tick);
+      }
       L.add(this.add.rectangle(x + 3, y + ch - 5, cw - 6, 2, el.col).setOrigin(0, 0));
       this.shown.push({ c: cr, x: x + cw / 2, y: y + 19, s: 1.0, f: 1 });
     });
@@ -1031,6 +1044,14 @@ export class CreatureHub extends Phaser.Scene {
     L.add(button(this, GAME_W / 2 - 50, py, '<', () => ((this.choosePage = (this.choosePage + pages - 1) % pages), this.draw()), { width: 24, height: 12 }));
     L.add(centerText(this, GAME_W / 2, py - 3, `${this.choosePage + 1} / ${pages}`, PALETTE.fog));
     L.add(button(this, GAME_W / 2 + 50, py, '>', () => ((this.choosePage = (this.choosePage + 1) % pages), this.draw()), { width: 24, height: 12 }));
+    // (left: let go of every tick; right: recruit them all, at once)
+    const n = this.chosen.size;
+    L.add(button(this, 38, py, 'CLEAR', () => (this.chosen.clear(), this.draw()), { width: 52, height: 12, disabled: !n }));
+    L.add(button(this, GAME_W - 46, py, n ? `RECRUIT ${n}` : 'RECRUIT', () => {
+      this.say(recruitChosen([...this.chosen]));
+      this.chosen.clear();
+      this.go('home');
+    }, { width: 72, height: 12, disabled: !n }));
   }
 
   /** The nine cards.  Face down until one is chosen; then that one, then the rest. */
