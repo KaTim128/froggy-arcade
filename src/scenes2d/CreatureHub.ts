@@ -36,7 +36,7 @@ import { backPlate } from '../ui/plate';
 import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { battleXp, levelOf, xpProgress } from '../game/creatureLevel';
 import { traitsOf } from '../game/creatureTraits';
-import { MINI_COST, MINI_INFO, MINI_WIN, drawPool, roleOf, startMini, type MiniKind } from '../game/creatureMinis';
+import { MINI_INFO, MINI_MIN_COST, MINI_PRICE, TEAM_SIZE, drawPool, roleOf, startMini, type MiniKind } from '../game/creatureMinis';
 import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
@@ -325,7 +325,17 @@ export class CreatureHub extends Phaser.Scene {
       t1 = smallText(this, tx, !sub ? h / 2 - 3 : short ? h / 2 - 6 : h / 2 - 7, label, disabled ? PALETTE.ash : PALETTE.cream);
     }
     const parts: Phaser.GameObjects.GameObject[] = [bg, edge, shine, g, t1];
-    if (sub) parts.push(short ? smallText(this, tx, h / 2 + 3, sub, disabled ? 0x4a4e68 : PALETTE.fog) : text(this, tx, h / 2 + 2, sub, disabled ? 0x4a4e68 : PALETTE.fog));
+    if (sub) {
+      // (the second line keeps the same rule: the small type when the big one
+      // would reach the outline)
+      const subCol = disabled ? 0x4a4e68 : PALETTE.fog;
+      let t2 = short ? smallText(this, tx, h / 2 + 3, sub, subCol) : text(this, tx, h / 2 + 2, sub, subCol);
+      if (tx + t2.width > w - 3) {
+        t2.destroy();
+        t2 = smallText(this, tx, h / 2 + 3, sub, subCol);
+      }
+      parts.push(t2);
+    }
     c.add(parts);
     L.add(c);
     if (disabled) return;
@@ -658,7 +668,7 @@ export class CreatureHub extends Phaser.Scene {
     const t = traitsOf(c);
     M.add(smallText(this, x + 6, y + 58, t.style, 0x9ad0ff));
     M.add(smallText(this, x + 6, y + 66, t.element.slice(0, 76), el.light));
-    // ---- its ULTIMATE (game/ultimates): up 30s into a fight, then every 30s
+    // ---- its ULTIMATE (game/ultimates): up 30s into a fight, then every 25s
     const ult = ultimateOf(c.id);
     const ulines = ult ? wrapWords(`ULTIMATE - ${ult.name}: ${ult.desc}`.toUpperCase(), 75).slice(0, 3) : [];
     ulines.forEach((ln, i) => M.add(smallText(this, x + 6, y + 74 + i * 7, ln, i ? 0xf0d890 : 0xffd45e)));
@@ -819,25 +829,26 @@ export class CreatureHub extends Phaser.Scene {
   private minis(): void {
     const L = this.layer;
     L.add(text(this, 8, 20, 'MINI GAMES', PALETTE.gold));
-    L.add(smallText(this, 8, 30, `EVERY MODE: ${MINI_COST} TOKENS IN, ${MINI_WIN} FOR A WIN, NOTHING FOR A LOSS.`, PALETTE.fog));
+    L.add(smallText(this, 8, 30, 'THE STAKE IS TAKEN ONCE, THE PRIZE PAID ON A WIN. NOTHING FOR A LOSS.', PALETTE.fog));
     L.add(smallText(this, 8, 37, 'YOU FIGHT WITH THE CREATURES ON OFFER, ALL AT THE SAME LEVEL. NO XP.', PALETTE.fog));
     const kinds: Array<[MiniKind, number, string, (g: Phaser.GameObjects.Graphics, x: number, y: number, col: number) => void]> = [
       ['melee', 0xff5a6a, 'PICK 1 OF 3 - UP CLOSE', (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col)],
       ['ranged', 0x6ad8f0, 'PICK 1 OF 3 - AT RANGE', (g, x, y, col) => drawAttackIcon(g, 'bolt', x, y, col)],
-      ['team', PALETTE.gold, 'PICK 3 OF 10 - ONE AT A TIME', (g, x, y, col) => {
+      ['team', PALETTE.gold, 'PICK 5 OF 12 - ONE AT A TIME', (g, x, y, col) => {
         g.fillStyle(col, 1).fillCircle(x - 5, y + 2, 3).fillCircle(x, y - 2, 3).fillCircle(x + 5, y + 2, 3);
       }],
     ];
     kinds.forEach(([k, col, sub, icon], i) => {
       const y = 48 + i * 34;
-      this.tile(16, y, GAME_W - 32, 28, MINI_INFO[k].title, `${sub}  -  ${MINI_COST} TOKENS`, col, icon, () => {
+      const pr = MINI_PRICE[k];
+      this.tile(16, y, GAME_W - 32, 28, MINI_INFO[k].title, `${sub}  -  ${pr.cost} IN, ${pr.win} TO WIN`, col, icon, () => {
         this.miniKind = k;
         this.miniPool = drawPool(k);
         this.miniPicks = [];
         this.go('minipick');
-      }, ledger.balance() < MINI_COST);
+      }, ledger.balance() < pr.cost);
     });
-    if (ledger.balance() < MINI_COST) L.add(centerSmall(this, GAME_W / 2, 152, `YOU NEED ${MINI_COST} TOKENS TO PLAY.`, 0xff9a9a));
+    if (ledger.balance() < MINI_MIN_COST) L.add(centerSmall(this, GAME_W / 2, 152, `YOU NEED ${MINI_MIN_COST} TOKENS TO PLAY.`, 0xff9a9a));
   }
 
   /**
@@ -849,15 +860,18 @@ export class CreatureHub extends Phaser.Scene {
   private miniPick(): void {
     const L = this.layer;
     const kind = this.miniKind;
-    const want = kind === 'team' ? 3 : 1;
+    const want = kind === 'team' ? TEAM_SIZE : 1;
+    const pr = MINI_PRICE[kind];
     L.add(text(this, 8, 20, MINI_INFO[kind].title, PALETTE.gold));
     // (two short lines, never one that wraps into the cards)
     L.add(smallText(this, 8, 30, MINI_INFO[kind].rules.join(' '), PALETTE.fog));
-    L.add(smallText(this, 8, 37, `${MINI_COST} TOKENS IN, ${MINI_WIN} FOR A WIN.`, PALETTE.gold));
+    L.add(smallText(this, 8, 37, `${pr.cost} TOKENS IN, ${pr.win} FOR A WIN.`, PALETTE.gold));
     const team = kind === 'team';
-    const cols = team ? 5 : 3;
-    const cw = team ? 58 : 92;
-    const ch = team ? 54 : 100;
+    // (5v5: twelve on offer, four across in three rows -- six across left a
+    // card too narrow for the longest name to sit inside its outline)
+    const cols = team ? 4 : 3;
+    const cw = team ? 74 : 92;
+    const ch = team ? 36 : 100;
     const gap = team ? 4 : 10;
     const x0 = Math.round((GAME_W - (cols * cw + (cols - 1) * gap)) / 2);
     const y0 = team ? 46 : 46;
@@ -865,21 +879,25 @@ export class CreatureHub extends Phaser.Scene {
       const c = creatureById(id);
       if (!c) return;
       const x = x0 + (i % cols) * (cw + gap);
-      const y = y0 + Math.floor(i / cols) * (ch + 4);
+      const y = y0 + Math.floor(i / cols) * (ch + (team ? 3 : 4));
       const on = this.miniPicks.indexOf(id);
       const el = ELEMENTS[c.element];
       const bg = this.add.rectangle(x, y, cw, ch, on >= 0 ? 0x2a2a14 : 0x181c36).setOrigin(0, 0).setStrokeStyle(on >= 0 ? 2 : 1, on >= 0 ? PALETTE.gold : el.col);
       L.add(bg);
-      const artH = team ? 24 : 44;
+      const artH = team ? 15 : 44;
       L.add(this.add.rectangle(x + 2, y + 2, cw - 4, artH, el.dark, 0.55).setOrigin(0, 0));
-      this.shown.push({ c, x: x + cw / 2, y: y + artH * 0.62, s: team ? 1.05 : 1.7, f: 1 });
+      this.shown.push({ c, x: x + cw / 2, y: y + artH * 0.62, s: team ? 0.8 : 1.7, f: 1 });
       // the name: the big type if it fits, the small one if not
       const nm = c.name.toUpperCase();
       const big = nm.length * 6 <= cw - 6;
       L.add(big ? centerText(this, x + cw / 2, y + artH + 7, nm, PALETTE.cream) : centerSmall(this, x + cw / 2, y + artH + 5, nm, PALETTE.cream));
       const role = roleOf(c).toUpperCase();
       const t = traitsOf(c);
-      L.add(centerSmall(this, x + cw / 2, y + artH + 13, team ? `${role} ${c.hp}HP` : `${role} - ${c.hp} HP`, el.light));
+      // (one line if it fits the card -- the small type is 4 a letter --
+      // otherwise the role and the health on a line each)
+      const one = team ? `${role} ${c.hp}HP` : `${role} - ${c.hp} HP`;
+      if (one.length * 4 + 4 <= cw) L.add(centerSmall(this, x + cw / 2, y + artH + 13, one, el.light));
+      else L.add([centerSmall(this, x + cw / 2, y + artH + 13, role, el.light), centerSmall(this, x + cw / 2, y + artH + 20, `${c.hp} HP`, el.light)]);
       if (!team) {
         L.add(centerSmall(this, x + cw / 2, y + artH + 21, t.style.split(':')[0], PALETTE.fog));
         L.add(centerSmall(this, x + cw / 2, y + artH + 29, `SPEED ${c.speed}`, PALETTE.fog));
@@ -897,8 +915,8 @@ export class CreatureHub extends Phaser.Scene {
       });
     });
     const ready = this.miniPicks.length === want;
-    const label = ready ? `FIGHT - ${MINI_COST} TOKENS` : team ? `PICK ${want - this.miniPicks.length} MORE` : 'PICK ONE';
-    L.add(button(this, GAME_W / 2, GAME_H - 12, label, () => {
+    const label = ready ? `FIGHT - ${pr.cost} TOKENS` : team ? `PICK ${want - this.miniPicks.length} MORE` : 'PICK ONE';
+    L.add(button(this, GAME_W / 2, GAME_H - 9, label, () => {
       if (!ready) return;
       const r = startMini(kind, this.miniPicks);
       if (!r.ok) {

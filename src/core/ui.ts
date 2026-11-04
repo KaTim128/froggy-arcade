@@ -220,9 +220,21 @@ export function button(
   // touched its edge.  Here the ink is measured and put on whole pixels, with
   // at least 4 clear either side -- a label too long for the width it was
   // given widens its box rather than running into the outline (log #49/#51).
+  //
+  // ---- AND SMALLER TEXT BEFORE A WIDER BOX (user, 4 Nov: "make the text
+  // smaller if there's no space to fit in the button").  A label too long for
+  // the width it was given is set in the small type, which fits half as much
+  // again; only one too long even for that widens the box.  Either way the
+  // text never touches the outline.
   const lines = label.split('\n');
-  const inkW = Math.max(0, ...lines.map((l) => [...l].length * FONT_ADVANCE - 1));
-  const inkH = lines.length * 9 - 3;
+  const bigInk = (ls: string[]): number => Math.max(0, ...ls.map((l) => [...l].length * FONT_ADVANCE - 1));
+  const smallInk = (ls: string[]): number => Math.max(0, ...ls.map((l) => [...l].length * SMALL_ADVANCE - 1));
+  const roomFor = (iw: number): boolean => opts.width === undefined || iw + 8 <= opts.width;
+  let small = !!label && !roomFor(bigInk(lines)) && roomFor(smallInk(lines));
+  const inkOf = (ls: string[], sm: boolean): { w: number; h: number } => (sm ? { w: smallInk(ls), h: ls.length * 7 - 2 } : { w: bigInk(ls), h: ls.length * 9 - 3 });
+  const ink0 = inkOf(lines, small);
+  const inkW = ink0.w;
+  const inkH = ink0.h;
   const w = Math.max(opts.width ?? Math.max(48, label.length * 6 + 12), label ? inkW + 8 : 0);
   const h = Math.max(opts.height ?? 15, label ? inkH + 4 : 0);
   const fill = opts.fill ?? PALETTE.plum;
@@ -231,17 +243,28 @@ export function button(
   const left = -Math.floor(w / 2);
   const top = -Math.floor(h / 2);
   const box = scene.add.rectangle(left, top, w, h, fill).setOrigin(0, 0).setStrokeStyle(1, PALETTE.neon);
-  const lbl = text(scene, left + Math.floor((w - inkW) / 2), top + Math.floor((h - inkH) / 2), label, opts.textColor ?? PALETTE.cream).setOrigin(0, 0);
+  const lx = left + Math.floor((w - inkW) / 2);
+  const ly = top + Math.floor((h - inkH) / 2);
+  const lbl = (small ? smallText(scene, lx, ly, label, opts.textColor ?? PALETTE.cream) : text(scene, lx, ly, label, opts.textColor ?? PALETTE.cream)).setOrigin(0, 0);
   if (lines.length > 1) lbl.setCenterAlign();
   // (a label changed later -- CASH OUT 5, a countdown -- is put back in the
-  // middle by its new ink, as the old centred origin used to do)
+  // middle by its new ink, as the old centred origin used to do; and it goes
+  // to the small type, or back, by whether it fits the box)
   const setText = lbl.setText.bind(lbl);
   lbl.setText = (v: string | string[]): Phaser.GameObjects.BitmapText => {
-    setText(v);
     const ls = String(Array.isArray(v) ? v.join('\n') : v).split('\n');
-    const iw = Math.max(0, ...ls.map((l) => [...l].length * FONT_ADVANCE - 1));
-    lbl.x = left + Math.floor((w - iw) / 2);
-    lbl.y = top + Math.floor((h - (ls.length * 9 - 3)) / 2);
+    const wantSmall = bigInk(ls) + 8 > w && smallInk(ls) + 8 <= w;
+    if (wantSmall !== small) {
+      small = wantSmall;
+      if (small) {
+        ensureSmallFont(scene);
+        lbl.setFont(SMALL_FONT_KEY, SMALL_ADVANCE);
+      } else lbl.setFont(FONT_KEY, FONT_ADVANCE);
+    }
+    setText(small ? ls.map(smallSafe).join('\n') : v);
+    const ink = inkOf(ls, small);
+    lbl.x = left + Math.floor((w - ink.w) / 2);
+    lbl.y = top + Math.floor((h - ink.h) / 2);
     return lbl;
   };
   const c = scene.add.container(x, y, [box, lbl]);
