@@ -38,6 +38,7 @@ import { SPECIALS } from '../game/specials';
 import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, bossById, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel, xpProgress } from '../game/creatureLevel';
+import { MINI_INFO, MINI_LEVEL, MINI_WIN, abandonMini, boutOver, currentMini } from '../game/creatureMinis';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, EVADE_CHANCE, EVADE_S, FOCUS_CRIT, FOCUS_S, FURY_MUL, FURY_S, QUICK_RATE, QUICK_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, WALL_DEFAULT, WALL_SPECS, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
@@ -410,7 +411,7 @@ interface Brain {
 
 export class CreatureArena extends Phaser.Scene {
   private biome!: Biome;
-  private mode: 'zone' | 'ladder' | 'training' | 'story' = 'zone';
+  private mode: 'zone' | 'ladder' | 'training' | 'story' | 'mini' = 'zone';
   /** Story: which world, which of its stages, and who (drawn when the fight opens, paid at the bell). */
   private storyWorld = 0;
   private storyStage = 0;
@@ -540,7 +541,7 @@ export class CreatureArena extends Phaser.Scene {
   /** Back after a reload with the battle already open and paid for (core/session). */
   private resumed = false;
 
-  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training' | 'story'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec; world?: number; node?: number }): void {
+  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training' | 'story' | 'mini'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec; world?: number; node?: number }): void {
     this.storyWorld = data.world ?? 0;
     this.storyNode = typeof data.node === 'number' ? data.node : undefined;
     this.vsShown = false;
@@ -597,9 +598,15 @@ export class CreatureArena extends Phaser.Scene {
     this.foeLevel = 0;
     const own = activeOwned();
     const sim = this.simSpec;
+    // ---- A MINI GAME: the run's own creatures, both at the mini level
+    const mini = this.mode === 'mini' ? currentMini() : null;
+    if (this.mode === 'mini' && (!mini || mini.done || !mini.me.length || !mini.foe.length)) {
+      this.scene.start('CreatureHub', { from: this.from, screen: 'minis', msg: 'NO MINI GAME IS ON.' });
+      return;
+    }
     // (yours fights at its level: see creatureLevel)
-    const mine = sim ? withLevel(creatureById(sim.me)!, sim.level) : own ? ownedCreature(own) : undefined;
-    this.myLevel = sim ? sim.level : own ? levelOf(own.xp ?? 0) : 1;
+    const mine = sim ? withLevel(creatureById(sim.me)!, sim.level) : mini ? withLevel(creatureById(mini.me[0])!, MINI_LEVEL) : own ? ownedCreature(own) : undefined;
+    this.myLevel = sim ? sim.level : mini ? MINI_LEVEL : own ? levelOf(own.xp ?? 0) : 1;
     if (!mine) {
       this.scene.start('CreatureHub', { from: this.from, msg: 'YOU NEED A CREATURE TO FIGHT.' });
       return;
@@ -608,7 +615,11 @@ export class CreatureArena extends Phaser.Scene {
     // drawn when the run was paid for: the place and the opponent come from
     // it, never from here, so nothing about it can be re-rolled.
     let wild: Creature;
-    if (sim) {
+    if (mini) {
+      wild = withLevel(creatureById(mini.foe[0])!, MINI_LEVEL);
+      this.foeLevel = MINI_LEVEL;
+      this.skill = 0.6;
+    } else if (sim) {
       wild = withLevel(creatureById(sim.foe)!, sim.level);
       this.foeLevel = sim.level;
       this.skill = sim.skill;
@@ -656,7 +667,7 @@ export class CreatureArena extends Phaser.Scene {
     // THE ADMIN'S TEST ZONE (core/gameConfig): the opponent or boss asked
     // for, at the level the fight would have had (never in a ladder run,
     // whose steps were drawn and paid for)
-    if (!sim && this.mode !== 'ladder') {
+    if (!sim && this.mode !== 'ladder' && this.mode !== 'mini') {
       const lv = this.foeLevel || this.myLevel;
       const wantBoss = cfgStr('clash.boss');
       const wantFoe = cfgStr('clash.foe');
@@ -682,6 +693,9 @@ export class CreatureArena extends Phaser.Scene {
     // (a boss is bigger, not huge: it has to fit the arena and be fair to hit)
     this.foe = this.fighter(foeC, ARENA.x + ARENA.w - 40, ARENA.y + ARENA.h / 2, -1, this.boss ? 1.35 : 1);
     this.lastFoePos = { x: this.foe.x, y: this.foe.y, stuck: 0 };
+    // (3v3: whoever won the last bout walks in with the health it had)
+    if (mini?.myHp !== undefined) this.me.hp = Math.max(1, Math.min(this.me.max, mini.myHp));
+    if (mini?.foeHp !== undefined) this.foe.hp = Math.max(1, Math.min(this.foe.max, mini.foeHp));
 
     this.paintGround();
     this.g = this.add.graphics().setDepth(10);
@@ -841,7 +855,8 @@ export class CreatureArena extends Phaser.Scene {
     // (a reload into a battle already paid for: the bell, and no second stake)
     const open = this.resumed && !!store.get().creatures.battle;
     this.resumed = false;
-    if (!this.training && !open) {
+    // (a mini game was paid for when it was picked: nothing more at the bell)
+    if (!this.training && !open && this.mode !== 'mini') {
       const r = this.mode === 'ladder' ? startLadderBattle() : this.mode === 'story' ? startStory(this.storyWorld, this.storyStage) : startBattle(this.biome.id, this.foe.c.id);
       if (!r.ok) {
         this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'trail' : 'map', msg: r.msg });
@@ -1801,6 +1816,30 @@ export class CreatureArena extends Phaser.Scene {
    */
   private confirmLeave(): void {
     if (this.dialog || this.over) return;
+    if (this.mode === 'mini') {
+      const was = this.paused;
+      this.paused = true;
+      this.dialog = confirmDialog(this, {
+        lines: ['LEAVE THIS MINI GAME?', 'THE ENTRY IS GONE AND NOTHING IS PAID.'],
+        confirm: 'CONFIRM LEAVE',
+        edge: 0xc31f2e,
+        onConfirm: () => {
+          this.dialog = null;
+          this.over = true;
+          this.settled = true;
+          abandonMini();
+          this.scene.start('CreatureHub', { from: this.from, screen: 'minis', msg: 'YOU LEFT THE MINI GAME.' });
+        },
+        onCancel: () => {
+          this.dialog?.destroy();
+          this.dialog = null;
+          if (this.started && !was) countBack(() => (this.paused = was));
+          else this.paused = was;
+        },
+      });
+      this.dialog.setDepth(3000);
+      return;
+    }
     const paid = this.started;
     const risk = !paid ? 0 : this.mode === 'ladder' ? LADDER_COST : this.mode === 'story' ? storyPrice(this.storyWorld, this.storyReplay).cost : BATTLE_COST;
     const name = this.me.c.name.toUpperCase();
@@ -4195,6 +4234,10 @@ export class CreatureArena extends Phaser.Scene {
     }
     if (this.settled) return;
     this.settled = true;
+    if (this.mode === 'mini') {
+      this.endMini(won);
+      return;
+    }
     // (what the run had paid before this one, for the run's total)
     const before = store.get().creatures.ladder?.earned ?? 0;
     const r = finishBattle(won, this.foeLevel);
@@ -4247,6 +4290,40 @@ export class CreatureArena extends Phaser.Scene {
       // back to where the fight came from: the run's ladder, or the map
       const screen = ladder ? 'ladder' : story ? 'trail' : 'map';
       box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen, world: this.storyWorld }), { width: 80, height: 13 }));
+    });
+  }
+
+  /**
+   * A MINI GAME BOUT IS OVER.  Duels end the run here; in 3v3 the loser's
+   * creature leaves and, while both sides have somebody left, the next one
+   * walks in against the survivor -- which keeps the health it had.
+   */
+  private endMini(won: boolean): void {
+    const run = currentMini();
+    const kind = run?.kind ?? 'melee';
+    const loser = (won ? this.foe : this.me).c.name.toUpperCase();
+    const r = boutOver(won, Math.max(1, Math.round(won ? this.me.hp : this.foe.hp)));
+    audio.sfx(r.over ? (r.won ? 'cha_ching' : 'death_stinger') : 'bell_ding', 0.6);
+    this.time.delayedCall(700, () => {
+      const box = this.add.container(0, 0).setDepth(2000);
+      const X = GAME_W / 2;
+      const Y = GAME_H / 2;
+      box.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.6).setOrigin(0, 0).setInteractive());
+      box.add(this.add.rectangle(X, Y, 244, 90, PALETTE.ink).setStrokeStyle(1, r.over ? (r.won ? PALETTE.gold : 0xc31f2e) : PALETTE.neon));
+      box.add(centerText(this, X, Y - 34, MINI_INFO[kind].title, PALETTE.ash));
+      if (!r.over && run) {
+        // the next one in
+        const nextMine = creatureById(run.me[0])?.name.toUpperCase() ?? '';
+        const nextFoe = creatureById(run.foe[0])?.name.toUpperCase() ?? '';
+        box.add(centerText(this, X, Y - 20, `${loser} FAINTS!`, won ? PALETTE.gold : 0xff6a6a));
+        box.add(centerText(this, X, Y - 6, `${nextMine}  VS  ${nextFoe}`, PALETTE.cream).setMaxWidth(232));
+        box.add(centerText(this, X, Y + 6, `YOU ${run.me.length} LEFT  -  THEM ${run.foe.length} LEFT`, PALETTE.fog));
+        box.add(button(this, X, Y + 30, 'NEXT BOUT', () => this.scene.start('CreatureArena', { mode: 'mini', from: this.from, biome: BIOMES[Phaser.Math.Between(0, BIOMES.length - 1)].id }), { width: 80, height: 13 }));
+        return;
+      }
+      box.add(centerText(this, X, Y - 20, r.won ? 'VICTORY!' : 'DEFEATED', r.won ? PALETTE.gold : 0xff6a6a));
+      box.add(centerText(this, X, Y - 6, r.won ? `+${MINI_WIN} TOKENS` : 'NO TOKENS THIS TIME', r.won ? PALETTE.gold : PALETTE.ash));
+      box.add(button(this, X, Y + 30, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen: 'minis' }), { width: 80, height: 13 }));
     });
   }
 

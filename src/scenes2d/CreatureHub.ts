@@ -35,6 +35,7 @@ import { backPlate } from '../ui/plate';
 import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { battleXp, levelOf, xpProgress } from '../game/creatureLevel';
 import { traitsOf } from '../game/creatureTraits';
+import { MINI_COST, MINI_INFO, MINI_WIN, drawPool, roleOf, startMini, type MiniKind } from '../game/creatureMinis';
 import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
@@ -42,8 +43,8 @@ import {
 } from '../game/creatures';
 import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
-type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls';
-const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls'];
+type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick';
+const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls', 'minis'];
 
 interface Shown {
   c: { element: Creature['element']; body: Creature['body'] };
@@ -221,6 +222,10 @@ export class CreatureHub extends Phaser.Scene {
 
   /** BACK: a world's trail goes back to the map of worlds; everything else to the team. */
   private back(): void {
+    if (this.screen === 'minipick') {
+      this.go('minis');
+      return;
+    }
     if (this.screen === 'trail') {
       this.markTo = WORLD_AT[this.storyW];
       this.mark = { x: WORLD_AT[this.storyW][0], y: WORLD_AT[this.storyW][1] - 20 };
@@ -267,7 +272,7 @@ export class CreatureHub extends Phaser.Scene {
     if (top) {
       // (LEAVE is in the pause menu: Esc on a keyboard, the gear on a phone)
     } else if (!(this.screen === 'pack' && this.picked)) L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.back(), { width: 44, height: 11 }));
-    ({ home: () => this.home(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), story: () => this.story(), trail: () => this.trail(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
+    ({ home: () => this.home(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), story: () => this.story(), trail: () => this.trail(), ladder: () => this.ladder(), controls: () => this.controls(), minis: () => this.minis(), minipick: () => this.miniPick() })[this.screen]();
     // (on the pack screen the line keeps to the right-hand column, clear of
     // the cards; once one is picked its own panel says who joined)
     const packMsg = this.screen === 'pack';
@@ -299,8 +304,10 @@ export class CreatureHub extends Phaser.Scene {
     g.fillStyle(0x0a0d1e, 1).fillRect(7, (h - 18) / 2, 18, 18);
     g.lineStyle(1, well, 0.7).strokeRect(7.5, (h - 18) / 2 + 0.5, 17, 17);
     icon(g, 16, h / 2, disabled ? PALETTE.ash : col);
-    const t1 = text(this, 30, h / 2 - 9, label, disabled ? PALETTE.ash : PALETTE.cream);
-    const t2 = text(this, 30, h / 2 + 2, sub, disabled ? 0x4a4e68 : PALETTE.fog);
+    // (a short tile has room for one line of the big type and one of the small)
+    const short = h < 24;
+    const t1 = text(this, 30, short ? h / 2 - 8 : h / 2 - 9, label, disabled ? PALETTE.ash : PALETTE.cream);
+    const t2 = short ? smallText(this, 30, h / 2 + 3, sub, disabled ? 0x4a4e68 : PALETTE.fog) : text(this, 30, h / 2 + 2, sub, disabled ? 0x4a4e68 : PALETTE.fog);
     c.add([bg, edge, shine, g, t1, t2]);
     L.add(c);
     if (disabled) return;
@@ -616,7 +623,7 @@ export class CreatureHub extends Phaser.Scene {
     const tx = 104;
     L.add(this.add.rectangle(tx, y, 94, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
     L.add(text(this, tx + 4, y + 3, `TEAM ${c.owned.length}/${MAX_OWNED}`, PALETTE.cream));
-    L.add(smallText(this, tx + 4, y + 13, c.owned.length > 1 ? 'TAP ONE: MAKE IT MAIN' : 'RECRUIT MORE TO PICK FROM', 0x6a7090));
+    L.add(smallText(this, tx + 4, y + 13, c.owned.length > 1 ? 'TAP ONE: MAKE IT MAIN' : 'RECRUIT TO ADD MORE', 0x6a7090));
     c.owned.forEach((o, i) => {
       const cr = ownedCreature(o);
       if (!cr) return;
@@ -663,21 +670,28 @@ export class CreatureHub extends Phaser.Scene {
     // STORY MODE, in place of the zone battles (user, 28 Oct)
     const sw = Math.min(c.story.cleared, WORLDS.length - 1);
     const storySub = c.story.cleared >= WORLDS.length ? 'ALL WORLDS DONE' : `WORLD ${sw + 1} OF ${WORLDS.length}`;
-    this.tile(mx, 34, mw, 24, 'STORY MODE', resting ? 'FAINTED' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.markTo = WORLD_AT[sw]), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
+    // (six tiles now, 20 high on a 22 step, so MINI GAMES fits without crowding)
+    this.tile(mx, 33, mw, 20, 'STORY MODE', resting ? 'FAINTED' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.markTo = WORLD_AT[sw]), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
     const ladderOpen = c.story.cleared >= WORLDS.length || !!run;
-    this.tile(mx, 61, mw, 24, 'LADDER', !ladderOpen ? 'AFTER STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
+    this.tile(mx, 55, mw, 20, 'LADDER', !ladderOpen ? 'AFTER STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
       for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
     }, () => this.go('ladder'), !act && !run);
     // TRAINING: free, no stake, a dummy that cannot hurt you -- in the place
     // last picked on the zone map
-    this.tile(mx, 88, mw, 24, 'TRAINING', act ? 'FREE, SAFE' : 'NO CREATURE', 0x6ad8f0, (g, x, y, col) => {
+    this.tile(mx, 77, mw, 20, 'TRAINING', act ? 'FREE, SAFE' : 'NO CREATURE', 0x6ad8f0, (g, x, y, col) => {
       // a straw dummy on its post
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 3, 3).fillRect(x - 3, y - 3, 7, 5).fillRect(x, y + 2, 1, 5).fillRect(x - 5, y - 2, 11, 1);
     }, () => this.train(this.biome), !act);
+    // MINI GAMES: duels and 3v3 with creatures of the game's own (user, 4 Nov)
+    this.tile(mx, 99, mw, 20, 'MINI GAMES', `${MINI_COST} IN, ${MINI_WIN} TO WIN`, 0xff9a3c, (g, x, y, col) => {
+      // two crossed claws
+      g.fillStyle(col, 1);
+      for (let k = -4; k <= 4; k++) g.fillRect(x + k, y + k * 0.8, 2, 2).fillRect(x + k, y - k * 0.8, 2, 2);
+    }, () => this.go('minis'));
     const full = c.owned.length >= MAX_OWNED && !busy;
-    this.tile(mx, 115, mw, 24, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : packPrice() ? `${packPrice()} TOKENS` : 'FIRST ONE FREE', 0x8a6aff, (g, x, y, col) => {
+    this.tile(mx, 121, mw, 20, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : packPrice() ? `${packPrice()} TOKENS` : 'FIRST ONE FREE', 0x8a6aff, (g, x, y, col) => {
       g.fillStyle(0x14100c, 1).fillRect(x - 6, y - 5, 9, 12).fillRect(x - 2, y - 7, 9, 12);
       g.fillStyle(col, 0.6).fillRect(x - 5, y - 4, 7, 10);
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
@@ -685,10 +699,112 @@ export class CreatureHub extends Phaser.Scene {
     }, () => this.go(busy ? 'pack' : 'recruit'));
     // (the keys, on a keyboard only: a phone's controls are on the screen -- C7)
     if (!isTouch())
-      this.tile(mx, 142, mw, 24, 'HOW TO PLAY', 'THE BASICS', 0x4ad0c0, (g, x, y, col) => {
+      this.tile(mx, 143, mw, 20, 'HOW TO PLAY', 'THE BASICS', 0x4ad0c0, (g, x, y, col) => {
         g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
         g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
       }, () => this.go('controls'));
+  }
+
+  // ------------------------------------------------------------ mini games
+
+  private miniKind: MiniKind = 'melee';
+  private miniPool: string[] = [];
+  private miniPicks: string[] = [];
+
+  /** THE MINI GAMES MENU: the three modes, what each is, and what it costs. */
+  private minis(): void {
+    const L = this.layer;
+    L.add(text(this, 8, 20, 'MINI GAMES', PALETTE.gold));
+    L.add(smallText(this, 8, 30, `EVERY MODE: ${MINI_COST} TOKENS IN, ${MINI_WIN} FOR A WIN, NOTHING FOR A LOSS.`, PALETTE.fog));
+    L.add(smallText(this, 8, 37, 'YOU FIGHT WITH THE CREATURES ON OFFER, ALL AT THE SAME LEVEL. NO XP.', PALETTE.fog));
+    const kinds: Array<[MiniKind, number, string, (g: Phaser.GameObjects.Graphics, x: number, y: number, col: number) => void]> = [
+      ['melee', 0xff5a6a, 'PICK 1 OF 3 - UP CLOSE', (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col)],
+      ['ranged', 0x6ad8f0, 'PICK 1 OF 3 - AT RANGE', (g, x, y, col) => drawAttackIcon(g, 'bolt', x, y, col)],
+      ['team', PALETTE.gold, 'PICK 3 OF 10 - ONE AT A TIME', (g, x, y, col) => {
+        g.fillStyle(col, 1).fillCircle(x - 5, y + 2, 3).fillCircle(x, y - 2, 3).fillCircle(x + 5, y + 2, 3);
+      }],
+    ];
+    kinds.forEach(([k, col, sub, icon], i) => {
+      const y = 48 + i * 34;
+      this.tile(16, y, GAME_W - 32, 28, MINI_INFO[k].title, `${sub}  -  ${MINI_COST} TOKENS`, col, icon, () => {
+        this.miniKind = k;
+        this.miniPool = drawPool(k);
+        this.miniPicks = [];
+        this.go('minipick');
+      }, ledger.balance() < MINI_COST);
+    });
+    if (ledger.balance() < MINI_COST) L.add(centerSmall(this, GAME_W / 2, 152, `YOU NEED ${MINI_COST} TOKENS TO PLAY.`, 0xff9a9a));
+  }
+
+  /**
+   * THE PICK.  The pool on cards -- the creature, its role, its health and
+   * reach -- tap to choose (tap again to drop it), STATS to read it in full,
+   * and FIGHT once the pick is complete.  The cards are sized to fit their
+   * words: a long name shrinks to the small type rather than run off.
+   */
+  private miniPick(): void {
+    const L = this.layer;
+    const kind = this.miniKind;
+    const want = kind === 'team' ? 3 : 1;
+    L.add(text(this, 8, 20, MINI_INFO[kind].title, PALETTE.gold));
+    // (two short lines, never one that wraps into the cards)
+    L.add(smallText(this, 8, 30, MINI_INFO[kind].rules.join(' '), PALETTE.fog));
+    L.add(smallText(this, 8, 37, `${MINI_COST} TOKENS IN, ${MINI_WIN} FOR A WIN.`, PALETTE.gold));
+    const team = kind === 'team';
+    const cols = team ? 5 : 3;
+    const cw = team ? 58 : 92;
+    const ch = team ? 54 : 100;
+    const gap = team ? 4 : 10;
+    const x0 = Math.round((GAME_W - (cols * cw + (cols - 1) * gap)) / 2);
+    const y0 = team ? 46 : 46;
+    this.miniPool.forEach((id, i) => {
+      const c = creatureById(id);
+      if (!c) return;
+      const x = x0 + (i % cols) * (cw + gap);
+      const y = y0 + Math.floor(i / cols) * (ch + 4);
+      const on = this.miniPicks.indexOf(id);
+      const el = ELEMENTS[c.element];
+      const bg = this.add.rectangle(x, y, cw, ch, on >= 0 ? 0x2a2a14 : 0x181c36).setOrigin(0, 0).setStrokeStyle(on >= 0 ? 2 : 1, on >= 0 ? PALETTE.gold : el.col);
+      L.add(bg);
+      const artH = team ? 24 : 44;
+      L.add(this.add.rectangle(x + 2, y + 2, cw - 4, artH, el.dark, 0.55).setOrigin(0, 0));
+      this.shown.push({ c, x: x + cw / 2, y: y + artH * 0.62, s: team ? 1.05 : 1.7, f: 1 });
+      // the name: the big type if it fits, the small one if not
+      const nm = c.name.toUpperCase();
+      const big = nm.length * 6 <= cw - 6;
+      L.add(big ? centerText(this, x + cw / 2, y + artH + 7, nm, PALETTE.cream) : centerSmall(this, x + cw / 2, y + artH + 5, nm, PALETTE.cream));
+      const role = roleOf(c).toUpperCase();
+      const t = traitsOf(c);
+      L.add(centerSmall(this, x + cw / 2, y + artH + 13, team ? `${role} ${c.hp}HP` : `${role} - ${c.hp} HP`, el.light));
+      if (!team) {
+        L.add(centerSmall(this, x + cw / 2, y + artH + 21, t.style.split(':')[0], PALETTE.fog));
+        L.add(centerSmall(this, x + cw / 2, y + artH + 29, `SPEED ${c.speed}`, PALETTE.fog));
+        L.add(button(this, x + cw / 2, y + ch - 10, 'STATS', () => this.showStats(c), { width: 46, height: 11, fill: 0x1c2142 }));
+      }
+      if (on >= 0 && team) L.add([this.add.circle(x + 7, y + 7, 5, PALETTE.gold), centerSmall(this, x + 7, y + 5, `${on + 1}`, 0x1a1a22)]);
+      bg.setInteractive({ useHandCursor: true });
+      bg.on('pointerdown', () => {
+        audio.sfx('ui_blip', 0.5);
+        const at = this.miniPicks.indexOf(id);
+        if (at >= 0) this.miniPicks.splice(at, 1);
+        else if (want === 1) this.miniPicks = [id];
+        else if (this.miniPicks.length < want) this.miniPicks.push(id);
+        this.draw();
+      });
+    });
+    const ready = this.miniPicks.length === want;
+    const label = ready ? `FIGHT - ${MINI_COST} TOKENS` : team ? `PICK ${want - this.miniPicks.length} MORE` : 'PICK ONE';
+    L.add(button(this, GAME_W / 2, GAME_H - 12, label, () => {
+      if (!ready) return;
+      const r = startMini(kind, this.miniPicks);
+      if (!r.ok) {
+        this.say(r);
+        this.draw();
+        return;
+      }
+      audio.sfx('cha_ching', 0.5);
+      this.scene.start('CreatureArena', { mode: 'mini', from: this.from, biome: BIOMES[Phaser.Math.Between(0, BIOMES.length - 1)].id });
+    }, { width: 120, height: 13, disabled: !ready }));
   }
 
   private confirmRelease(uid: number, cr: Creature): void {
