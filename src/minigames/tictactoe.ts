@@ -353,51 +353,128 @@ const FROG = 0x46c46e;
 const FROG_DARK = 0x2a7a44;
 
 /**
- * A hand, as a little drawing: the fist, the flat palm, or two fingers out.
- * Drawn pointing right (the player's, from the left of the table) or, with
- * `flip`, pointing left (Froggy's, from the right).  Froggy's has the round
- * pads on its fingertips.
+ * A HAND (user, 4 Nov: "easier to see and understand ... palm facing the
+ * opposite from the screen").  Held UP, the way a hand is thrown, and seen
+ * from the BACK -- the palm faces away from you -- so the three read at a
+ * glance, as they do on any sign:
+ *
+ *   ROCK      a fist: four knuckles in a row along the top, the thumb
+ *             folded in at the side
+ *   PAPER     the hand flat and open: four fingers straight up, a little
+ *             spread, the thumb out to the side
+ *   SCISSORS  two fingers up in a V, the other two folded down, the thumb
+ *             over them
+ *
+ * Yours has fingernails on the fingertips (it is the back of the hand) and a
+ * sleeve cuff; Froggy's is green with the round pads frogs have on their
+ * fingertips.  `flip` mirrors it, so the two thumbs face each other across
+ * the table.  `k` scales it: about 37 tall at 1.
  */
 function drawHand(s: Phaser.Scene, kind: Hand, x: number, y: number, k: number, col: number, flip: boolean): Phaser.GameObjects.Container {
   const frog = col === FROG;
   const dark = frog ? FROG_DARK : SKIN_DARK;
+  const light = frog ? 0x7ae69a : 0xf6d2b0;
+  const ink = frog ? 0x1a4a2a : 0x6a4428;
   const c = s.add.container(x, y);
-  const R = (dx: number, dy: number, w: number, h: number, colr: number, r = 2) => {
-    const g = s.add.graphics();
-    g.fillStyle(dark, 1).fillRoundedRect(dx - w / 2 - 1, dy - h / 2 - 1, w + 2, h + 2, r + 1);
-    g.fillStyle(colr, 1).fillRoundedRect(dx - w / 2, dy - h / 2, w, h, r);
-    c.add(g);
-  };
-  const pad = (dx: number, dy: number) => {
-    if (frog) c.add(s.add.circle(dx, dy, 2.2, 0x6fe08e).setStrokeStyle(0.8, dark));
-  };
-  // the wrist and the back of the hand
-  R(-16, 0, 14, 12, col, 3);
-  R(-3, 0, 16, 18, col, 5);
-  if (kind === 'rock') {
-    // fingers curled: four knuckles stacked on the front
-    for (let i = 0; i < 4; i++) R(6, -6 + i * 4, 7, 4, col, 2);
-    R(-2, 7, 10, 4, col, 2); // the thumb across under
-  } else if (kind === 'paper') {
-    // fingers straight out, a little spread
-    for (let i = 0; i < 4; i++) {
-      R(12, -6.6 + i * 4.4, 16, 3.6, col, 1.8);
-      pad(20, -6.6 + i * 4.4);
-    }
-    R(-1, -11, 10, 4, col, 2); // the thumb up
-  } else {
-    // two fingers out in a V, two curled
-    for (const ang of [-16, 10]) {
-      const f = s.add.container(4, -3).setAngle(ang);
+  // two layers: every outline first, then every fill over them, so the parts
+  // join into one hand with one outline round it, not a pile of boxes
+  const lines = s.add.container(0, 0);
+  const fills = s.add.container(0, 0);
+  const marks = s.add.container(0, 0);
+  c.add([lines, fills, marks]);
+  /** A rounded part at (cx, cy), w by h, turned `ang` degrees about its bottom middle. */
+  const part = (cx: number, cy: number, w: number, h: number, r: number, ang = 0, fill = col): Phaser.GameObjects.Container => {
+    const mk = (into: Phaser.GameObjects.Container, grow: number, colr: number): Phaser.GameObjects.Container => {
+      const holder = s.add.container(cx, cy + h / 2).setAngle(ang);
       const g = s.add.graphics();
-      g.fillStyle(dark, 1).fillRoundedRect(-1, -3, 20, 6, 2.5);
-      g.fillStyle(col, 1).fillRoundedRect(0, -2, 18, 4, 2);
-      f.add(g);
-      if (frog) f.add(s.add.circle(18, 0, 2.2, 0x6fe08e).setStrokeStyle(0.8, dark));
-      c.add(f);
-    }
-    R(6, 4.5, 7, 4, col, 2);
-    R(6, 8.5, 7, 4, col, 2);
+      g.fillStyle(colr, 1).fillRoundedRect(-w / 2 - grow, -h - grow, w + grow * 2, h + grow * 2, Math.min(r + grow, (w + grow * 2) / 2));
+      holder.add(g);
+      into.add(holder);
+      return holder;
+    };
+    mk(lines, 1.1, ink);
+    return mk(fills, 0, fill);
+  };
+  /** A mark drawn in a part's own frame (a nail, a crease, a pad). */
+  const onPart = (holder: Phaser.GameObjects.Container, draw: (g: Phaser.GameObjects.Graphics) => void): void => {
+    const m = s.add.container(holder.x, holder.y).setAngle(holder.angle);
+    const g = s.add.graphics();
+    draw(g);
+    m.add(g);
+    marks.add(m);
+  };
+  /** A finger straight up from (fx, base): its nail (or a frog's pad) at the tip. */
+  const finger = (fx: number, base: number, len: number, ang: number): void => {
+    const w = frog ? 4.6 : 4.2;
+    const f = part(fx, base - len / 2, w, len, 2.1, ang);
+    onPart(f, (g) => {
+      if (frog) {
+        // the round sticky pad, wider than the finger
+        g.fillStyle(ink, 1).fillCircle(0, -len + 1.4, 3.1);
+        g.fillStyle(light, 1).fillCircle(0, -len + 1.4, 2.4);
+        g.fillStyle(0xffffff, 0.5).fillCircle(-0.8, -len + 0.7, 0.8);
+      } else {
+        // the nail, and the knuckle creases halfway down
+        g.fillStyle(0xffe8d8, 1).fillRoundedRect(-1.4, -len + 0.8, 2.8, 3.2, 1.2);
+        g.fillStyle(ink, 0.45).fillRect(-1.2, -len * 0.5, 2.4, 0.6).fillRect(-1, -len * 0.5 + 1.2, 2, 0.5);
+      }
+      // the lit edge down one side
+      g.fillStyle(light, 0.7).fillRect(-w / 2 + 0.6, -len + 3, 0.8, len - 5);
+    });
+  };
+  /** A finger folded down: just its knuckle, a bump along the top of the fist. */
+  const knuckle = (fx: number, top: number): void => {
+    const kn = part(fx, top + 3.4, 4.5, 6.6, 2.2);
+    onPart(kn, (g) => {
+      g.fillStyle(light, 0.9).fillRect(-1.2, -6, 2.4, 1);
+      g.fillStyle(ink, 0.55).fillRect(-1.6, -2.4, 3.2, 0.6);
+      // the crease between this knuckle and the next
+      g.fillStyle(ink, 0.8).fillRect(2.05, -6.2, 0.6, 4.5);
+    });
+  };
+
+  // ---- the wrist and the sleeve
+  if (frog) part(0, 16, 11, 9, 3, 0, col);
+  else {
+    part(0, 15.5, 11, 7, 2.5, 0, col);
+    part(0, 19.5, 15, 5, 2, 0, 0x4a6a3a); // the green jacket's cuff
+  }
+  // ---- the back of the hand
+  const back = part(0, 5, 18, 17, 5);
+  onPart(back, (g) => {
+    // shade down the far side, light down the near, two tendons
+    g.fillStyle(dark, 0.5).fillRoundedRect(4.5, -15, 3.5, 13, 2);
+    g.fillStyle(light, 0.55).fillRoundedRect(-8, -15, 2.5, 12, 1.5);
+    g.fillStyle(dark, 0.3).fillRect(-2.5, -13, 0.7, 9).fillRect(1.5, -13, 0.7, 9);
+  });
+  const top = -3.5; // where the fingers meet the back of the hand
+  const xs = [-6.6, -2.2, 2.2, 6.6];
+  if (kind === 'rock') {
+    for (const fx of xs) knuckle(fx, top - 3);
+    // the thumb folded in along the side
+    const th = part(-9.4, 3, 5, 10, 2.4, 14);
+    onPart(th, (g) => g.fillStyle(light, 0.6).fillRect(-1.6, -8, 0.8, 6));
+  } else if (kind === 'paper') {
+    // straight up, a little spread; the middle finger the longest
+    const len = [11.5, 14, 13, 10.5];
+    xs.forEach((fx, i) => finger(fx * 1.05, top + 1, len[i], -9 + i * 6));
+    // the thumb out to the side
+    const th = part(-9, 4, 4.8, 11, 2.3, -48);
+    onPart(th, (g) => {
+      if (frog) {
+        g.fillStyle(ink, 1).fillCircle(0, -9.6, 2.8);
+        g.fillStyle(light, 1).fillCircle(0, -9.6, 2.1);
+      } else g.fillStyle(0xffe8d8, 1).fillRoundedRect(-1.3, -10.2, 2.6, 2.8, 1.1);
+    });
+  } else {
+    // the V: first and second fingers up and apart
+    finger(-2.8, top + 1, 13.5, -24);
+    finger(2.4, top + 1, 14, 22);
+    // the other two folded down, the thumb laid over them
+    knuckle(5.6, top - 1);
+    knuckle(-6.4, top - 1);
+    const th = part(-3, 4, 11, 4.6, 2.3, 0);
+    onPart(th, (g) => g.fillStyle(light, 0.6).fillRect(-4, -3.8, 7, 0.8));
   }
   c.setScale(flip ? -k : k, k);
   return c;
@@ -417,15 +494,15 @@ function startRps(): void {
   menuButton(L);
   L.add(centerText(s, 70, 44, 'YOU', PALETTE.cream));
   L.add(centerText(s, 250, 44, 'FROGGY', PALETTE.mossLight));
-  myHand = drawHand(s, 'rock', 74, 84, 1.6, SKIN, false);
-  hisHand = drawHand(s, 'rock', 246, 84, 1.6, FROG, true);
+  myHand = drawHand(s, 'rock', 74, 80, 1.45, SKIN, false);
+  hisHand = drawHand(s, 'rock', 246, 80, 1.45, FROG, true);
   L.add([myHand, hisHand]);
   L.add(centerText(s, GAME_W / 2, 122, 'PICK YOUR HAND', PALETTE.cream));
   // the three choices, each a button with its hand on it
   HANDS.forEach((h, i) => {
     const x = 92 + i * 68;
     const b = button(s, x, 150, '', () => throwHands(h, null), { width: 58, height: 30 });
-    b.add(drawHand(s, h, -2, -3, 0.6, SKIN, false));
+    b.add(drawHand(s, h, 0, -5, 0.5, SKIN, false));
     b.add(centerText(s, 0, 10, h.toUpperCase(), PALETTE.cream));
     L.add(b);
   });
@@ -456,8 +533,8 @@ function throwHands(mine: Hand, forced: Hand | null): void {
       const hx = hh.x;
       mh.destroy();
       hh.destroy();
-      mh = drawHand(s, mine, mx, y0, 1.6, SKIN, false);
-      hh = drawHand(s, his, hx, y0, 1.6, FROG, true);
+      mh = drawHand(s, mine, mx, y0, 1.45, SKIN, false);
+      hh = drawHand(s, his, hx, y0, 1.45, FROG, true);
       myHand = mh;
       hisHand = hh;
       L.add([mh, hh]);
