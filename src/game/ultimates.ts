@@ -28,6 +28,7 @@
  * extra effect.
  */
 
+import { plainWords } from './plainWords';
 import { BOSSES, CREATURES, ELEMENTS, type Creature } from './creatures';
 import { roleOf } from './creatureMinis';
 
@@ -264,7 +265,8 @@ function build(): Map<string, Ultimate> {
     }
     if (names.has(name)) name = `${c.name.toUpperCase().slice(0, 8)} ${nouns[0]}`;
     names.add(name);
-    const desc = fx.map(words).join('. ') + '.';
+    // (in TILES and SEC, as every other line of Clash text is: game/plainWords)
+    const desc = plainWords(fx.map(words).join('. ') + '.');
     out.set(c.id, { name, desc, fx, range: RANGE[fx[0].k] });
   }
   return out;

@@ -32,7 +32,7 @@ import { cfgNum, cfgPct, cfgStr } from '../core/gameConfig';
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, STARTERS,
+  BATTLE_COST, BATTLE_WIN, BIOMES, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, STARTERS,
   BOSSES, bossById, creatureById, rollLadder, rollPack, zoneFoe, type Biome, type Creature,
 } from './creatures';
 import type { CreatureState, Owned } from './creatureState';
@@ -141,7 +141,6 @@ export function openPack(rng: () => number = Math.random): Result {
   const c = C();
   if (c.battle) return no('FINISH THE BATTLE FIRST.');
   if (c.pending) return no('PICK A CARD FROM THE PACK YOU OPENED FIRST.');
-  if (c.owned.length >= MAX_OWNED) return no(`YOUR TEAM IS FULL (${MAX_OWNED}). RELEASE ONE FIRST.`);
   const price = packPrice(c);
   if (ledger.balance() < price) return no(`A PACK COSTS ${price} TOKENS.`);
   const cards = rollPack(rng);
@@ -163,7 +162,6 @@ export function pickCard(index: number): Result & { id?: string; cards?: string[
   const p = c.pending;
   if (!p) return no('NO PACK IS OPEN.');
   if (!Number.isInteger(index) || index < 0 || index > 8) return no('PICK ONE OF THE NINE.');
-  if (c.owned.length >= MAX_OWNED) return no(`YOUR TEAM IS FULL (${MAX_OWNED}).`);
   const id = p.cards[index];
   edit((s) => {
     const uid = s.nextUid++;
@@ -183,17 +181,6 @@ export function setActive(uid: number): Result {
   return ok('READY TO FIGHT.');
 }
 
-export function release(uid: number): Result {
-  const c = C();
-  if (c.battle) return no('NOT IN THE MIDDLE OF A BATTLE.');
-  const o = c.owned.find((x) => x.uid === uid);
-  if (!o) return no('NOT YOURS.');
-  edit((s) => {
-    s.owned = s.owned.filter((x) => x.uid !== uid);
-    if (s.active === uid) s.active = s.owned[0]?.uid ?? -1;
-  });
-  return ok(`${creatureById(o.id)!.name.toUpperCase()} WANDERS OFF.`);
-}
 
 
 // --------------------------------------------------------------- zone battle

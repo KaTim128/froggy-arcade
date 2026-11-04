@@ -32,7 +32,7 @@ import { store } from '../core/state';
 import { button, centerText, confirmDialog, forfeitLines, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
-import { plainWords } from '../game/plainWords';
+import { plainWords, TILE_PX } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
 import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, bossById, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
@@ -977,6 +977,31 @@ export class CreatureArena extends Phaser.Scene {
     ];
     // (each world's own floor and set pieces: art/arenaFloors)
     paintFloor(g, b.id, ARENA, b.ground, b.groundDark, b.id, 1, avoid);
+    // ---- THE TILES (user, 4 Nov): every distance on the cards is in TILES
+    // (game/plainWords TILE_PX), so the floor shows them -- a faded box
+    // outline for each, laid in from the middle so the part tiles at the top
+    // and bottom edges are the same, a dark line with a faint lit edge
+    // inside it, the way tiles are set in a floor
+    {
+      const T = TILE_PX;
+      const cols = Math.floor(ARENA.w / T);
+      const rows = Math.floor(ARENA.h / T);
+      const ox = ARENA.x + (ARENA.w - cols * T) / 2;
+      const oy = ARENA.y + (ARENA.h - rows * T) / 2;
+      // (a dark line on a light floor, a pale one on a dark floor: faded on both)
+      const lum = (((b.ground >> 16) & 255) * 0.3 + ((b.ground >> 8) & 255) * 0.59 + (b.ground & 255) * 0.11) / 255;
+      const [edge, edgeA] = lum < 0.38 ? [0xffffff, 0.07] : [0x000000, 0.13];
+      for (let cx = -1; cx <= cols; cx++)
+        for (let cy = -1; cy <= rows; cy++) {
+          const x0 = Math.max(ARENA.x, ox + cx * T);
+          const y0 = Math.max(ARENA.y, oy + cy * T);
+          const x1 = Math.min(ARENA.x + ARENA.w, ox + (cx + 1) * T);
+          const y1 = Math.min(ARENA.y + ARENA.h, oy + (cy + 1) * T);
+          if (x1 - x0 < 2 || y1 - y0 < 2) continue;
+          g.lineStyle(1, edge, edgeA).strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+          g.fillStyle(0xffffff, 0.035).fillRect(x0 + 1, y0 + 1, x1 - x0 - 2, 1);
+        }
+    }
     // a worn track round the middle, where fights happen
     g.lineStyle(3, b.groundDark, 0.25).strokeEllipse(ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, ARENA.w * 0.72, ARENA.h * 0.78);
     // the haze of the place, heaviest at the edges: light coming in over it

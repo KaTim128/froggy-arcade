@@ -927,18 +927,69 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     return B.done();
   },
   zebra: (t) => {
+    // ---- ZAPZEBRA (user, 4 Nov: "make zebra look better").  A zebra first
+    // and its element second: an ivory coat with thin black stripes that
+    // curve round the barrel and run in chevrons over the haunch, striped
+    // legs on black hooves, a long head with a dark muzzle and two ears, and
+    // the stiff upright mane -- its tips lit with the storm in it (volt).
     const B = new Build();
     const g = Math.sin(t * 8) * 0.8;
-    for (const [u, p] of [[-3.6, g], [-2, -g], [2.4, g], [3.8, -g]] as const) B.cap(u, 2.6, u + p * 0.6, 7.5, 0.6, 0.45, 'b', 0.4);
-    B.e(0, 1.4, 5.2, 2.8, 'b', 0, 1);
-    // the tail: a cord from the rump with a dark tuft that swings
-    B.cap(-4.8, 0.2, -6.4 + g * 0.5, 3.8, 0.6, 0.4, 'b', 0.6).e(-6.6 + g * 0.6, 5, 0.9, 1.6, 'k', 0.15, 0.6);
-    B.chain([[3.8, 0], [5.4, -3], [6.4, -5]], 1.4, 1, 'b', 0.9);
-    B.e(7.4, -4.6, 2.2, 1.3, 'b', 0.4, 0.7);
-    for (let i = 0; i < 5; i++) B.dl(-4 + i * 1.8, -0.8, -3.4 + i * 1.8, 3.8, 0.55, 'k');
-    B.dl(4.6, -1.6, 5.8, -3.8, 0.5, 'k');
-    for (let i = 0; i < 4; i++) B.tri(4 + i * 0.6, -1 - i * 1.2, 4.8 + i * 0.6, -1.4 - i * 1.2, 4 + i * 0.6, -2.6 - i * 1.2, 'k', 0.2);
-    B.glow(7.6, -5.6, 0.5, 0xfff07a).eye(7.2, -5, 0.55);
+    const COAT = IVORY;
+    const INK = 0x16141c;
+    // the legs, hooves at the bottom; the far pair a shade darker
+    for (const [u, p, far] of [[-3.4, g, 1], [-1.8, -g, 0], [2.2, g, 1], [3.6, -g, 0]] as const) {
+      // (brighter than the coat: the shading under the barrel greys them)
+      const tone = far ? 0xf0ece0 : 0xffffff;
+      // (thick enough that the coat shows inside the outline, not just the line)
+      B.cap(u, 2.4, u + p * 0.6, 7.1, 0.9, 0.62, tone, 0.4);
+      // a black hoof
+      B.cap(u + p * 0.6 - 0.15, 7.4, u + p * 0.6 + 0.2, 7.6, 0.5, 0.5, INK, 0.1);
+    }
+    // the barrel, the haunch and the shoulder
+    B.e(0, 1.4, 5.2, 2.7, COAT, 0, 1);
+    B.c(-3.4, 1.2, 2.3, COAT, 1).c(3.2, 1, 2.2, COAT, 1);
+    // the tail: a cord off the rump and a black tuft that swings
+    B.cap(-5, 0.4, -6.4 + g * 0.5, 3.8, 0.45, 0.3, COAT, 0.6).e(-6.6 + g * 0.6, 4.8, 0.8, 1.5, INK, 0.15, 0.6);
+    // the neck and the long head
+    B.chain([[3.8, 0], [5.2, -2.8], [6.2, -4.8]], 1.5, 1.05, COAT, 0.9);
+    B.e(7.6, -4.2, 2.5, 1.25, COAT, 0.55, 0.7);
+    // two ears, pricked
+    B.tri(5.9, -5.6, 6.5, -5.9, 5.6, -7.6, COAT, 0.2).tri(6.6, -5.4, 7.2, -5.6, 6.8, -7.4, 0xc8c2b0, 0.2);
+    // ---- the stripes: thin, curved down and round the barrel, every one a
+    // little different, and none on the belly
+    for (let i = 0; i < 7; i++) {
+      const x = -1.6 + i * 1.05;
+      B.dl(x, -1.2, x - 0.5, 1.4, 0.32, INK).dl(x - 0.5, 1.4, x - 0.2, 2.8, 0.28, INK);
+    }
+    // the haunch: chevrons pointing back over the rump
+    for (let k = 0; k < 3; k++) {
+      const r = 1 + k * 0.8;
+      B.dl(-3.4 + r * 0.4, 1.2 - r, -3.4 - r * 0.6, 1.2, 0.3, INK).dl(-3.4 - r * 0.6, 1.2, -3.4 + r * 0.4, 1.2 + r * 0.9, 0.3, INK);
+    }
+    // the neck: bands across it
+    for (let k = 0; k < 4; k++) B.dl(4 + k * 0.62, -0.6 - k * 1.1, 5.6 + k * 0.62, -1.6 - k * 1.1, 0.3, INK);
+    // the legs: bars across them, high up
+    for (const [u, p] of [[-3.4, g], [-1.8, -g], [2.2, g], [3.6, -g]] as const) for (const k of [0.25, 0.5]) {
+      const ux = u + p * 0.6 * k;
+      const y = 2.4 + k * 4.9;
+      B.dl(ux - 0.5, y, ux + 0.5, y - 0.15, 0.24, INK);
+    }
+    // the face: a dark muzzle, a stripe down the brow, the nostril
+    B.de(9.4, -3.3, 1, 0.75, INK, 0.55);
+    B.dl(6.8, -5.4, 8.4, -4.4, 0.26, INK).dl(7.2, -4, 8.6, -3.6, 0.24, INK);
+    B.dc(9.9, -3.2, 0.22, 0x5a5260);
+    // ---- the mane: stiff, upright, black and white in bands, along the
+    // neck from the ears to the withers -- its tips lit (volt)
+    for (let i = 0; i < 7; i++) {
+      const k = i / 6;
+      const bx = 6 - k * 2.6;
+      const by = -5.8 + k * 5;
+      const h = 1.5 - k * 0.4;
+      const flick = Math.sin(t * 9 + i) * 0.15;
+      B.tri(bx - 0.3, by + 0.3, bx + 0.3, by - 0.1, bx - 0.4 - h * 0.45 + flick, by - h, i % 2 ? COAT : INK, 0.1);
+      if (i % 2 === 0) B.glow(bx - 0.5 - h * 0.45 + flick, by - h, 0.28, 0xfff07a);
+    }
+    B.eye(7.1, -4.6, 0.55);
     return B.done();
   },
   // ============================================ TWENTY MORE (28 Oct)

@@ -40,9 +40,9 @@ import { MINI_COST, MINI_INFO, MINI_WIN, drawPool, roleOf, startMini, type MiniK
 import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, BOSSES, bossById, creatureById, type Attack, type Creature,
+  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
+import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, retreat, setActive, startLadder } from '../game/creatureClash';
 
 type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick';
 const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls', 'minis'];
@@ -98,6 +98,9 @@ function wrapWords(s: string, n: number): string[] {
   if (line) out.push(line);
   return out;
 }
+
+/** Team tiles on a page: two across, four down (the page arrows go under them). */
+const TEAM_PAGE = 8;
 
 export class CreatureHub extends Phaser.Scene {
   private screen: Screen = 'home';
@@ -628,9 +631,10 @@ export class CreatureHub extends Phaser.Scene {
     // ---- the team, where the second card used to be
     const tx = 104;
     L.add(this.add.rectangle(tx, y, 94, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
-    L.add(text(this, tx + 4, y + 3, `TEAM ${c.owned.length}/${MAX_OWNED}`, PALETTE.cream));
+    L.add(text(this, tx + 4, y + 3, `TEAM ${c.owned.length}`, PALETTE.cream));
     L.add(smallText(this, tx + 4, y + 13, c.owned.length > 1 ? 'TAP ONE: MAKE IT MAIN' : 'RECRUIT TO ADD MORE', 0x6a7090));
-    c.owned.forEach((o, i) => {
+    const page0 = Phaser.Math.Clamp(this.teamPage, 0, Math.max(0, Math.ceil(c.owned.length / TEAM_PAGE) - 1)) * TEAM_PAGE;
+    c.owned.slice(page0, page0 + TEAM_PAGE).forEach((o, i) => {
       const cr = ownedCreature(o);
       if (!cr) return;
       const col = i % 2;
@@ -660,10 +664,16 @@ export class CreatureHub extends Phaser.Scene {
         });
       }
     });
-    // RELEASE: the main one, asked first
-    if (act) {
-      const cr = ownedCreature(act)!;
-      L.add(button(this, tx + 47, y + h - 9, 'RELEASE MAIN', () => this.confirmRelease(act.uid, cr), { width: 86, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
+    // (no RELEASE: a creature recruited is yours for good -- user, 4 Nov)
+    // ---- MORE THAN FIT: the team is unlimited, so it goes in pages of
+    // TEAM_PAGE, with arrows and the page between them
+    const pages = Math.max(1, Math.ceil(c.owned.length / TEAM_PAGE));
+    this.teamPage = Phaser.Math.Clamp(this.teamPage, 0, pages - 1);
+    if (pages > 1) {
+      const py = y + h - 9;
+      L.add(button(this, tx + 12, py, '<', () => ((this.teamPage = (this.teamPage + pages - 1) % pages), this.draw()), { width: 18, height: 12 }));
+      L.add(centerText(this, tx + 47, py, `${this.teamPage + 1} / ${pages}`, PALETTE.cream));
+      L.add(button(this, tx + 82, py, '>', () => ((this.teamPage = (this.teamPage + 1) % pages), this.draw()), { width: 18, height: 12 }));
     }
     // ---- the menu, on the right
     const mx = 207;
@@ -696,8 +706,7 @@ export class CreatureHub extends Phaser.Scene {
       g.fillStyle(col, 1);
       for (let k = -4; k <= 4; k++) g.fillRect(x + k, y + k * 0.8, 2, 2).fillRect(x + k, y - k * 0.8, 2, 2);
     }, () => this.go('minis'));
-    const full = c.owned.length >= MAX_OWNED && !busy;
-    this.tile(mx, 121, mw, 20, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : packPrice() ? `${packPrice()} TOKENS` : 'FIRST ONE FREE', 0x8a6aff, (g, x, y, col) => {
+    this.tile(mx, 121, mw, 20, 'RECRUIT', busy ? 'PACK WAITING' : packPrice() ? `${packPrice()} TOKENS` : 'FIRST ONE FREE', 0x8a6aff, (g, x, y, col) => {
       g.fillStyle(0x14100c, 1).fillRect(x - 6, y - 5, 9, 12).fillRect(x - 2, y - 7, 9, 12);
       g.fillStyle(col, 0.6).fillRect(x - 5, y - 4, 7, 10);
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
@@ -713,6 +722,8 @@ export class CreatureHub extends Phaser.Scene {
 
   // ------------------------------------------------------------ mini games
 
+  /** Which page of the team is showing (it is unlimited). */
+  private teamPage = 0;
   private miniKind: MiniKind = 'melee';
   private miniPool: string[] = [];
   private miniPicks: string[] = [];
@@ -813,26 +824,6 @@ export class CreatureHub extends Phaser.Scene {
     }, { width: 120, height: 13, disabled: !ready }));
   }
 
-  private confirmRelease(uid: number, cr: Creature): void {
-    if (this.dialog) return;
-    const last = store.get().creatures.owned.length === 1;
-    this.dialog = confirmDialog(this, {
-      lines: [`RELEASE ${cr.name.toUpperCase()}?`, 'IT WILL NOT COME BACK.', ...(last ? ['IT IS YOUR LAST ONE.'] : [])],
-      confirm: 'RELEASE',
-      onConfirm: () => {
-        this.dialog = null;
-        this.say(release(uid));
-        this.screen = needsRecovery() ? 'recruit' : 'home';
-        this.draw();
-      },
-      onCancel: () => {
-        this.dialog?.destroy();
-        this.dialog = null;
-      },
-    });
-    this.dialog.setDepth(3000);
-  }
-
   /** THE PACK: one price, nine different creatures face down, every one as likely as any other. */
   private recruit(): void {
     const L = this.layer;
@@ -864,7 +855,7 @@ export class CreatureHub extends Phaser.Scene {
       L.add(button(this, GAME_W / 2, 132, 'YOUR PACK', () => this.go('pack'), { width: 96, height: 13 }));
       return;
     }
-    const can = ledger.balance() >= packPrice() && c.owned.length < MAX_OWNED;
+    const can = ledger.balance() >= packPrice();
     L.add(button(this, GAME_W / 2, 132, packPrice() ? `OPEN  ${packPrice()} TOK` : 'OPEN - FREE', () => {
       const r = openPack();
       this.say(r);
@@ -874,8 +865,7 @@ export class CreatureHub extends Phaser.Scene {
       }
       this.draw();
     }, { width: 96, height: 13, disabled: !can }));
-    if (c.owned.length >= MAX_OWNED) L.add(centerText(this, GAME_W / 2, 154, `YOUR TEAM IS FULL (${MAX_OWNED}). RELEASE ONE FIRST.`, PALETTE.gold));
-    else if (ledger.balance() < packPrice()) L.add(centerText(this, GAME_W / 2, 154, `YOU HAVE ${ledger.balance()} TOKENS.`, PALETTE.ash));
+    if (ledger.balance() < packPrice()) L.add(centerText(this, GAME_W / 2, 154, `YOU HAVE ${ledger.balance()} TOKENS.`, PALETTE.ash));
   }
 
   /** The nine cards.  Face down until one is chosen; then that one, then the rest. */

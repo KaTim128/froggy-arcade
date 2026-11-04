@@ -10,6 +10,7 @@
  * with the number in it, so the STATS page can list them as bullets.
  */
 
+import { TILE_PX } from './plainWords';
 import { CREATURES, ELEMENTS, type Attack, type Creature } from './creatures';
 import { SPECIALS } from './specials';
 
@@ -20,7 +21,7 @@ function rank(v: number, of: (c: Creature) => number): number {
   return all.length > 1 ? below / (all.length - 1) : 0.5;
 }
 
-const tiles = (px: number): number => Math.max(1, Math.round(px / 13));
+const tiles = (px: number): number => Math.max(1, Math.round(px / TILE_PX));
 const dps = (a: Attack): number => a.dmg / Math.max(0.1, a.cd);
 
 /** What its specials can do, by what they are and what they say. */

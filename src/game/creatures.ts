@@ -542,8 +542,12 @@ export const LADDER_COST = 20;
 export const LADDER_LEVELS = 5;
 export const LADDER_WIN = 0;
 export const LADDER_BOSS_WIN = 100;
-/** How many creatures a team holds (user, 2 Nov: more than two; one fights, the rest wait). */
-export const MAX_OWNED = 8;
+/**
+ * How many creatures a team holds: no limit (user, 4 Nov -- "unlimited space
+ * in the team"; it was 8).  And none can be released: once recruited, yours
+ * for good.
+ */
+export const MAX_OWNED = Number.POSITIVE_INFINITY;
 
 /**
  * THE LADDER'S OPPONENTS, drawn at the start of a run (so reloading cannot
