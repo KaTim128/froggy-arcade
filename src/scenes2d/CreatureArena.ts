@@ -3385,8 +3385,8 @@ export class CreatureArena extends Phaser.Scene {
       case 'leap': {
         // up and out of reach, then down on where they stood
         const [tx, ty] = inArena(o.x, o.y);
+        // (untouchable in the air -- not the updraft's own flag, which lands with its gust)
         f.invuln = Math.max(f.invuln, 0.5);
-        f.st.air = Math.max(f.st.air ?? 0, 0.5);
         this.fx.push({ kind: 'warn', x: tx, y: ty, r: e.r, t: 0, life: 0.45, col });
         this.time.delayedCall(450, () => {
           if (this.over || f.hp <= 0) return;

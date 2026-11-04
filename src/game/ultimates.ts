@@ -112,7 +112,7 @@ export interface Ultimate {
 export const GIANT_TAKEN = 0.7;
 export const LIFESTEAL_FRAC = 0.5;
 export const BLIND_R = 140;
-export const PACK_LIFE = 6;
+export const PACK_LIFE = 4.5;
 export const CROW_LIFE = 4;
 
 // shorthand for the table
@@ -448,7 +448,7 @@ function worth(f: UltFx, hp: number): number {
     case 'swap': return f.dmg + 6;
     case 'barrage': return f.n * f.dmg * 0.5;
     case 'volley': return f.n * f.dmg * 0.55;
-    case 'spiral': return f.n * f.dmg * 0.3;
+    case 'spiral': return f.n * f.dmg * 0.15; // flung all round: few find them
     case 'ring': return f.dmg * 1.6;
     case 'homing': return f.n * f.dmg * 0.65;
     case 'sweep': return f.dmg * 0.85;
@@ -465,7 +465,7 @@ function worth(f: UltFx, hp: number): number {
     case 'tornado': return f.t * f.dps * 0.6 + f.t * 1.5;
     case 'bouncer': return f.t * f.dmg * 0.6;
     case 'orbit': return f.t * f.dmg * 0.5 * Math.min(2, f.n / 2);
-    case 'pack': return f.n * f.dmg * 2.5;
+    case 'pack': return f.n * f.dmg * 3.2;
     case 'turret': return f.t * f.dmg * 0.7;
     case 'totem': return f.t * f.hps * 0.7;
     case 'bombers': return f.n * f.dmg * 0.6;
