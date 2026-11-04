@@ -477,7 +477,8 @@ export function rollPack(rng: () => number = Math.random): string[] {
 export type CoverShape =
   | 'rock' | 'tuft' | 'tree' | 'ice' | 'reed' | 'pillar' | 'shell' | 'cactus' | 'vent'
   // the extras each world scatters beside its main cover (CreatureArena WORLD_EXTRAS)
-  | 'log' | 'bush' | 'table' | 'fence' | 'stump' | 'mushroom' | 'crystal' | 'snowdrift' | 'driftwood' | 'rubble' | 'urn' | 'bones';
+  | 'log' | 'bush' | 'table' | 'fence' | 'stump' | 'mushroom' | 'crystal' | 'snowdrift' | 'driftwood' | 'rubble' | 'urn' | 'bones'
+  | 'stalagmite' | 'haybale' | 'pine' | 'snowman' | 'mossylog' | 'bogroot' | 'sandcastle' | 'coral' | 'sandstone' | 'obelisk' | 'altar' | 'voidorb' | 'lavarock' | 'charred';
 export type CoverPlan = 'line' | 'grove' | 'scatter' | 'ring';
 
 export interface Biome {
@@ -500,14 +501,14 @@ export interface Biome {
 export const BIOMES: Biome[] = [
   { id: 'caves', name: 'ECHO CAVES', pool: ['mole', 'bat', 'spider', 'roller', 'slug', 'tortoise', 'yeti', 'bear', 'hedgehog', 'armadillo', 'worm', 'pangolin', 'goat', 'axolotl'], ground: 0x4a4440, groundDark: 0x2e2a28, prop: 'rock', cover: 'line', mood: { sky: 0x120e14, haze: 0x2a2230, fleck: 0x8a7a9a } },
   { id: 'fields', name: 'WINDY FIELDS', pool: ['moth', 'mantis', 'hound', 'owl', 'sprout', 'hare', 'stag', 'bee', 'fox', 'falcon', 'parrot', 'mouse', 'zebra', 'dragonfly', 'ladybug', 'lemur', 'cricket', 'squirrel', 'swan'], ground: 0x8ab85a, groundDark: 0x5a8a3a, prop: 'tree', cover: 'grove', mood: { sky: 0x9ad0e8, haze: 0xc8e8a0, fleck: 0xf0e880 } },
-  { id: 'forests', name: 'DEEPWOOD', pool: ['sprout', 'serpent', 'beetle', 'centipede', 'owl', 'shroom', 'stag', 'sloth', 'lynx', 'crow', 'firefly', 'badger', 'caterpillar', 'porcupine', 'possum', 'koala', 'ladybug', 'beaver', 'moose', 'squirrel', 'raccoon'], ground: 0x3a6a2e, groundDark: 0x24461c, prop: 'tree', cover: 'scatter', mood: { sky: 0x16220f, haze: 0x2a4a22, fleck: 0x8ad06a } },
+  { id: 'forests', name: 'DEEPWOOD', pool: ['sprout', 'serpent', 'beetle', 'centipede', 'owl', 'shroom', 'stag', 'sloth', 'lynx', 'crow', 'firefly', 'badger', 'caterpillar', 'porcupine', 'possum', 'koala', 'ladybug', 'beaver', 'moose', 'squirrel', 'raccoon'], ground: 0x3a6a2e, groundDark: 0x24461c, prop: 'pine', cover: 'scatter', mood: { sky: 0x16220f, haze: 0x2a4a22, fleck: 0x8ad06a } },
   { id: 'frozen', name: 'FROZEN PASS', pool: ['golem', 'ram', 'jelly', 'hound', 'moth', 'penguin', 'yeti', 'rhino', 'walrus', 'ermine', 'moose', 'narwhal', 'goat'], ground: 0xd8ecf4, groundDark: 0xa0c4d4, prop: 'ice', cover: 'line', mood: { sky: 0xbfd8e8, haze: 0xeaf6ff, fleck: 0xffffff } },
   { id: 'swamps', name: 'SOURMIRE', pool: ['serpent', 'toad', 'slug', 'bat', 'sprout', 'shroom', 'gecko', 'newt', 'wraith', 'eel', 'leech', 'salamander', 'dragonfly', 'beaver', 'skunk', 'axolotl'], ground: 0x4a5a3a, groundDark: 0x2e3a24, prop: 'reed', cover: 'scatter', mood: { sky: 0x202a1e, haze: 0x3a5a3a, fleck: 0x9ab06a } },
   { id: 'ruins', name: 'SUNKEN RUINS', pool: ['centipede', 'golem', 'spider', 'owl', 'wisp', 'gecko', 'tortoise', 'obelisk', 'snail', 'crow', 'crocodile', 'shark', 'raccoon', 'peacock'], ground: 0x9a9070, groundDark: 0x6a6048, prop: 'pillar', cover: 'ring', mood: { sky: 0x2a3348, haze: 0xc8c0a0, fleck: 0xfff0c0 } },
   { id: 'shore', name: 'SALT SHORE', pool: ['crab', 'ray', 'toad', 'jelly', 'mantis', 'puffer', 'angler', 'urchin', 'seahorse', 'heron', 'otter', 'octopus', 'starfish', 'flamingo', 'shark', 'lobster', 'narwhal', 'swan'], ground: 0xe0d090, groundDark: 0xb8a868, prop: 'shell', cover: 'scatter', mood: { sky: 0x6ab8e0, haze: 0xf0e8c0, fleck: 0xffffff } },
   { id: 'desert', name: 'GLASS DESERT', pool: ['roller', 'beetle', 'hound', 'wisp', 'mantis', 'scorpion', 'hare', 'ferret', 'falcon', 'rhino', 'chick', 'wasp', 'camel', 'cricket', 'pangolin', 'vulture'], ground: 0xe8c078, groundDark: 0xc09050, prop: 'cactus', cover: 'scatter', mood: { sky: 0xe8a060, haze: 0xffd8a0, fleck: 0xfff4c0 } },
   // STORY MODE's last world (game/creatureStory): an arena of its own, its dwellers the murk and the glow
-  { id: 'void', name: 'VOID CITADEL', pool: ['wraith', 'crow', 'lynx', 'shroom', 'bat', 'serpent', 'firefly', 'owl', 'angler', 'snail', 'obelisk', 'possum', 'worm', 'vulture', 'skunk', 'peacock'], ground: 0x241c38, groundDark: 0x140f22, prop: 'pillar', cover: 'ring', mood: { sky: 0x07050e, haze: 0x4a2a7a, fleck: 0xb88aff } },
+  { id: 'void', name: 'VOID CITADEL', pool: ['wraith', 'crow', 'lynx', 'shroom', 'bat', 'serpent', 'firefly', 'owl', 'angler', 'snail', 'obelisk', 'possum', 'worm', 'vulture', 'skunk', 'peacock'], ground: 0x241c38, groundDark: 0x140f22, prop: 'obelisk', cover: 'ring', mood: { sky: 0x07050e, haze: 0x4a2a7a, fleck: 0xb88aff } },
   { id: 'volcano', name: 'ASHEN PEAK', pool: ['wisp', 'slug', 'mole', 'ram', 'roller', 'scorpion', 'angler', 'boar', 'heron', 'chick', 'salamander', 'camel', 'flamingo'], ground: 0x5a3a30, groundDark: 0x3a2018, prop: 'vent', cover: 'ring', mood: { sky: 0x2a1218, haze: 0x6a2a1a, fleck: 0xff8a3a } },
 ];
 

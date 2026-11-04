@@ -70,16 +70,18 @@ const COVER_LANE = 24;
  * Each entry is a kind and how many pieces long it lies.
  */
 const WORLD_EXTRAS: Record<string, Array<[CoverShape, number]>> = {
-  caves: [['crystal', 1], ['rubble', 1], ['crystal', 1]],
-  fields: [['bush', 1], ['log', 2], ['table', 2], ['fence', 3]],
-  forests: [['stump', 1], ['log', 2], ['mushroom', 1], ['bush', 1]],
-  frozen: [['snowdrift', 2], ['rock', 1], ['snowdrift', 1]],
-  swamps: [['log', 2], ['stump', 1], ['mushroom', 1]],
+  // (no world shares a piece with another -- user, 4 Nov: "each arena should
+  // have their own unique walls and barriers")
+  caves: [['crystal', 1], ['stalagmite', 1], ['crystal', 2]],
+  fields: [['bush', 1], ['table', 2], ['fence', 3], ['haybale', 1]],
+  forests: [['stump', 1], ['log', 2], ['mushroom', 1]],
+  frozen: [['snowdrift', 2], ['snowman', 1], ['snowdrift', 1]],
+  swamps: [['mossylog', 2], ['bogroot', 1], ['mossylog', 1]],
   ruins: [['rubble', 1], ['urn', 1], ['rubble', 2]],
-  shore: [['driftwood', 2], ['rock', 1], ['driftwood', 1]],
-  desert: [['bones', 1], ['rock', 1], ['bones', 2]],
-  void: [['crystal', 1], ['urn', 1], ['crystal', 2]],
-  volcano: [['rock', 1], ['bones', 1], ['rubble', 1]],
+  shore: [['driftwood', 2], ['sandcastle', 1], ['coral', 1]],
+  desert: [['bones', 1], ['sandstone', 1], ['bones', 2]],
+  void: [['altar', 2], ['voidorb', 1], ['altar', 1]],
+  volcano: [['lavarock', 1], ['charred', 1], ['lavarock', 2]],
 };
 
 /**
@@ -90,12 +92,15 @@ const WORLD_EXTRAS: Record<string, Array<[CoverShape, number]>> = {
 const COVER_HP: Partial<Record<CoverShape, number>> = {
   tree: 60, tuft: 12, ice: 45, reed: 18, shell: 40, cactus: 30,
   log: 40, bush: 18, table: 30, fence: 24, stump: 45, mushroom: 16, crystal: 35, snowdrift: 22, driftwood: 30, rubble: 30, urn: 14, bones: 20,
+  stalagmite: 50, haybale: 22, pine: 60, snowman: 20, mossylog: 38, bogroot: 34, sandcastle: 16, coral: 28, sandstone: 55, altar: 40, voidorb: 24, charred: 26,
 };
 /** The bits that fly off it when it goes. */
 const DEBRIS: Partial<Record<CoverShape, number[]>> = {
   tree: [0x2a5a1c, 0x4a3018], tuft: [0x6aa83a], ice: [0xbfe8f6, 0x6ab4d6], reed: [0x5a7a32, 0x8a6a2a], shell: [0xf0dcc4, 0xb08a70], cactus: [0x2f7a3a, 0xe8f0b0],
   log: [0x6a4424, 0xa07040], bush: [0x3a7a2a, 0x6aa83a], table: [0xa07040, 0x6a4424], fence: [0xc8a070, 0x6a4a2a], stump: [0x6a4424, 0xc89a60], mushroom: [0xd04040, 0xf0e8d8],
-  crystal: [0xb88aff, 0xe8d8ff], snowdrift: [0xffffff, 0xd8ecf4], driftwood: [0xc8b090, 0x8a7458], rubble: [0xb8ae90, 0x6a6048], urn: [0xc07040, 0x7a4020], bones: [0xf0e8d0, 0xc8bca0],
+  crystal: [0x8ac8f0, 0xe8f4ff], snowdrift: [0xffffff, 0xd8ecf4], driftwood: [0xc8b090, 0x8a7458], rubble: [0xb8ae90, 0x6a6048], urn: [0xc07040, 0x7a4020], bones: [0xf0e8d0, 0xc8bca0],
+  stalagmite: [0x6a625a, 0x9a9183], haybale: [0xe8c860, 0xb8902a], pine: [0x1e4a2a, 0x4a3018], snowman: [0xffffff, 0xf08a3a], mossylog: [0x5a7a2a, 0x4a3018], bogroot: [0x3a2a18, 0x5a7a32],
+  sandcastle: [0xe8d090, 0xc8a860], coral: [0xff7a8a, 0xffb0a0], sandstone: [0xd8a060, 0xa87040], obelisk: [0x2a1a48, 0xb88aff], altar: [0x3a2a5a, 0xb88aff], voidorb: [0xb88aff, 0xffffff], lavarock: [0x2a1a14, 0xff6a20], charred: [0x1a1210, 0xff8a3a],
 };
 /** The strip a move's line runs along: under the health bars, over the arena. */
 const INFO_X = 8;
@@ -1479,6 +1484,133 @@ export class CreatureArena extends Phaser.Scene {
         g.fillStyle(0x3a2a1a, 1).fillCircle(p.x - p.r * 0.35, p.y - p.r * 0.1, 1.3).fillCircle(p.x + p.r * 0.3, p.y - p.r * 0.1, 1.3);
         g.lineStyle(1, 0xf0e8d0, 1);
         for (const dx of [-p.r * 0.9, p.r * 0.9]) g.lineBetween(p.x + dx, p.y + p.r * 0.6, p.x + dx * 1.2, p.y - p.r * 0.4);
+        break;
+      case 'stalagmite':
+        // a cone of wet stone up from the cave floor, ringed
+        g.fillStyle(0x3a342e, 1).fillTriangle(p.x - p.r, p.y + p.r * 0.7, p.x + p.r, p.y + p.r * 0.7, p.x, p.y - p.r * 1.9);
+        g.fillStyle(0x6a625a, 1).fillTriangle(p.x - p.r * 0.75, p.y + p.r * 0.6, p.x + p.r * 0.5, p.y + p.r * 0.6, p.x - p.r * 0.05, p.y - p.r * 1.7);
+        g.fillStyle(0x9a9183, 1).fillTriangle(p.x - p.r * 0.45, p.y + p.r * 0.4, p.x - p.r * 0.1, p.y + p.r * 0.4, p.x - p.r * 0.1, p.y - p.r * 1.4);
+        g.lineStyle(1, 0x2a241e, 0.8).lineBetween(p.x - p.r * 0.6, p.y, p.x + p.r * 0.55, p.y).lineBetween(p.x - p.r * 0.35, p.y - p.r * 0.8, p.x + p.r * 0.3, p.y - p.r * 0.8);
+        g.fillStyle(0xbfe0ff, 0.9).fillRect(p.x - 0.5, p.y - p.r * 1.85, 1, 1);
+        break;
+      case 'haybale':
+        g.fillStyle(0x8a6a1a, 1).fillRoundedRect(p.x - p.r - 1, p.y - p.r * 0.8, p.r * 2 + 2, p.r * 1.6, 2);
+        g.fillStyle(0xe0b848, 1).fillRoundedRect(p.x - p.r, p.y - p.r * 0.8, p.r * 2, p.r * 1.4, 2);
+        g.fillStyle(0xf4d878, 1).fillRect(p.x - p.r + 1, p.y - p.r * 0.8, p.r * 2 - 2, 2);
+        g.lineStyle(1, 0x9a3a2a, 1).lineBetween(p.x - p.r * 0.4, p.y - p.r * 0.8, p.x - p.r * 0.4, p.y + p.r * 0.6).lineBetween(p.x + p.r * 0.4, p.y - p.r * 0.8, p.x + p.r * 0.4, p.y + p.r * 0.6);
+        g.fillStyle(0xb8902a, 1);
+        for (let i = 0; i < 5; i++) g.fillRect(p.x - p.r + 1 + i * (p.r * 0.45), p.y - p.r * 0.3 + (i % 2) * 2, 2, 1);
+        break;
+      case 'pine':
+        // a conifer: three tiers of needles over a short trunk
+        g.fillStyle(0x3a2410, 1).fillRect(p.x - 1.5, p.y, 3, p.r * 0.9);
+        for (let k = 0; k < 3; k++) {
+          const w = p.r * (1.35 - k * 0.32);
+          const y0 = p.y + p.r * 0.2 - k * p.r * 0.65;
+          g.fillStyle(0x10301a, 1).fillTriangle(p.x - w - 1, y0 + 1, p.x + w + 1, y0 + 1, p.x, y0 - p.r * 1.05);
+          g.fillStyle(0x1e5a32, 1).fillTriangle(p.x - w, y0, p.x + w * 0.6, y0, p.x - w * 0.1, y0 - p.r * 0.95);
+          g.fillStyle(0x3a8a4a, 1).fillTriangle(p.x - w * 0.7, y0 - 1, p.x - w * 0.15, y0 - 1, p.x - w * 0.25, y0 - p.r * 0.7);
+        }
+        break;
+      case 'snowman':
+        g.fillStyle(0xa0c4d4, 1).fillCircle(p.x, p.y + p.r * 0.3, p.r * 0.95).fillCircle(p.x, p.y - p.r * 0.85, p.r * 0.65);
+        g.fillStyle(0xffffff, 1).fillCircle(p.x - 0.5, p.y + p.r * 0.2, p.r * 0.85).fillCircle(p.x - 0.5, p.y - p.r * 0.9, p.r * 0.56);
+        g.fillStyle(0x1a1a24, 1).fillRect(p.x - 2, p.y - p.r * 1.05, 1, 1).fillRect(p.x + 1, p.y - p.r * 1.05, 1, 1).fillRect(p.x - 0.5, p.y + p.r * 0.05, 1, 1).fillRect(p.x - 0.5, p.y + p.r * 0.45, 1, 1);
+        g.fillStyle(0xf08a3a, 1).fillTriangle(p.x, p.y - p.r * 0.85, p.x, p.y - p.r * 0.65, p.x + 3, p.y - p.r * 0.75);
+        g.fillStyle(0xc83a3a, 1).fillRect(p.x - p.r * 0.6, p.y - p.r * 0.42, p.r * 1.2, 1.5);
+        break;
+      case 'mossylog': {
+        // a rotting log half in the water, furred with moss
+        g.fillStyle(0x1e3024, 0.8).fillEllipse(p.x, p.y + p.r * 0.5, p.r * 2.6, p.r * 0.8);
+        g.fillStyle(0x3a2412, 1).fillRoundedRect(p.x - p.r - 1, p.y - p.r * 0.55, p.r * 2 + 2, p.r * 1.1, 2);
+        g.fillStyle(0x5a3a1e, 1).fillRoundedRect(p.x - p.r, p.y - p.r * 0.5, p.r * 2, p.r * 0.7, 2);
+        g.fillStyle(0x5a8a2a, 1);
+        this.blob(g, p.x - p.r * 0.2, p.y - p.r * 0.55, p.r * 0.8, seed, 0.35, 8);
+        g.fillStyle(0x8ab04a, 1).fillRect(p.x - p.r * 0.6, p.y - p.r * 0.7, 2, 1).fillRect(p.x + p.r * 0.2, p.y - p.r * 0.6, 2, 1);
+        g.fillStyle(0x8a6a3a, 1).fillEllipse(p.x + p.r, p.y - p.r * 0.1, 3, p.r);
+        break;
+      }
+      case 'bogroot':
+        // a knot of black roots arching out of the mire
+        g.fillStyle(0x1e3024, 0.8).fillEllipse(p.x, p.y + p.r * 0.6, p.r * 2.4, p.r * 0.7);
+        g.lineStyle(2, 0x2a1c10, 1);
+        g.beginPath().arc(p.x - p.r * 0.3, p.y + p.r * 0.5, p.r * 0.7, Math.PI, 0).strokePath();
+        g.beginPath().arc(p.x + p.r * 0.4, p.y + p.r * 0.5, p.r * 0.6, Math.PI, 0).strokePath();
+        g.lineStyle(1, 0x5a4024, 1);
+        g.beginPath().arc(p.x - p.r * 0.3, p.y + p.r * 0.5, p.r * 0.7, Math.PI * 1.1, Math.PI * 1.5).strokePath();
+        g.fillStyle(0x3a2a18, 1).fillRect(p.x - 1, p.y - p.r * 1.1, 2, p.r * 1.1);
+        g.fillStyle(0x5a7a32, 1).fillRect(p.x - 2, p.y - p.r * 1.2, 4, 1.5);
+        break;
+      case 'sandcastle':
+        g.fillStyle(0xb89a60, 1).fillRect(p.x - p.r, p.y - p.r * 0.4, p.r * 2, p.r * 1.1);
+        g.fillStyle(0xe8d090, 1).fillRect(p.x - p.r + 1, p.y - p.r * 0.4, p.r * 2 - 2, p.r * 0.9);
+        g.fillStyle(0xd8b878, 1).fillRect(p.x - p.r * 0.45, p.y - p.r * 1.2, p.r * 0.9, p.r * 0.9);
+        for (const dx of [-p.r, -p.r * 0.35, p.r * 0.3]) g.fillStyle(0xe8d090, 1).fillRect(p.x + dx, p.y - p.r * 0.6, 2, 2);
+        g.fillStyle(0x6a4a2a, 1).fillRect(p.x - 0.5, p.y + p.r * 0.1, 1.5, p.r * 0.6);
+        g.fillStyle(0xd83a3a, 1).fillTriangle(p.x, p.y - p.r * 1.8, p.x + 3, p.y - p.r * 1.6, p.x, p.y - p.r * 1.4);
+        g.fillStyle(0x6a4a2a, 1).fillRect(p.x - 0.5, p.y - p.r * 1.8, 1, p.r * 0.6);
+        break;
+      case 'coral':
+        // a branching pink coral on a stone
+        g.fillStyle(0x8a7a68, 1);
+        this.blob(g, p.x, p.y + p.r * 0.5, p.r * 0.9, seed, 0.5, 8);
+        g.lineStyle(2, 0xe85a6a, 1);
+        for (const [dx, h] of [[-p.r * 0.6, 1.2], [0, 1.6], [p.r * 0.55, 1.1]] as const) {
+          g.lineBetween(p.x + dx, p.y + p.r * 0.4, p.x + dx, p.y - p.r * h + p.r * 0.4);
+          g.lineBetween(p.x + dx, p.y - p.r * 0.2, p.x + dx + (dx >= 0 ? 2 : -2), p.y - p.r * 0.6);
+        }
+        g.fillStyle(0xffb0a0, 1).fillCircle(p.x, p.y - p.r * 1.2, 1).fillCircle(p.x - p.r * 0.6, p.y - p.r * 0.8, 1).fillCircle(p.x + p.r * 0.55, p.y - p.r * 0.7, 1);
+        break;
+      case 'sandstone':
+        // a wind-cut boulder in layered bands
+        g.fillStyle(0x8a5a30, 1);
+        this.blob(g, p.x, p.y, p.r * 1.1, seed, 0.8, 9);
+        g.fillStyle(0xd8a060, 1);
+        this.blob(g, p.x - 0.5, p.y - 0.5, p.r * 0.95, seed + 2, 0.8, 9);
+        g.lineStyle(1, 0xa87040, 0.9);
+        for (let k = -1; k <= 1; k++) g.lineBetween(p.x - p.r * 0.8, p.y + k * p.r * 0.35, p.x + p.r * 0.8, p.y + k * p.r * 0.35 + 0.5);
+        g.fillStyle(0xf0c888, 1).fillEllipse(p.x - p.r * 0.3, p.y - p.r * 0.55, p.r * 0.8, p.r * 0.3);
+        break;
+      case 'obelisk':
+        // a black needle of stone, runes lit along it
+        g.fillStyle(0x0e0a1a, 1).fillRect(p.x - p.r * 0.65, p.y - p.r * 1.5, p.r * 1.3, p.r * 2.2);
+        g.fillStyle(0x2a1a48, 1).fillRect(p.x - p.r * 0.55, p.y - p.r * 1.4, p.r * 1.1, p.r * 2.05);
+        g.fillStyle(0x0e0a1a, 1).fillTriangle(p.x - p.r * 0.65, p.y - p.r * 1.5, p.x + p.r * 0.65, p.y - p.r * 1.5, p.x, p.y - p.r * 2.1);
+        g.fillStyle(0x3a2a68, 1).fillRect(p.x - p.r * 0.55, p.y - p.r * 1.4, 1.5, p.r * 2.05);
+        g.fillStyle(0xb88aff, 1);
+        for (let k = 0; k < 3; k++) g.fillRect(p.x - 1, p.y - p.r * 1.1 + k * p.r * 0.55, 2, 1).fillRect(p.x, p.y - p.r * 1.0 + k * p.r * 0.55, 1, 1);
+        break;
+      case 'altar':
+        g.fillStyle(0x140f22, 1).fillRect(p.x - p.r - 1, p.y - p.r * 0.6, p.r * 2 + 2, p.r * 1.4);
+        g.fillStyle(0x3a2a5a, 1).fillRect(p.x - p.r, p.y - p.r * 0.6, p.r * 2, p.r * 1.1);
+        g.fillStyle(0x5a4a8a, 1).fillRect(p.x - p.r, p.y - p.r * 0.6, p.r * 2, 1.5);
+        g.lineStyle(1, 0xb88aff, 0.9).strokeCircle(p.x, p.y, p.r * 0.35);
+        g.fillStyle(0xe8d8ff, 1).fillRect(p.x - 0.5, p.y - 0.5, 1, 1);
+        break;
+      case 'voidorb':
+        // a sphere of nothing in a cradle, a ring of light round it
+        g.fillStyle(0x3a2a5a, 1).fillRect(p.x - p.r * 0.7, p.y + p.r * 0.3, p.r * 1.4, p.r * 0.5);
+        g.fillStyle(0x07050e, 1).fillCircle(p.x, p.y - p.r * 0.3, p.r * 0.85);
+        g.lineStyle(1, 0xb88aff, 1).strokeCircle(p.x, p.y - p.r * 0.3, p.r * 0.85);
+        g.lineStyle(1, 0xe8d8ff, 0.7).strokeEllipse(p.x, p.y - p.r * 0.3, p.r * 2.1, p.r * 0.6);
+        g.fillStyle(0xffffff, 0.9).fillRect(p.x - p.r * 0.35, p.y - p.r * 0.7, 1, 1);
+        break;
+      case 'lavarock':
+        // a black boulder with molten seams
+        g.fillStyle(0x0e0806, 1);
+        this.blob(g, p.x, p.y, p.r * 1.1, seed, 0.85, 8);
+        g.fillStyle(0x2a1a14, 1);
+        this.blob(g, p.x - 0.5, p.y - 0.5, p.r * 0.9, seed + 4, 0.85, 8);
+        g.lineStyle(1, 0xff6a20, 1).lineBetween(p.x - p.r * 0.6, p.y - p.r * 0.2, p.x + p.r * 0.1, p.y + p.r * 0.3).lineBetween(p.x + p.r * 0.1, p.y + p.r * 0.3, p.x + p.r * 0.5, p.y - p.r * 0.3);
+        g.fillStyle(0x4a3028, 1).fillEllipse(p.x - p.r * 0.3, p.y - p.r * 0.5, p.r * 0.6, p.r * 0.25);
+        break;
+      case 'charred':
+        // a burnt tree: a black trunk and two dead limbs, embers in the bark
+        g.fillStyle(0x0e0806, 1).fillRect(p.x - 2.5, p.y - p.r * 1.6, 5, p.r * 2.2);
+        g.fillStyle(0x2a1c16, 1).fillRect(p.x - 1.5, p.y - p.r * 1.6, 2, p.r * 2.2);
+        g.lineStyle(2, 0x0e0806, 1).lineBetween(p.x, p.y - p.r * 0.9, p.x - p.r, p.y - p.r * 1.5).lineBetween(p.x, p.y - p.r * 0.5, p.x + p.r * 0.9, p.y - p.r * 1.1);
+        g.fillStyle(0xff8a3a, 1).fillRect(p.x - 0.5, p.y - p.r * 0.2, 1, 1).fillRect(p.x + 1, p.y - p.r, 1, 1);
+        g.fillStyle(0x3a2a24, 0.8).fillEllipse(p.x, p.y + p.r * 0.6, p.r * 1.8, p.r * 0.5);
         break;
     }
     if (tint) {

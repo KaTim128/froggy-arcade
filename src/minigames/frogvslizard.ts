@@ -639,7 +639,7 @@ function groundShadow(scene: Phaser.Scene, x: number, w: number): void {
  *
  * TEXTURED, AND NOT THE COLOUR OF THE LAWN (user, 4 Nov).  A dark outline
  * all the way round, a deeper jade skin with darker blotches and fine
- * speckle, a warm yellow belly, orange toe pads and a gold eye ring -- so he
+ * speckle, a warm yellow belly, orange toe pads and a green eye ring -- so he
  * reads against the grass rather than melting into it.  The eyes stay where
  * they were (-6/6, -23): the status marks sit over them.
  */
@@ -676,8 +676,8 @@ function makeFrog(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameO
   for (const [sx, sy] of [[-6, -17], [-1, -19], [4, -21], [-9, -12], [9, -16], [1, -12]] as const) g.fillRect(sx, sy, 1, 1);
   // the mouth line
   g.lineStyle(1, ink, 1).lineBetween(-2, -16, 7, -16);
-  // eyes: gold ring, cream, black, a glint
-  g.fillStyle(0xe0b040, 1).fillCircle(-6, -23, 4.4).fillCircle(6, -23, 4.4);
+  // eyes: a green ring (not yellow -- user, 4 Nov), cream, black, a glint
+  g.fillStyle(0x3aa860, 1).fillCircle(-6, -23, 4.4).fillCircle(6, -23, 4.4);
   g.fillStyle(0xfff4d8, 1).fillCircle(-6, -23, 3.4).fillCircle(6, -23, 3.4);
   g.fillStyle(PALETTE.black, 1).fillCircle(-5, -23, 2).fillCircle(7, -23, 2);
   g.fillStyle(0xffffff, 1).fillRect(-7, -25, 1, 1).fillRect(5, -25, 1, 1);

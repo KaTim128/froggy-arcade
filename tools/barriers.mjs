@@ -26,6 +26,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 await page.setViewport({ width: 960, height: 540 });
 await page.goto(`${URL}/?intro=1&tokens=50&scene=ArcadeHub`, { waitUntil: 'load' });
 await sleep(2500);
+const seenKinds = {};
 const worlds = ['caves', 'fields', 'forests', 'frozen', 'swamps', 'ruins', 'shore', 'desert', 'void', 'volcano'];
 try {
   for (const w of worlds) {
@@ -53,11 +54,20 @@ try {
     }
     check(`${w}: every layout lets both creatures reach each other and everywhere`, runs.every((r) => r.ok), runs.filter((r) => !r.ok).map((r) => `pockets ${r.pockets}`).join(', '));
     const kinds = [...new Set(runs.flatMap((r) => r.kinds))];
+    seenKinds[w] = kinds;
     check(`${w}: more than one kind of cover`, runs.every((r) => r.kinds.length >= 2), kinds.join(' '));
     check(`${w}: some cover breaks`, runs.every((r) => r.breakable));
     const minGap = Math.min(...runs.map((r) => r.gap));
     check(`${w}: barriers far enough apart to walk between`, minGap >= 14, `closest ${minGap.toFixed(1)}px`);
   }
+  // ---- no world borrows another's cover
+  const owner = {};
+  const shared = [];
+  for (const [w, ks] of Object.entries(seenKinds)) for (const k of ks) {
+    if (owner[k] && owner[k] !== w) shared.push(`${k} (${owner[k]} + ${w})`);
+    owner[k] = owner[k] ?? w;
+  }
+  check('every world has its own barriers: none shared', shared.length === 0, shared.join(', '));
   // a breakable piece, shot down: it loses its collision
   const broke = await page.evaluate(() => {
     const s = window.__froggy.game().scene.getScene('CreatureArena');
