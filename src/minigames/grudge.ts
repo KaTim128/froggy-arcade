@@ -214,7 +214,7 @@ const FOES: FoeDef[] = [
   // quills -- every punch that lands on him pricks the fist that threw it, and
   // twice as hard if he had them up in a block.
   { key: 'porcupine', name: 'PORCUPINE', rare: false, weight: 10,
-    skin: 0x6a4a34, skinLight: 0xc8a888, glove: 0x3a6a8a, gloveLit: 0x6a9aba, bodyW: 16, bodyH: 17, headW: 10, look: 'porcupine',
+    skin: 0x6a4a34, skinLight: 0xc8a888, glove: 0x3a6a8a, gloveLit: 0x6a9aba, bodyW: 17, bodyH: 18, headW: 11, look: 'porcupine',
     speed: 0.9, power: 0.95, windup: 1, reach: 0.9, guard: 0.85, blockRate: 1.25, tempo: 1.05, dodge: 0, style: 'balanced', chaos: 0.1, counter: 0.3,
     note: 'EVERY HIT COSTS YOU' },
   { key: 'lion', name: 'LION', rare: false, weight: 10,
@@ -289,6 +289,7 @@ const FACE: Record<string, FaceDef> = {
   hyena: { headW: 11, headH: 10, eyes: [[1, -2.4]], r: 1.4, col: 0xf2e6c0, pupil: 'dot', pr: 0.7, snout: 'none' },
   zebra: { headW: 10, headH: 11, eyes: [[1.2, -3]], r: 1.4, col: 0x2a1a10, pupil: 'none', pr: 0, snout: 'none' },
   lion: { headW: 12, headH: 11, eyes: [[2.2, -2.6]], r: 1.6, col: 0xe8a630, pupil: 'slit', pr: 1, snout: 'none' },
+  porcupine: { headW: 11, headH: 10, eyes: [[2.6, -2.2]], r: 1.3, col: 0x140c08, pupil: 'none', pr: 0, snout: 'none' },
 };
 
 /**
@@ -962,6 +963,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   const dark = shade(d.skin, 0.35);
   const E = (x: number, y: number, w: number, h: number, c: number) => scene.add.ellipse(x, y, w, h, c);
   const R = (x: number, y: number, w: number, h: number, c: number, a = 0) => scene.add.rectangle(x, y, w, h, c).setAngle(a);
+  const C = (x: number, y: number, r: number, c: number) => scene.add.circle(x, y, r, c);
   // ---- A TRIANGLE WHERE IT WAS ASKED FOR.
   //
   // `scene.add.triangle` does not draw its three points at (x, y) plus the
@@ -1177,31 +1179,56 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       break;
     }
     case 'porcupine': {
-      // ---- A BLUNT LITTLE FACE IN A COAT OF QUILLS.  A round snout with a
-      // pink nose, small ears, and banded quills fanning back off the head
-      // and the whole back.
-      const quill = 0xf0e8d8;
-      const band = 0x2a1e16;
-      head.push(E(6, 2, 8, 5.4, d.skinLight), E(9.6, 1.6, 2.4, 2, 0xd86a7a));
-      headBack.push(E(-1, -5, 3.4, 3.4, dark));
-      for (let i = 0; i < 9; i++) {
-        // (fanned up and back, off the crown: never out over the face)
-        const a = -3.05 + i * 0.16;
-        const len = 9 + (i % 3) * 2;
-        const x0 = -2 + Math.cos(a) * 3;
-        const y0 = -2 + Math.sin(a) * 3;
-        headBack.push(R(x0 + Math.cos(a) * len * 0.5, y0 + Math.sin(a) * len * 0.5, len, 1.4, i % 2 ? quill : band, (a * 180) / Math.PI));
-      }
+      // ---- THE PORCUPINE, REDRAWN (user, 4 Nov: "ugly -- redo it").  A round
+      // brown boxer under a great crest of quills: tapered spikes, dark at the
+      // root and cream at the tip, sweeping back off the crown and down the
+      // whole back in two layers, with a blunt pale snout, a shiny black nose,
+      // a little round ear and beady black eyes.
+      const root0 = 0x3a281a;
+      const tip = 0xf4ecd8;
+      const spike = (list: Phaser.GameObjects.GameObject[], x0: number, y0: number, ang: number, len: number, w: number): void => {
+        const ux = Math.cos(ang);
+        const uy = Math.sin(ang);
+        const px = -uy * w * 0.5;
+        const py = ux * w * 0.5;
+        const ex = x0 + ux * len;
+        const ey = y0 + uy * len;
+        list.push(TA(x0 + px, y0 + py, x0 - px, y0 - py, ex, ey, root0));
+        // the pale tip: the last 40% of the quill
+        const mx = x0 + ux * len * 0.6;
+        const my = y0 + uy * len * 0.6;
+        list.push(TA(mx + px * 0.45, my + py * 0.45, mx - px * 0.45, my - py * 0.45, ex, ey, tip));
+      };
+      // the back: two rows of long quills fanned back (pi) and up (1.5 pi) --
+      // never forward over the face -- rooted along the upper back
       for (let i = 0; i < 11; i++) {
-        const a = -3.1 + i * 0.13;
-        const len = 9 + (i % 2) * 3;
-        body.push(R(-3 + Math.cos(a) * (bw * 0.5 + len * 0.4), -bh * 0.2 + Math.sin(a) * (bh * 0.6 + len * 0.3), len, 1.5, i % 2 ? quill : band, (a * 180) / Math.PI).setAlpha(0.95));
+        const t = i / 10;
+        const a = Math.PI * (0.86 + t * 0.56);
+        spike(back, -3 - t * 2, 7 - t * 15, a, 13 + Math.sin(t * Math.PI) * 6, 3.4);
       }
-      body.push(E(3, 3, bw * 0.7, bh * 0.75, d.skinLight).setAlpha(0.6));
-      {
-        const root: Pt = [-bw + 3, bh - 5];
-        tailParts.push(tube(bez(root, [root[0] - 2, root[1] + 2], [root[0] - 4, root[1] + 4], [root[0] - 5, root[1] + 6], 6), 4, 2.6, band));
+      for (let i = 0; i < 9; i++) {
+        const t = i / 8;
+        const a = Math.PI * (0.92 + t * 0.5);
+        spike(back, -1 - t, 5 - t * 13, a, 10 + Math.sin(t * Math.PI) * 4, 2.8);
       }
+      // the crest: quills off the crown, up and back
+      for (let i = 0; i < 7; i++) {
+        const t = i / 6;
+        const a = Math.PI * (1.12 + t * 0.34);
+        spike(headBack, -2 + t * 2, -1 - t * 3, a, 9 + Math.sin(t * Math.PI) * 3, 2.6);
+      }
+      // a soft lighter belly and a dark furry edge where the quills start
+      body.push(E(3, 2, d.bodyW * 0.55, d.bodyH * 0.72, d.skinLight).setAlpha(0.85));
+      body.push(E(-5, -4, 5, d.bodyH * 0.7, shade(d.skin, 0.2)).setAlpha(0.7));
+      // the face: a blunt pale snout, a shiny nose, a little ear, whiskers
+      head.push(E(5.4, 1.6, 7.4, 5.4, 0x9a7a5a), E(8.8, 0.8, 2.8, 2.4, 0x140c08), C(8.4, 0.2, 0.6, 0xffffff));
+      head.push(R(4.6, 3.6, 2.6, 0.6, 0x3a281a));
+      head.push(R(9.4, 2.2, 3, 0.4, 0xf4ecd8).setAngle(12).setAlpha(0.8), R(9.2, 3, 3, 0.4, 0xf4ecd8).setAngle(-6).setAlpha(0.8));
+      headBack.push(C(-1.6, -3.8, 2.2, shade(d.skin, 0.25)), C(-1.6, -3.8, 1.1, 0xd88a8a));
+      // a short tail with its own quills
+      tailRoot0 = [-bw + 3, bh - 5];
+      tailParts.push(E(-2, 2, 6, 4, d.skin));
+      for (const a of [Math.PI * 0.95, Math.PI * 1.1, Math.PI * 0.82]) spike(tailParts, -3, 2, a, 6, 2);
       break;
     }
     case 'lion': {
@@ -1226,86 +1253,77 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       break;
     }
     case 'shell': {
-      // ---- THE TORTOISE.  The shell is the silhouette, and it is a shell:
-      // a high dome with a dark rim, a ring of marginal plates round the
-      // bottom edge, a spine of big hexagonal scutes with pale growth rings
-      // in them, and the sun on top.  It lives in its own group because it
-      // MOVES -- when the tortoise blocks, it turns its shell to the blow.
-      const sw = d.bodyW + 10;
-      const sh = d.bodyH + 6;
-      const rim = 0x3a2e18;
-      const hex = (x: number, y: number, r: number, col: number, seam: number) => {
+      // ---- THE TORTOISE, REDRAWN (user, 4 Nov: "ugly -- redo it").  A boxer
+      // with a real carapace on its back: a high, half-round dome over the
+      // back half of the body with a dark rim, a column of big scutes with
+      // growth rings, a row of marginal plates round the edge and a lit top;
+      // a cream plastron down its front in plates; a short leathery neck into
+      // a wrinkled head with a hooked horn beak; and stumpy clawed feet.
+      const rim = 0x2a1e0c;
+      const horn = 0x6e5428;
+      const half = (cx: number, cy: number, w: number, h: number, col: number): Phaser.GameObjects.Graphics => {
+        const pts: Phaser.Math.Vector2[] = [];
+        for (let k = 0; k <= 18; k++) {
+          const a = Math.PI / 2 + (k / 18) * Math.PI;
+          pts.push(new Phaser.Math.Vector2(cx + Math.cos(a) * w, cy + Math.sin(a) * h));
+        }
+        return scene.add.graphics().fillStyle(col, 1).fillPoints(pts, true);
+      };
+      const plate = (x: number, y: number, rx: number, ry: number, col: number, seam: number): Phaser.GameObjects.Graphics => {
         const pts: Phaser.Math.Vector2[] = [];
         for (let k = 0; k < 6; k++) {
           const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
-          pts.push(new Phaser.Math.Vector2(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.86));
+          pts.push(new Phaser.Math.Vector2(x + Math.cos(a) * rx, y + Math.sin(a) * ry));
         }
         const g = scene.add.graphics().fillStyle(col, 1).fillPoints(pts, true);
-        g.lineStyle(0.8, seam, 1).strokePoints(pts, true);
+        g.lineStyle(0.7, seam, 1).strokePoints(pts, true);
         return g;
       };
-      // A DOME, NOT A BALL (user, 3 Nov: "fix the overlapping circular
-      // appearance").  The carapace is a high arch with a FLAT underside and
-      // a lip of marginal plates along it, sat on the back -- so the outline
-      // is a tortoise's, with legs coming out under it, not a disc stuck on
-      // a body.
-      const dome = (w: number, h: number, base: number, col: number): Phaser.GameObjects.Graphics => {
-        const pts: Phaser.Math.Vector2[] = [];
-        for (let k = 0; k <= 16; k++) {
-          const a = Math.PI + (k / 16) * Math.PI;
-          pts.push(new Phaser.Math.Vector2(Math.cos(a) * w / 2, base + Math.sin(a) * h));
-        }
-        pts.push(new Phaser.Math.Vector2(w / 2 - 1, base + 1.2), new Phaser.Math.Vector2(-w / 2 + 1, base + 1.2));
-        return scene.add.graphics().fillStyle(col, 1).fillPoints(pts, true);
-      };
-      const base = sh * 0.34;
-      shell.push(dome(sw + 4, sh * 0.86 + 2, base + 1.5, 0x1e180c).setAlpha(0.45));
-      shell.push(dome(sw + 2, sh * 0.86 + 1, base, rim));
-      shell.push(dome(sw, sh * 0.86, base - 0.4, 0x5e4c26));
-      shell.push(dome(sw - 3, sh * 0.78, base - 1.6, 0x7a6232));
-      // the lip: a row of marginal plates along the flat underside
-      for (let k = 0; k < 7; k++) {
-        const px = -sw / 2 + 2.5 + (k * (sw - 5)) / 6;
-        shell.push(R(px, base - 0.6, (sw - 5) / 6 - 0.4, 2.6, k % 2 ? 0x8a7040 : 0x7e6638).setStrokeStyle(0.5, rim));
+      // the plastron first, under the shell's edge: cream plates down the front
+      body.push(E(4.2, 0.5, 9, d.bodyH * 0.9, 0x8a7a4a), E(4, 0.4, 7.8, d.bodyH * 0.84, 0xe0d098));
+      for (let k = -2; k <= 2; k++) body.push(R(4, 0.4 + k * 3.2, 7, 0.6, 0xa8965e));
+      body.push(R(4, 0.4, 0.6, d.bodyH * 0.76, 0xa8965e).setAlpha(0.8));
+      // the carapace: rim, horn, lit dome
+      body.push(half(1.5, -0.5, 15.5, 13.5, rim));
+      body.push(half(1, -0.5, 14.2, 12.4, horn));
+      body.push(half(0.6, -1, 12.4, 10.6, 0x86683a));
+      // the marginal plates round the edge
+      for (let k = 0; k < 9; k++) {
+        const a = Math.PI / 2 + ((k + 0.5) / 9) * Math.PI;
+        body.push(R(1 + Math.cos(a) * 13.3, -0.5 + Math.sin(a) * 11.6, 3.4, 2.2, k % 2 ? 0x9a7a44 : 0x7e6236, (a * 180) / Math.PI + 90).setStrokeStyle(0.5, rim));
       }
-      // the scutes: a spine of three along the crown, a row of four under it,
-      // every one with pale growth rings and a dark seam
-      for (const [x, y, r] of [[-5.4, -sh * 0.46, 3.4], [0, -sh * 0.56, 3.8], [5.4, -sh * 0.46, 3.4], [-8.6, -1.4, 2.8], [-3, -2.6, 3.2], [3, -2.6, 3.2], [8.6, -1.4, 2.8]] as const) {
-        shell.push(hex(x, y, r, 0x9a7c42, 0x3a2c14));
-        shell.push(hex(x, y - 0.3, r * 0.66, 0xa8884a, 0x8a6e36).setAlpha(0.8));
-        shell.push(hex(x, y - 0.5, r * 0.34, 0xc8a85e, 0xa8884a).setAlpha(0.75));
+      // the scutes: three down the spine, two on the flank, each with rings
+      for (const [x, y, rx, ry] of [[-6.4, -6.4, 3.8, 3.4], [-7.6, 0, 4, 3.6], [-6.4, 6.2, 3.8, 3.2], [-1.4, -3.6, 2.8, 2.8], [-1.6, 3.4, 2.8, 2.8]] as const) {
+        body.push(plate(x, y, rx, ry, 0xa8884a, 0x3a2c14));
+        body.push(plate(x, y - 0.2, rx * 0.62, ry * 0.62, 0xb8985a, 0x8a6e36).setAlpha(0.85));
+        body.push(E(x - 0.3, y - 0.5, rx * 0.5, ry * 0.36, 0xe0c888).setAlpha(0.55));
       }
-      // the sun along the top of the dome
-      shell.push(E(-2, -sh * 0.66, sw * 0.5, 2.2, 0xfff0c0).setAlpha(0.38));
-      shell.push(E(-5, -sh * 0.58, 3, 1.2, 0xffffff).setAlpha(0.35));
-      // A NECK.  Wrinkled and leathery, reaching forward and up out of the
-      // shell's mouth to the head -- the head is not just parked on top.
+      // the sun on the top of the dome
+      body.push(E(-6, -9, 7, 2.2, 0xfff0c0).setAlpha(0.35));
+      // a short leathery neck out of the front of the shell
       {
-        const neck = bez([0, -4], [2, -7], [3, -10], [3.4, -13], 10);
-        body.push(tube(neck, 6, 4.6, d.skin), tube(neck, 2.4, 1.6, shade(d.skin, 0.12)));
-        for (const k of [0.3, 0.5, 0.7]) {
-          const [nx, ny] = neck[Math.round(k * (neck.length - 1))];
-          body.push(R(nx, ny, 4.6, 0.6, dark).setAlpha(0.45));
+        const neck = bez([3, -6], [3.4, -8], [3.4, -10], [3, -12], 8);
+        body.push(tube(neck, 6.4, 5.2, d.skin));
+        for (const t of [0.35, 0.65]) {
+          const [nx, ny] = neck[Math.round(t * (neck.length - 1))];
+          body.push(R(nx + 0.5, ny, 5, 0.6, dark).setAlpha(0.45));
         }
       }
-      // FOUR LIMBS.  The front two are the shared legs; the hind pair are
-      // thick stumps with claws, half behind the shell's lip.
-      for (const hx of [-10, -5]) {
-        root.push(R(hx, -5, 5, 8, shade(d.skin, 0.16)).setStrokeStyle(0.6, dark));
-        root.push(E(hx + 0.5, -1, 7, 3.4, shade(d.skin, 0.1)));
-        for (const c of [-2, 0, 2]) root.push(R(hx + 1.5 + c, 0.6, 1, 1.2, 0xd8d0b0));
+      // stumpy elephant feet with three pale claws each
+      for (const hx of [-5, 5]) {
+        root.push(E(hx, -1.4, 8, 3.6, shade(d.skin, 0.12)));
+        for (const c of [-2.2, 0, 2.2]) root.push(R(hx + 1.6 + c, -0.2, 1.1, 1.3, 0xe8e0c0));
       }
-      // and a short pointed tail, out from under the back of the shell
-      tailParts.push(TA(-sw / 2 - 1, -2, -sw / 2 - 6, 1, -sw / 2 + 1, 1.5, d.skin));
-      // a hooked horny beak, wrinkles under the jaw, and scales on the crown
-      head.push(TA(3.4, -0.4, 7.6, 0.6, 4, 3.4, 0x5a5230), TA(6, 0.2, 7.6, 0.6, 6.8, 2.2, 0x3a3420));
-      head.push(R(-1, 3, 5, 0.8, dark).setAlpha(0.6), R(0, 5, 4, 0.8, dark).setAlpha(0.6), R(-0.5, 6.8, 3.4, 0.7, dark).setAlpha(0.5));
-      for (const [sx, sy] of [[-2, -3.4], [0.4, -3.8], [-0.8, -2.2], [1.8, -2.6]] as const) head.push(E(sx, sy, 1.8, 1.3, shade(d.skin, 0.18)).setAlpha(0.8));
-      // a wise old eyebrow over the eye
-      head.push(R(2.2, -3.2, 3, 0.7, dark).setAngle(-12).setAlpha(0.7));
-      // and the plastron on its front, under the chin
-      body.push(E(2, 1, d.bodyW * 0.62, d.bodyH * 0.8, 0xd8c88a).setStrokeStyle(0.6, 0x8a7a4a));
-      for (let k = -1; k <= 1; k++) body.push(R(2, 1 + k * 3.4, d.bodyW * 0.5, 0.6, 0x8a7a4a).setAlpha(0.7));
+      // a short pointed tail out from under the back of the shell
+      tailRoot0 = [-bw + 1, bh - 4];
+      tailParts.push(TA(0, -1.6, -6, 1.2, 0, 1.6, d.skin));
+      // the head: a hooked horn beak, a mouth line, wrinkles and crown scales
+      head.push(TA(3.6, -1, 7.4, 0.8, 3.8, 3.2, 0x4a4430), TA(5.6, -0.2, 7.4, 0.8, 6.4, 2.2, 0x2a2618));
+      head.push(R(1.6, 2.4, 4.4, 0.7, dark).setAngle(8));
+      for (const [sx, sy] of [[-2.4, -3.2], [0, -3.8], [-1, -1.8], [2, -2.8]] as const) head.push(E(sx, sy, 2, 1.4, shade(d.skin, 0.2)).setAlpha(0.85));
+      head.push(R(-1, 4.2, 4.4, 0.6, dark).setAlpha(0.5), R(0, 3.4, 3, 0.6, dark).setAlpha(0.4));
+      // an old, heavy brow over the eye
+      head.push(R(2.2, -3.4, 3.4, 0.9, dark).setAngle(-14).setAlpha(0.85));
       break;
     }
     case 'snake':
