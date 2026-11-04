@@ -16,7 +16,7 @@
  * what is true.
  */
 
-import { ultimateOf } from '../game/ultimates';
+import { ULT_COOLDOWN_S, ULT_UNLOCK_S, ultimateOf } from '../game/ultimates';
 import { STAGES, WORLDS, lineupFoe, stageLevel, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import { isTouch } from '../core/device';
@@ -305,14 +305,28 @@ export class CreatureHub extends Phaser.Scene {
     const shine = this.add.rectangle(3, 0, w - 3, 1, 0xffffff, disabled ? 0.04 : 0.1).setOrigin(0, 0);
     const g = this.add.graphics();
     const well = disabled ? 0x2a2e48 : col;
-    g.fillStyle(0x0a0d1e, 1).fillRect(7, (h - 18) / 2, 18, 18);
-    g.lineStyle(1, well, 0.7).strokeRect(7.5, (h - 18) / 2 + 0.5, 17, 17);
-    icon(g, 16, h / 2, disabled ? PALETTE.ash : col);
-    // (a short tile has room for one line of the big type and one of the small)
+    // (the icon's well fits the tile: a short one gets a smaller well)
+    const ws = Math.min(18, h - 2);
+    const wx = ws < 18 ? 6 : 7;
+    g.fillStyle(0x0a0d1e, 1).fillRect(wx, (h - ws) / 2, ws, ws);
+    g.lineStyle(1, well, 0.7).strokeRect(wx + 0.5, (h - ws) / 2 + 0.5, ws - 1, ws - 1);
+    icon(g, wx + ws / 2, h / 2, disabled ? PALETTE.ash : col);
+    const tx = wx + ws + (ws < 18 ? 4 : 5);
+    // no second line (the home menu, user 4 Nov): the label alone, centred
+    // on the tile's height; otherwise one line of the big type and one of
+    // the small on a short tile, two of the big on a tall one
     const short = h < 24;
-    const t1 = text(this, 30, short ? h / 2 - 8 : h / 2 - 9, label, disabled ? PALETTE.ash : PALETTE.cream);
-    const t2 = short ? smallText(this, 30, h / 2 + 3, sub, disabled ? 0x4a4e68 : PALETTE.fog) : text(this, 30, h / 2 + 2, sub, disabled ? 0x4a4e68 : PALETTE.fog);
-    c.add([bg, edge, shine, g, t1, t2]);
+    let t1 = !sub ? text(this, tx, h / 2 - 4, label, disabled ? PALETTE.ash : PALETTE.cream) : text(this, tx, short ? h / 2 - 8 : h / 2 - 9, label, disabled ? PALETTE.ash : PALETTE.cream);
+    // ---- TEXT STAYS INSIDE THE BUTTON (user, 4 Nov: "never overlapping the
+    // outlines -- keep this rule").  A label that would reach the outline
+    // drops to the small type, which every label fits.
+    if (tx + t1.width > w - 3) {
+      t1.destroy();
+      t1 = smallText(this, tx, !sub ? h / 2 - 3 : short ? h / 2 - 6 : h / 2 - 7, label, disabled ? PALETTE.ash : PALETTE.cream);
+    }
+    const parts: Phaser.GameObjects.GameObject[] = [bg, edge, shine, g, t1];
+    if (sub) parts.push(short ? smallText(this, tx, h / 2 + 3, sub, disabled ? 0x4a4e68 : PALETTE.fog) : text(this, tx, h / 2 + 2, sub, disabled ? 0x4a4e68 : PALETTE.fog));
+    c.add(parts);
     L.add(c);
     if (disabled) return;
     bg.setInteractive({ useHandCursor: true });
@@ -431,7 +445,8 @@ export class CreatureHub extends Phaser.Scene {
       // (taller rows now the stat bars are off the card: easier to hit)
       // (user, 2 Nov: on the team screen the rows are taller -- there was
       // room under the card -- so each is an easier target)
-      const ch = tall ? 17 : 12;
+      // (13, not 17, on the tall card now: the ultimate is a fourth row under them)
+      const ch = tall ? 13 : 12;
       const mid = Math.floor((ch - 12) / 2);
       const chip = this.add.rectangle(x + 2, ty - 2, w - 4, ch, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
       L.addAt(chip, L.getIndex(g));
@@ -455,6 +470,75 @@ export class CreatureHub extends Phaser.Scene {
       chip.on('pointerdown', () => (audio.sfx('ui_blip'), this.showMove(c, a)));
       ty += ch + 1;
     }
+    // ---- THE ULTIMATE, under the moves (user, 4 Nov), in the same kind of
+    // row: a gold star, its name, and a "?" that opens what it does
+    const ult = ultimateOf(c.id);
+    if (ult) {
+      const ch = tall ? 13 : 12;
+      const mid = Math.floor((ch - 12) / 2);
+      const chip = this.add.rectangle(x + 2, ty - 2, w - 4, ch, 0x2e2440).setOrigin(0, 0).setStrokeStyle(1, 0x7a5a2a);
+      L.addAt(chip, L.getIndex(g));
+      const pts: Phaser.Math.Vector2[] = [];
+      for (let k = 0; k < 10; k++) {
+        const ang = -Math.PI / 2 + (k * Math.PI) / 5;
+        const r = k % 2 ? 1.8 : 4.2;
+        pts.push(new Phaser.Math.Vector2(x + 8 + Math.cos(ang) * r, ty + 4 + mid + Math.sin(ang) * r));
+      }
+      g.fillStyle(0xffd45e, 1).fillPoints(pts, true);
+      // (the name in the small type if the house font would run into the "?")
+      const qx = x + w - 9;
+      let name: Phaser.GameObjects.BitmapText = text(this, x + 15, ty + 1 + mid, ult.name, 0xffd45e);
+      if (name.x + name.width > qx - 2) {
+        name.destroy();
+        name = smallText(this, x + 15, ty + 2 + mid, ult.name, 0xffd45e);
+      }
+      L.add(name);
+      L.add(this.add.rectangle(qx - 1, ty - 1 + mid, 7, 10, 0x5a4420).setOrigin(0, 0));
+      L.add(text(this, qx, ty + 1 + mid, '?', PALETTE.gold));
+      chip.setInteractive({ useHandCursor: true });
+      chip.on('pointerover', () => (chip.setFillStyle(0x3e3060).setStrokeStyle(1, PALETTE.gold), audio.sfx('ui_hover')));
+      chip.on('pointerout', () => chip.setFillStyle(0x2e2440).setStrokeStyle(1, 0x7a5a2a));
+      chip.on('pointerdown', () => (audio.sfx('ui_blip'), this.showUlt(c)));
+    }
+  }
+
+  /** The ultimate, said in full: the same kind of panel as a move's. */
+  private showUlt(c: Creature): void {
+    const ult = ultimateOf(c.id);
+    if (!ult) return;
+    this.modal?.destroy(true);
+    const M = this.add.container(0, 0).setDepth(600);
+    this.modal = M;
+    const el = ELEMENTS[c.element];
+    const w = 300;
+    const close = (): void => this.draw();
+    const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
+    veil.setInteractive().on('pointerdown', close);
+    M.add(veil);
+    const per = Math.floor((w - 20) / 4);
+    const rows: Array<{ s: string; col: number; gap: boolean }> = [];
+    const lineOf = (ln: string, col: number): void => wrapWords(ln.toUpperCase(), per).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
+    lineOf(`ULTIMATE: UNLOCKS ${ULT_UNLOCK_S} SEC INTO A FIGHT, THEN READY AGAIN ${ULT_COOLDOWN_S} SEC AFTER EACH USE.`, PALETTE.fog);
+    lineOf(`WHAT IT DOES: ${ult.desc}`, PALETTE.gold);
+    lineOf(isTouch() ? 'HOW TO USE: TAP THE ULT BUTTON WHEN IT LIGHTS UP.' : 'HOW TO USE: PRESS Q WHEN THE ULT BADGE TURNS GOLD.', 0x9ad0ff);
+    lineOf(`ELEMENT: ${el.name}`, el.light);
+    const LH = 7;
+    const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
+    const h = Math.min(GAME_H - 4, 27 + textH + 22);
+    const x = (GAME_W - w) / 2;
+    const y = Math.max(2, (GAME_H - h) / 2);
+    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, 0xffd45e));
+    M.add(text(this, x + 8, y + 8, `ULTIMATE - ${ult.name}`, PALETTE.gold));
+    M.add(text(this, x + w - 6, y + 8, c.name.toUpperCase(), PALETTE.fog).setOrigin(1, 0));
+    M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
+    let ly = y + 28;
+    for (const r of rows) {
+      if (r.gap) ly += 3;
+      if (ly + 6 > y + h - 20) break;
+      M.add(smallText(this, x + 8, ly, r.s, r.col));
+      ly += LH;
+    }
+    M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
   }
 
   /**
@@ -678,6 +762,12 @@ export class CreatureHub extends Phaser.Scene {
     // ---- the menu, on the right
     const mx = 207;
     const mw = GAME_W - mx - 8;
+    // ---- THE MENU TILES (user, 4 Nov): the label alone, no line under it,
+    // narrower than the panel and centred in it, evenly spaced down it
+    const MW = 94;
+    const MH = 17;
+    const MX = mx - 4 + Math.round((mw + 8 - MW) / 2);
+    const menuY = (row: number): number => 37 + row * (MH + 5);
     L.add(this.add.rectangle(mx - 4, 21, mw + 8, GAME_H - 34, 0x0e1124, 0.9).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
     L.add(text(this, mx, 25, 'MENU', PALETTE.ash));
     const busy = !!c.pending;
@@ -685,28 +775,25 @@ export class CreatureHub extends Phaser.Scene {
     const resting = !!act && restLeft(act) > 0;
     // STORY MODE, in place of the zone battles (user, 28 Oct)
     const sw = Math.min(c.story.cleared, WORLDS.length - 1);
-    const storySub = c.story.cleared >= WORLDS.length ? 'ALL WORLDS DONE' : `WORLD ${sw + 1} OF ${WORLDS.length}`;
-    // (six tiles now, 20 high on a 22 step, so MINI GAMES fits without crowding)
-    this.tile(mx, 33, mw, 20, 'STORY MODE', resting ? 'FAINTED' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.markTo = WORLD_AT[sw]), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
-    const ladderOpen = c.story.cleared >= WORLDS.length || !!run;
-    this.tile(mx, 55, mw, 20, 'LADDER', !ladderOpen ? 'AFTER STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
+    this.tile(MX, menuY(0), MW, MH, 'STORY MODE', '', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.markTo = WORLD_AT[sw]), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
+    this.tile(MX, menuY(1), MW, MH, 'LADDER', '', PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
       for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
     }, () => this.go('ladder'), !act && !run);
     // TRAINING: free, no stake, a dummy that cannot hurt you -- in the place
     // last picked on the zone map
-    this.tile(mx, 77, mw, 20, 'TRAINING', act ? 'FREE, SAFE' : 'NO CREATURE', 0x6ad8f0, (g, x, y, col) => {
+    this.tile(MX, menuY(2), MW, MH, 'TRAINING', '', 0x6ad8f0, (g, x, y, col) => {
       // a straw dummy on its post
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 3, 3).fillRect(x - 3, y - 3, 7, 5).fillRect(x, y + 2, 1, 5).fillRect(x - 5, y - 2, 11, 1);
     }, () => this.train(this.biome), !act);
     // MINI GAMES: duels and 3v3 with creatures of the game's own (user, 4 Nov)
-    this.tile(mx, 99, mw, 20, 'MINI GAMES', `${MINI_COST} IN, ${MINI_WIN} TO WIN`, 0xff9a3c, (g, x, y, col) => {
+    this.tile(MX, menuY(3), MW, MH, 'MINI GAMES', '', 0xff9a3c, (g, x, y, col) => {
       // two crossed claws
       g.fillStyle(col, 1);
       for (let k = -4; k <= 4; k++) g.fillRect(x + k, y + k * 0.8, 2, 2).fillRect(x + k, y - k * 0.8, 2, 2);
     }, () => this.go('minis'));
-    this.tile(mx, 121, mw, 20, 'RECRUIT', busy ? 'PACK WAITING' : packPrice() ? `${packPrice()} TOKENS` : 'FIRST ONE FREE', 0x8a6aff, (g, x, y, col) => {
+    this.tile(MX, menuY(4), MW, MH, 'RECRUIT', '', 0x8a6aff, (g, x, y, col) => {
       g.fillStyle(0x14100c, 1).fillRect(x - 6, y - 5, 9, 12).fillRect(x - 2, y - 7, 9, 12);
       g.fillStyle(col, 0.6).fillRect(x - 5, y - 4, 7, 10);
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
@@ -714,7 +801,7 @@ export class CreatureHub extends Phaser.Scene {
     }, () => this.go(busy ? 'pack' : 'recruit'));
     // (the keys, on a keyboard only: a phone's controls are on the screen -- C7)
     if (!isTouch())
-      this.tile(mx, 143, mw, 20, 'HOW TO PLAY', 'THE BASICS', 0x4ad0c0, (g, x, y, col) => {
+      this.tile(MX, menuY(5), MW, MH, 'HOW TO PLAY', '', 0x4ad0c0, (g, x, y, col) => {
         g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
         g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
       }, () => this.go('controls'));

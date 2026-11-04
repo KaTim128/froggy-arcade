@@ -419,6 +419,8 @@ export class CreatureArena extends Phaser.Scene {
   private biome!: Biome;
   private mode: 'zone' | 'ladder' | 'training' | 'story' | 'mini' = 'zone';
   private ultText: Phaser.GameObjects.BitmapText | null = null;
+  /** The admin's test switch: no cooldowns on your side (read once, at the start). */
+  private noCooldown = false;
   private foeUltText: Phaser.GameObjects.BitmapText | null = null;
   /** Story: which world, which of its stages, and who (drawn when the fight opens, paid at the bell). */
   private storyWorld = 0;
@@ -596,6 +598,7 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   create(): void {
+    this.noCooldown = cfgStr('clash.noCooldown') === 'yes';
     // its own music (user, 1 Nov: every arcade game has its own)
     audio.setScene({ music: 'game_clash_battle', ambience: ['cabinet_bleeps'] });
     // (a fresh fight: the last one's strip mask and labels went with it)
@@ -3711,6 +3714,12 @@ export class CreatureArena extends Phaser.Scene {
     for (let i = 0; i < 3; i++) f.cds[i] = Math.max(0, f.cds[i] - dt * cdRate);
     // (the ultimate's clock runs only while the fight is on)
     if (this.started && !this.over) f.ultT = Math.max(0, f.ultT - dt);
+    // THE ADMIN'S NO-COOLDOWN TEST (core/gameConfig clash.noCooldown, test
+    // zone only): your moves and your ultimate are always ready
+    if (f === this.me && this.noCooldown) {
+      for (let i = 0; i < 3; i++) f.cds[i] = 0;
+      f.ultT = 0;
+    }
     for (const k of ['slow', 'stun', 'stunImmune', 'blind', 'shield', 'invuln', 'aura', 'root', 'flash'] as const) f[k] = Math.max(0, f[k] - dt);
     if (f.burn > 0) {
       const before = Math.floor(f.burn);
