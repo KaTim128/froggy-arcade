@@ -545,6 +545,14 @@ function hop(dc: number, dr: number): void {
   const col = Phaser.Math.Clamp(frog.col + dc, 0, 18);
   const row = Phaser.Math.Clamp(frog.row + dr, 0, LANES + 1);
   if (col === frog.col && row === frog.row) return;
+  // ---- THE GRACE AFTER A HIT IS FOR GETTING YOUR BEARINGS, NOT A FREE RUN
+  // (user): it only covers the kerb you came back on.  The moment you hop
+  // off it into the road, the cars can have you again.
+  if (invulnMs > 0 && row !== 0) {
+    invulnMs = 0;
+    sprite.setAlpha(1);
+    eyes?.setAlpha(1);
+  }
   frog.col = col;
   frog.row = row;
   hopping = true;

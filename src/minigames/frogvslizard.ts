@@ -116,7 +116,7 @@ const ITEMS: Record<ItemId, ItemDef> = {
   tnt: { id: 'tnt', name: 'DYNAMITE', short: 'TNT', dmg: 28, heal: 0, poison: 0, sleep: 0, confuse: 0, color: 0xd94f2e, stock: 1, desc: 'DYNAMITE - 28 DAMAGE. A BIG BANG.' },
   poison: { id: 'poison', name: 'POISON', short: 'PSN', dmg: 8, heal: 0, poison: 3, sleep: 0, confuse: 0, color: 0x9b6fe0, stock: 1, desc: 'POISON - 8, THEN 5 A TURN FOR 3 TURNS.' },
   sleep: { id: 'sleep', name: 'SLEEP BALL', short: 'SLP', dmg: 0, heal: 0, poison: 0, sleep: 2, confuse: 0, color: 0x2e4a9a, stock: 1, desc: 'SLEEP BALL - NO DAMAGE. SLEEPS 2 TURNS.' },
-  confuse: { id: 'confuse', name: 'CONFUSION BALL', short: 'CNF', dmg: 4, heal: 0, poison: 0, sleep: 0, confuse: 1, color: 0xff6fb4, stock: 1, desc: 'CONFUSION BALL - 4 DAMAGE. NO WIND BAR 1 TURN.' },
+  confuse: { id: 'confuse', name: 'CONFUSION BALL', short: 'CNF', dmg: 4, heal: 0, poison: 0, sleep: 0, confuse: 1, color: 0xff6fb4, stock: 1, desc: 'CONFUSION - 4 DAMAGE. LOCKS THEIR NEXT WIND.' },
 };
 const ORDER: ItemId[] = ['rock', 'heal', 'tnt', 'poison', 'sleep', 'confuse'];
 /** A round's specials: one of each. */
@@ -840,8 +840,11 @@ function refreshHud(): void {
 
   // wind: side, and how much of the bar it fills -- unless whoever is
   // throwing is confused, and then nobody is shown it
-  windFill?.setVisible(!windHidden);
-  if (windHidden) windText?.setText('WIND ???');
+  // (confused: the bar is locked and greyed, not just gone -- you can see
+  // there is a wind, you just cannot read it)
+  windFill?.setVisible(true);
+  if (windHidden) windText?.setText('WIND LOCKED').setTint(PALETTE.ash);
+  else windText?.setTint(PALETTE.cream);
   const mag = Math.abs(wind);
   const w = Math.round(mag * 34);
   if (windFill) {
@@ -849,6 +852,10 @@ function refreshHud(): void {
     windFill.setOrigin(wind < 0 ? 1 : 0, 0);
     windFill.x = GAME_W / 2;
     windFill.setFillStyle(mag > 0.66 ? PALETTE.ember : mag > 0.33 ? PALETTE.gold : PALETTE.tealLight);
+    if (windHidden) {
+      windFill.setSize(70, 4).setOrigin(0.5, 0).setFillStyle(0x55596a);
+      windFill.x = GAME_W / 2;
+    }
   }
   const arrows = mag < 0.08 ? '-' : (wind < 0 ? '<' : '>').repeat(Math.min(3, 1 + Math.floor(mag * 3)));
   if (!windHidden) windText?.setText(`WIND ${arrows}`);
@@ -1551,6 +1558,41 @@ function skullSmoke(x: number, k: number): void {
   });
 }
 
+/** Four pink mini balls from (x, y) back to `who`, 1 damage each as they land. */
+function miniBalls(who: Who, x: number, y: number): void {
+  const sc = scene0;
+  if (!sc) return;
+  const tx = who === 'frog' ? FROG_X : LIZARD_X;
+  banner('CONFUSED - IT COMES BACK!', 0xff6fb4);
+  for (let i = 0; i < 4; i++) {
+    const b = sc.add.circle(x, y, 2, 0xff6fb4).setStrokeStyle(1, 0xffd0e8).setDepth(46);
+    const ox = (i - 1.5) * 6;
+    const peak = Math.min(y, GROUND_Y - 30) - 16 - i * 4;
+    sc.tweens.addCounter({
+      from: 0,
+      to: 1,
+      delay: i * 140,
+      duration: 650,
+      ease: 'Sine.easeIn',
+      onUpdate: (tw) => {
+        const k = tw.getValue() ?? 0;
+        b.x = x + (tx + ox - x) * k;
+        b.y = (1 - k) * (1 - k) * y + 2 * (1 - k) * k * peak + k * k * (GROUND_Y - 14);
+      },
+      onComplete: () => {
+        b.destroy();
+        if (phase === 'over' || phase === 'roundEnd') return;
+        const s = sides[who];
+        s.hp = Math.max(0, s.hp - 1);
+        floatText(tx + ox, GROUND_Y - 30, '-1', 0xff6fb4);
+        audio.sfx('ui_blip', 0.4);
+        refreshHud();
+        if (i === 3 && (sides.frog.hp <= 0 || sides.lizard.hp <= 0)) endRound();
+      },
+    });
+  }
+}
+
 function puff(x: number, y: number): void {
   if (!scene0) return;
   const p = scene0.add.circle(x, y, 3, 0xbfa07a).setAlpha(0.7).setDepth(40);
@@ -1558,10 +1600,20 @@ function puff(x: number, y: number): void {
 }
 
 function endFlight(hit: boolean): void {
+  const from = proj?.from ?? null;
+  const at = proj ? { x: proj.x, y: Math.min(proj.y, GROUND_Y - 4) } : null;
   proj?.body?.destroy();
   proj = null;
   refreshHud();
   if (!hit) banner('MISS', PALETTE.fog);
+  // ---- A CONFUSED MISS COMES BACK.  The throw breaks into four little pink
+  // balls that fly home to whoever threw it, one damage each.
+  if (!hit && from && at && windHidden && sides[from].confused > 0) {
+    miniBalls(from, at.x, at.y);
+    phase = 'settle';
+    settleMs = 1500;
+    return;
+  }
   if (sides.frog.hp <= 0 || sides.lizard.hp <= 0) {
     endRound();
     return;

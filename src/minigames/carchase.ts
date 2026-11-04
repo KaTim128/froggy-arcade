@@ -558,6 +558,8 @@ interface Car extends Mover {
   want: number;
   /** True while this change is aimed at the player's line. */
   hunting: boolean;
+  /** Broken down in its lane, hazards on: it does not move and never changes lane. */
+  parked?: boolean;
   lamps: Phaser.GameObjects.Rectangle[];
   /** Its paint, so a reload can draw the same car again (log #87). */
   colour: number;
@@ -657,6 +659,23 @@ let smokeTimer = 0;
 let smoke: Array<{ x: number; y: number; life: number; body: Phaser.GameObjects.Arc }> = [];
 let barriers: Barrier[] = [];
 let barrierTimer = 0;
+/**
+ * ---- ROADWORKS: AN OUTER LANE ENDS, AND OPENS AGAIN (user).  `y` is the
+ * head of it (the LANE ENDS sign and the start of the cone taper) and it runs
+ * CLOSURE_LEN down the road from there; traffic in that lane merges out
+ * before it, and the lane splits back open at the tail.
+ */
+interface Closure { lane: number; y: number; body: Phaser.GameObjects.Container }
+let closures: Closure[] = [];
+let closureTimer = 0;
+let stallTimer = 0;
+const CLOSURE_LEN = 190;
+const CLOSURE_GAP_MS = 17000;
+const STALL_GAP_MS = 11000;
+/** Is `lane` closed by roadworks anywhere between y0 and y1 on the screen? */
+function closedAt(lane: number, y0: number, y1: number): boolean {
+  return closures.some((cl) => cl.lane === lane && cl.y < y1 && cl.y + CLOSURE_LEN > y0);
+}
 let peds: Ped[] = [];
 let pedTimer = 0;
 /**
@@ -807,6 +826,9 @@ export const carChase: MinigameModule = {
     pickups = [];
     barriers = [];
     barrierTimer = BARRIER_GAP_MS;
+    closures = [];
+    closureTimer = CLOSURE_GAP_MS;
+    stallTimer = STALL_GAP_MS;
     peds = [];
     pedTimer = PED_GAP_MS;
     joltMs = 0;
@@ -1187,6 +1209,10 @@ export const carChase: MinigameModule = {
          * that is decided by the chooser, not by the spawner.
          */
         layBarrier: () => layBarrier(),
+        layClosure: () => layClosure(),
+        spawnStalled: () => spawnStalled(),
+        closures: () => closures.map((c) => ({ lane: c.lane, y: Math.round(c.y) })),
+        parked: () => traffic.filter((c) => c.parked).map((c) => ({ lane: c.lane, y: Math.round(c.y) })),
         /**
          * One pedestrian, spawned the way the GAME spawns them -- their own
          * heading, their own clock, their own mind.  `spawnPedAt` below freezes
@@ -1307,12 +1333,36 @@ export const carChase: MinigameModule = {
       const leader = carAhead(c);
       const gap = leader ? c.y - leader.y : Infinity;
       c.want = leader && gap < FOLLOW_GAP * 2 ? Math.min(c.cruise, leader.own - 3) : c.cruise;
+      // roadworks ahead in its lane: it wants out, and until it gets out it
+      // slows right down to queue at the cones rather than drive into them
+      const worksAhead = !c.parked && c.move < 0 && closedAt(c.lane, c.y - 150, c.y);
+      if (worksAhead) {
+        c.want = Math.min(c.want, 4);
+        if (c.warn <= 0) {
+          const out = c.lane === 0 ? 1 : 2;
+          if (laneClear(out, c.y, CAR_H * 2.2, c) && !closedAt(out, c.y - 60, c.y + 40)) {
+            c.signal = out < c.lane ? -1 : 1;
+            c.signalMs = 0;
+            c.blinks = 0;
+            c.warn = LANE_WARN_MS;
+            c.from = c.x;
+            c.lane = out;
+          }
+        }
+      }
       // and it gets there at a finite rate, so nothing on this road changes
       // speed instantly — and at a much finer one while it is crossing a line,
       // so a car that has announced a change does not also surprise you with
       // the speed it makes it at.
       const step = (c.move >= 0 ? LANE_CHANGE_ACCEL : CAR_ACCEL) * dt;
-      c.own = Math.max(16, c.own + Phaser.Math.Clamp(c.want - c.own, -step, step));
+      // (a broken-down car, and anything queued behind one or at the cones, can come to a stop)
+      const floor = c.parked || (leader?.parked && gap < FOLLOW_GAP * 2) || worksAhead ? 0 : 16;
+      c.own = c.parked ? 0 : Math.max(floor, c.own + Phaser.Math.Clamp(c.want - c.own, -step, step));
+      if (c.parked) {
+        // hazards: both indicators, together
+        const on = Math.floor(elapsed / 300) % 2 === 0;
+        for (const l of c.lamps) l.setVisible(on);
+      }
       c.y += (ground - c.own) * dt;
 
       // ---- indicating, then moving.  Nothing moves sideways until the lamp
@@ -1568,6 +1618,43 @@ export const carChase: MinigameModule = {
       }
     }
 
+    // ---- ROADWORKS AND BREAKDOWNS: a lane that ends and opens again, and a car
+    // stopped dead with its hazards on.  Both leave the rest of the road open.
+    if (stage() >= 1) {
+      closureTimer -= delta;
+      if (closureTimer <= 0) {
+        layClosure();
+        closureTimer = CLOSURE_GAP_MS + Math.random() * 6000;
+      }
+      stallTimer -= delta;
+      if (stallTimer <= 0) {
+        spawnStalled();
+        stallTimer = STALL_GAP_MS + Math.random() * 5000;
+      }
+    }
+    for (const cl of closures) {
+      cl.y += ground * dt;
+      cl.body.setPosition(LANES[cl.lane], cl.y);
+    }
+    closures = closures.filter((cl) => {
+      if (cl.y > BOTTOM + 10) {
+        cl.body.destroy();
+        return false;
+      }
+      return true;
+    });
+    for (const cl of closures) {
+      // the cones begin a little way past the sign, tapering in
+      const y0 = cl.y + 14;
+      const y1 = cl.y + CLOSURE_LEN - 22;
+      const hw = (LANE_W - 6 + CAR_W) / 2 - 3;
+      for (const p of police) if (p.stun <= 0 && Math.abs(LANES[cl.lane] - p.x) < hw && p.y > y0 && p.y < y1) spinOut(p);
+      if (Math.abs(LANES[cl.lane] - px) < hw && py - CAR_H / 2 < y1 && py + CAR_H / 2 > y0) {
+        crash('ROADWORKS');
+        return;
+      }
+    }
+
     // ---- PEOPLE IN THE ROAD, last of the four and the only one that moves of
     // its own accord.  They walk, they change their mind, and they do not look.
     if (stage() >= 3) {
@@ -1741,7 +1828,8 @@ export const carChase: MinigameModule = {
     const v = snap as Record<string, number | boolean> & { traffic: C[]; police: P[]; barriers: Array<{ y: number; lane: number }>; cash: Array<{ x: number; y: number }> };
     if (!scene0) return;
     // the road cleared, then put back
-    for (const list of [traffic, police, traps, barriers, peds] as Array<Array<{ body: Phaser.GameObjects.Container }>>) for (const o of list) o.body.destroy();
+    for (const list of [traffic, police, traps, barriers, peds, closures] as Array<Array<{ body: Phaser.GameObjects.Container }>>) for (const o of list) o.body.destroy();
+    closures = [];
     for (const o of [...cash, ...pickups, ...drops]) o.body.destroy();
     for (const o of smoke) o.body.destroy();
     traffic = [];
@@ -2088,12 +2176,12 @@ function playerHasAnOut(blocked: number): boolean {
  * not do it if the player would have nowhere to go afterwards.
  */
 function thinkCar(c: Car): void {
-  if (c.move >= 0 || c.warn > 0) return;
+  if (c.parked || c.move >= 0 || c.warn > 0) return;
   const changing = traffic.filter((o) => o.move >= 0 || o.warn > 0).length;
   if (changing >= CHANGERS) return;
 
   const options = [c.lane - 1, c.lane + 1].filter(
-    (i) => i >= 0 && i <= 3 && laneClear(i, c.y, CAR_H * 2.2, c),
+    (i) => i >= 0 && i <= 3 && laneClear(i, c.y, CAR_H * 2.2, c) && !closedAt(i, c.y - 160, c.y + 40),
   );
   if (!options.length) return;
 
@@ -2144,6 +2232,7 @@ function spawnTraffic(): void {
   if (elapsed < 10000 && Math.abs(LANES[idx] - px) < LANE_W / 2) idx = (idx + 1) % 4;
   // Not into the back of one already there.
   if (!laneClear(idx, TOP - CAR_H, CAR_H * 2)) return;
+  if (closedAt(idx, TOP - CAR_H * 2, TOP + 160)) return;
   const lane = LANES[idx];
   const own = TRAFFIC_MIN + Math.random() * TRAFFIC_SPAN;
   // Amber is gone from the paints: it is the indicator's colour, and a car
@@ -2202,6 +2291,8 @@ function spawnTrap(): void {
   // The other half of the pact in `layBarrier`: a strip laid onto concrete
   // that is already coming down closes the road just as completely.
   if (barriers.some((b) => b.y < BOTTOM * 0.6)) return;
+  if (closures.some((cl) => cl.y + CLOSURE_LEN > TOP - 20)) return;
+  if (traffic.some((c) => c.parked && c.y < BOTTOM * 0.6)) return;
   const width = collected >= TRAP_CASH * 2 ? 3 : 2;
   const here = laneOf(px);
   // Pick the gap first: a lane you can actually get to from where you are.
@@ -2394,6 +2485,72 @@ function spawnBarrier(lanes: number[], y = TOP - BARRIER_H): void {
 }
 
 /**
+ * ROADWORKS on an outer lane: a LANE ENDS sign, merge arrows painted in the
+ * lane, a taper of cones across it, the closed stretch, and LANE OPEN where
+ * it splits back out.  Never in the lane you are in as it is laid, never on
+ * top of concrete, a strip or a breakdown, and never both outer lanes.
+ */
+function layClosure(): void {
+  if (!scene0) return;
+  if (closures.length) return;
+  if (traps.some((t) => t.y < BOTTOM * 0.7) || barriers.some((b) => b.y < BOTTOM * 0.7)) return;
+  if (traffic.some((c) => c.parked && c.y < BOTTOM * 0.7)) return;
+  const here = laneOf(px);
+  const lanes = [0, 3].filter((l) => l !== here);
+  const lane = lanes[Phaser.Math.Between(0, lanes.length - 1)];
+  const inward = lane === 0 ? 1 : -1;
+  const y = TOP - CLOSURE_LEN;
+  const w = LANE_W - 6;
+  const parts: Phaser.GameObjects.GameObject[] = [];
+  // the closed stretch: hatched tarmac
+  parts.push(scene0.add.rectangle(0, CLOSURE_LEN / 2 + 8, w, CLOSURE_LEN - 30, 0x3a3a44).setAlpha(0.55));
+  for (let k = 30; k < CLOSURE_LEN - 20; k += 12) parts.push(scene0.add.rectangle(0, k, w - 6, 2, PALETTE.amber).setAngle(inward * 30).setAlpha(0.55));
+  // the taper: cones stepping in from the edge of the lane
+  for (let k = 0; k < 5; k++) {
+    const cx = -inward * (w / 2 - 2) + inward * k * (w / 8);
+    parts.push(scene0.add.triangle(cx, 18 + k * 4, 0, 5, 2.5, 0, 5, 5, 0xff7a20).setOrigin(0.5, 0.5), scene0.add.rectangle(cx, 19 + k * 4, 4, 1, 0xffffff));
+  }
+  // cones down both edges of the closed stretch
+  for (let k = 40; k < CLOSURE_LEN - 16; k += 16)
+    for (const e of [-1, 1]) parts.push(scene0.add.triangle(e * (w / 2 - 2), k, 0, 5, 2.5, 0, 5, 5, 0xff7a20).setOrigin(0.5, 0.5));
+  // the merge arrows painted in the lane BEFORE the cones (further up = sooner)
+  for (const ay of [-34, -64]) parts.push(scene0.add.triangle(inward * 3, ay, 0, 6, 6, 0, 3, 8, 0xffffff).setAngle(inward * 45).setAlpha(0.8));
+  // the signs: LANE ENDS at the head, LANE OPEN at the tail
+  parts.push(scene0.add.rectangle(0, 4, w - 4, 9, PALETTE.amber), text(scene0, 0, 8, 'ENDS', 0x1a1a22).setOrigin(0.5, 0));
+  parts.push(scene0.add.rectangle(0, CLOSURE_LEN - 6, w - 4, 9, 0x2a8a3a), text(scene0, 0, CLOSURE_LEN - 2, 'OPEN', PALETTE.cream).setOrigin(0.5, 0));
+  // (drawn head-down: the road scrolls TOWARD you, so the end you meet first --
+  // the arrows, the ENDS sign and the taper -- is the bottom of it, and the
+  // lane opening again is the top)
+  for (const o of parts as Array<Phaser.GameObjects.GameObject & { y: number; angle: number; type: string }>) {
+    o.y = CLOSURE_LEN - o.y;
+    if (o.type === 'Rectangle') o.angle = -o.angle;
+  }
+  const body = scene0.add.container(LANES[lane], y, parts).setDepth(3);
+  closures.push({ lane, y, body });
+  audio.sfx('fence_thunk', 0.3);
+}
+
+/** A broken-down car: stopped dead in one lane with its hazards going. */
+function spawnStalled(): void {
+  if (!scene0) return;
+  if (traffic.some((c) => c.parked)) return;
+  if (traps.some((t) => t.y < BOTTOM * 0.6) || barriers.some((b) => b.y < BOTTOM * 0.6)) return;
+  const here = laneOf(px);
+  const free = [0, 1, 2, 3].filter((i) => i !== here && laneClear(i, TOP - CAR_H, CAR_H * 3) && !closedAt(i, TOP - 200, TOP + 200));
+  // (and never next to roadworks: one lane down at a time)
+  const open = free.filter((i) => !closures.some((cl) => cl.y + CLOSURE_LEN > TOP && Math.abs(cl.lane - i) <= 1));
+  if (!open.length) return;
+  const idx = open[Phaser.Math.Between(0, open.length - 1)];
+  const colour = PALETTE.bone;
+  const body = carSprite(scene0, LANES[idx], TOP - CAR_H, colour, false);
+  traffic.push({
+    colour, id: nextCarId++, x: LANES[idx], y: TOP - CAR_H, own: 0, cruise: 0, want: 0, body, lane: idx, from: LANES[idx],
+    signal: 0, signalMs: 0, blinks: 0, warn: 0, move: -1, think: 1e9, hunting: false, parked: true,
+    lamps: body.getData('lamps') as Phaser.GameObjects.Rectangle[],
+  });
+}
+
+/**
  * Choose where the concrete goes, and leave a door in it.
  *
  * THE RULES ARE THE WHOLE POINT.  At most two of the four lanes, never the
@@ -2411,6 +2568,9 @@ function layBarrier(): void {
   // in it.  The strip has the stronger claim (it is the older hazard and it
   // picks its own gap), so the concrete waits.
   if (traps.some((t) => t.y < BOTTOM * 0.6)) return;
+  // (nor alongside roadworks or a broken-down car: two half-blocks at once is a full one)
+  if (closures.some((cl) => cl.y + CLOSURE_LEN > TOP - 20)) return;
+  if (traffic.some((c) => c.parked && c.y < BOTTOM * 0.6)) return;
   const here = laneOf(px);
   const free = [0, 1, 2, 3].filter((i) => i !== here);
   if (!free.length) return;

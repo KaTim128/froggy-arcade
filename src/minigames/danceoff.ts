@@ -58,7 +58,7 @@ import Phaser from 'phaser';
 import { touchControls } from '../ui/touchControls';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { centerText, text } from '../core/ui';
+import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
@@ -162,6 +162,12 @@ let round = 0;
 let wins = { you: 0, rival: 0 };
 /** ms left of the card between rounds.  Nothing is playable while it is up. */
 let cardMs = 0;
+/**
+ * ---- THE CHOICE BETWEEN ROUNDS (user): the card waits for you.  CASH OUT
+ * takes what is banked; DANCE ON costs nothing to try -- lose the next and
+ * you still walk with what you had.
+ */
+let choosing = false;
 /** The card's own objects, torn down when the next round starts. */
 let cardBits: Phaser.GameObjects.GameObject[] = [];
 /** The round title, so a round that ends early can take it down with it. */
@@ -258,7 +264,8 @@ export const danceOff: MinigameModule = {
       'THREE ROUNDS. 45 SECONDS EACH.',
       'WIN ONE: 20.  TWO: 35.  ALL THREE: 50.',
       'DROP A ROUND AND YOU STOP, AND KEEP IT.',
-      'NEW SONG EACH ROUND - AND HE GETS BETTER.',
+      'NEW SONG AND A NEW DANCER EACH ROUND.',
+      'BETWEEN ROUNDS: C CASHES OUT, SPACE DANCES ON.',
     ],
     controls: [
       ['A / S', 'LEFT AND DOWN'],
@@ -331,7 +338,7 @@ export const danceOff: MinigameModule = {
     }
 
     dancers = {
-      rival: makeRival(scene, 138, FEET_Y),
+      rival: makeRival(scene, 138, FEET_Y, 0),
       you: makeDancer(scene, 182, FEET_Y),
     };
 
@@ -355,7 +362,13 @@ export const danceOff: MinigameModule = {
     const kb = scene.input.keyboard;
     keys = kb ? ['A', 'S', 'W', 'D'].map((k) => kb.addKey(k)) : [];
     onKey = (ev: KeyboardEvent) => {
-      if (over || cardMs > 0 || ev.repeat) return;
+      if (over || ev.repeat) return;
+      if (choosing) {
+        if (ev.code === 'KeyC') cashOutNow();
+        else if (ev.code === 'Space' || ev.code === 'Enter') danceOn();
+        return;
+      }
+      if (cardMs > 0) return;
       const lane = LANE_CODES.indexOf(ev.code);
       if (lane >= 0) press(lane);
     };
@@ -450,8 +463,13 @@ export const danceOff: MinigameModule = {
         finish: () => endRound(),
         /** And skip the card between rounds, so a test need not wait it out. */
         skipCard: () => {
-          if (cardMs > 0) cardMs = 1;
+          // (the card waits for a choice now: skipping it is DANCE ON)
+          if (choosing) danceOn();
+          else if (cardMs > 0) cardMs = 1;
         },
+        /** The card's other choice: take the bank and go. */
+        cashOut: () => cashOutNow(),
+        rival: () => RIVALS[Math.min(round, RIVALS.length - 1)].name,
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__dance;
@@ -469,6 +487,7 @@ export const danceOff: MinigameModule = {
 
     // Between rounds: the card is up, nothing is on the mats, and no key
     // pressed at it reaches the next round's chart.
+    if (choosing) return;
     if (cardMs > 0) {
       cardMs -= delta;
       if (cardMs <= 0) {
@@ -702,6 +721,13 @@ function startRound(i: number): void {
   if (!sceneRef) return;
   round = i;
   const cfg = ROUNDS[Math.min(i, ROUNDS.length - 1)];
+  choosing = false;
+  // ---- A NEW DANCER EVERY ROUND (user): each round's rival is somebody else
+  if (dancers.rival) {
+    const { x, y } = dancers.rival;
+    dancers.rival.destroy();
+    dancers.rival = makeRival(sceneRef, x, y, i);
+  }
   for (const o of cardBits) o.destroy();
   cardBits = [];
   for (const n of notes) clear(n);
@@ -723,7 +749,7 @@ function startRound(i: number): void {
     // The first banner has to say what the round is FOR, because the ladder is
     // the whole game and a player who missed the card would otherwise think
     // they were three rounds from being paid rather than one.
-    i === 0 ? `WIN THIS FOR ${PRIZE[1]} TOKENS` : `HE IS DANCING HARDER  -  ${cfg.bpm} BPM`,
+    i === 0 ? `${RIVALS[0].name} - WIN FOR ${PRIZE[1]}` : `NEW DANCER: ${RIVALS[Math.min(i, RIVALS.length - 1)].name}  -  ${cfg.bpm} BPM`,
     PALETTE.cream,
   ).setDepth(50);
   // Kept, not forgotten: a round that ends early — the buzzer, or a test —
@@ -780,16 +806,37 @@ function endRound(): void {
   // is worth, because that is the decision the player is actually holding.
   const banked = PRIZE[wins.you] ?? 0;
   const next = (PRIZE[wins.you + 1] ?? banked) - banked;
+  const nextRival = RIVALS[Math.min(round + 1, RIVALS.length - 1)];
   cardBits = [
-    sceneRef.add.rectangle(GAME_W / 2, 100, 228, 74, PALETTE.ink).setDepth(49).setStrokeStyle(1, PALETTE.gold),
-    centerText(sceneRef, GAME_W / 2, 76, 'ROUND TO YOU', PALETTE.gold, 16).setDepth(50),
-    centerText(sceneRef, GAME_W / 2, 94, `${score.you} - ${score.rival}`, PALETTE.cream).setDepth(50),
-    centerText(sceneRef, GAME_W / 2, 106, `${banked} TOKENS BANKED`, PALETTE.tealLight).setDepth(50),
-    centerText(sceneRef, GAME_W / 2, 118, `WIN THE NEXT FOR +${next}`, PALETTE.ash).setDepth(50),
+    sceneRef.add.rectangle(GAME_W / 2, 104, 236, 90, PALETTE.ink).setDepth(49).setStrokeStyle(1, PALETTE.gold),
+    centerText(sceneRef, GAME_W / 2, 72, 'ROUND TO YOU', PALETTE.gold, 16).setDepth(50),
+    centerText(sceneRef, GAME_W / 2, 88, `${score.you} - ${score.rival}   ${banked} BANKED`, PALETTE.cream).setDepth(50),
+    centerText(sceneRef, GAME_W / 2, 100, `NEXT: ${nextRival.name} FOR +${next}`, PALETTE.tealLight).setDepth(50),
+    centerText(sceneRef, GAME_W / 2, 111, 'LOSE IT AND YOU KEEP THE BANK', PALETTE.ash).setDepth(50),
+    button(sceneRef, GAME_W / 2 - 52, 130, `CASH OUT ${banked}`, () => cashOutNow(), { width: 92, height: 14, fill: PALETTE.slate }).setDepth(51),
+    button(sceneRef, GAME_W / 2 + 52, 130, 'DANCE ON', () => danceOn(), { width: 92, height: 14 }).setDepth(51),
   ];
   audio.sfx('chime', 0.6);
   round++;
   cardMs = CARD_MS;
+  choosing = true;
+}
+
+/** Take what is banked and go. */
+function cashOutNow(): void {
+  if (!choosing || over) return;
+  choosing = false;
+  for (const o of cardBits) o.destroy();
+  cardBits = [];
+  endMatch(false);
+}
+
+/** On to the next round, and the next dancer. */
+function danceOn(): void {
+  if (!choosing || over) return;
+  choosing = false;
+  cardMs = 0;
+  startRound(round);
 }
 
 /**
@@ -860,20 +907,44 @@ function makeDancer(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjec
   return scene.add.container(x, y, parts).setDepth(10);
 }
 
-/** Him: taller, sharper, and enjoying himself more than you are. */
-function makeRival(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjects.Container {
-  const skin = 0x8f6fe0;
-  const parts = [
-    scene.add.ellipse(-5, -2, 8, 4, 0x5a3f9c),
-    scene.add.ellipse(5, -2, 8, 4, 0x5a3f9c),
-    scene.add.rectangle(0, -4, 14, 16, skin).setOrigin(0.5, 1),
-    scene.add.rectangle(0, -12, 18, 4, 0x5a3f9c).setOrigin(0.5, 1),
-    scene.add.circle(0, -26, 8, skin),
+/** The three dancers, one a round, each sharper than the last. */
+export const RIVALS = [
+  { name: 'DISCO DON', skin: 0x8f6fe0, dark: 0x5a3f9c, hair: PALETTE.gold, extra: 'quiff' },
+  { name: 'FLAMINGA', skin: 0xf08aa8, dark: 0xb04a6a, hair: 0xffe0f0, extra: 'shades' },
+  { name: 'THE KING', skin: 0x3a3a48, dark: 0x1a1a22, hair: 0xffd45e, extra: 'crown' },
+] as const;
+
+/** Round `look`'s dancer: taller, sharper, and enjoying himself more than you are. */
+function makeRival(scene: Phaser.Scene, x: number, y: number, look: number): Phaser.GameObjects.Container {
+  const r = RIVALS[Math.min(look, RIVALS.length - 1)];
+  const parts: Phaser.GameObjects.GameObject[] = [
+    scene.add.ellipse(-5, -2, 8, 4, r.dark),
+    scene.add.ellipse(5, -2, 8, 4, r.dark),
+    scene.add.rectangle(0, -4, 14, 16, r.skin).setOrigin(0.5, 1),
+    scene.add.rectangle(0, -12, 18, 4, r.dark).setOrigin(0.5, 1),
+    scene.add.circle(0, -26, 8, r.skin),
     scene.add.circle(-3, -27, 2, PALETTE.cream),
     scene.add.circle(3, -27, 2, PALETTE.cream),
-    scene.add.rectangle(0, -22, 7, 1, 0x3d2a5c),
-    // a quiff, because he has a look and you do not
-    scene.add.triangle(0, -33, 0, 6, 7, 0, 10, 8, PALETTE.gold).setOrigin(0.5, 1),
+    scene.add.rectangle(0, -22, 7, 1, r.dark),
   ];
+  if (r.extra === 'quiff') parts.push(scene.add.triangle(0, -33, 0, 6, 7, 0, 10, 8, r.hair).setOrigin(0.5, 1));
+  if (r.extra === 'shades') {
+    parts.push(scene.add.rectangle(0, -27, 12, 3, 0x1a1a22), scene.add.rectangle(4, -28, 2, 1, 0xffffff));
+    // a feather boa over the shoulders
+    for (let k = -3; k <= 3; k++) parts.push(scene.add.circle(k * 2.6, -17 + Math.abs(k) * 0.6, 2, r.hair));
+  }
+  if (r.extra === 'crown') {
+    parts.push(
+      scene.add.rectangle(0, -34, 12, 3, r.hair),
+      scene.add.triangle(-4, -36, 0, 4, 2, 0, 4, 4, r.hair).setOrigin(0.5, 1),
+      scene.add.triangle(0, -37, 0, 5, 2, 0, 4, 5, r.hair).setOrigin(0.5, 1),
+      scene.add.triangle(4, -36, 0, 4, 2, 0, 4, 4, r.hair).setOrigin(0.5, 1),
+      scene.add.circle(0, -34, 1, 0xd94f2e),
+      // a gold chain and a red cape
+      scene.add.rectangle(0, -15, 10, 1, r.hair),
+      scene.add.rectangle(-8, -10, 2, 12, 0xc31f2e),
+      scene.add.rectangle(8, -10, 2, 12, 0xc31f2e),
+    );
+  }
   return scene.add.container(x, y, parts).setDepth(10);
 }

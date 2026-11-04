@@ -3454,6 +3454,46 @@ for (const g of [
   await page.close();
 }
 
+// A NEW DANCER EVERY ROUND, AND THE CARD BETWEEN ROUNDS WAITS FOR A CHOICE:
+// CASH OUT takes the bank, DANCE ON goes on to the next dancer.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=60&game=danceoff`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__dance');
+  const first = await page.evaluate(() => window.__dance.rival());
+  await page.evaluate(() => {
+    window.__dance.setScores(9000, 0);
+    window.__dance.finish();
+  });
+  await sleep(4000);
+  const waiting = await page.evaluate(() => window.__dance.state());
+  const holds = waiting.cardUp && waiting.round === 1 && !waiting.over;
+  console.log(`${holds ? 'PASS' : 'FAIL'}  dance off: the card waits for CASH OUT or DANCE ON  — card ${waiting.cardUp ? 'up' : 'gone'} after 4s`);
+  if (!holds) failures++;
+  await page.evaluate(() => window.__dance.skipCard());
+  await sleep(500);
+  const second = await page.evaluate(() => window.__dance.rival());
+  const fresh = second !== first;
+  console.log(`${fresh ? 'PASS' : 'FAIL'}  dance off: a new dancer every round  — ${first} -> ${second}`);
+  if (!fresh) failures++;
+  const before = await page.evaluate(() => window.__froggy.state().tokens);
+  await page.evaluate(() => {
+    window.__dance.setScores(9000, 0);
+    window.__dance.finish();
+  });
+  await sleep(400);
+  await page.keyboard.press('KeyC');
+  await sleep(2600);
+  const after = await page.evaluate(() => window.__froggy.state().tokens);
+  const cashed = after - before === 35;
+  console.log(`${cashed ? 'PASS' : 'FAIL'}  dance off: C cashes out the bank between rounds  — ${before} -> ${after}, wants +35`);
+  if (!cashed) failures++;
+  await page.close();
+}
+
 // THE LADDER'S OTHER THREE ENDINGS.
 //
 // Winning all three is the easy one to get right.  What the table is actually
