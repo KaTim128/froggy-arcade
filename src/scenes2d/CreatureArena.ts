@@ -2,8 +2,11 @@
  * ---- CREATURE CLASH, the fight.  Real time, top down, one on one.
  *
  *   move      WASD / arrows, or the move stick
- *   choose    1 2 3, or the three attack buttons -- BEFORE you aim
- *   aim+fire  mouse + click, or drag the aim stick and let go
+ *   attack    desktop: KEYBOARD ONLY (user, 3 Nov) -- 1 2 3 or J K L fire
+ *             that ability at once, SPACE fires the chosen one; every one
+ *             aims itself at the opponent (a blink goes the way you walk).
+ *             The mouse does nothing in a fight.
+ *   phone     the move pad and the three attack buttons, auto-aimed too
  *
  * Two kinds of fight, and the training ground:
  *
@@ -275,6 +278,12 @@ interface Prop {
   /** A piece somebody put up that shots can break: what it has left, and had. */
   hp?: number;
   maxHp?: number;
+  /**
+   * Whose wall this piece is.  It stops the OTHER one's body and shots;
+   * its owner walks and fires straight through it (user, 3 Nov: "abilities
+   * must never harm or obstruct the player's own creature").
+   */
+  owner?: Fighter;
 }
 
 /**
@@ -692,6 +701,8 @@ export class CreatureArena extends Phaser.Scene {
     this.input.keyboard!.on('keydown-ONE', () => this.keyFire(0));
     this.input.keyboard!.on('keydown-TWO', () => this.keyFire(1));
     this.input.keyboard!.on('keydown-THREE', () => this.keyFire(2));
+    // SPACE: the chosen ability, auto-aimed
+    this.input.keyboard!.on('keydown-SPACE', () => this.quickFire(this.sel));
     this.input.addPointer(2);
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.down(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.moveP(p));
@@ -824,8 +835,8 @@ export class CreatureArena extends Phaser.Scene {
   private keyFire(i: number): void {
     this.choose(i);
     if (this.touch || this.band || this.over || this.paused || !this.started || this.dialog) return;
-    const p = this.input.activePointer;
-    this.fire(this.me, i, p.worldX - this.me.x, p.worldY - this.me.y);
+    // auto-aimed, never the mouse: the fight is played on the keyboard
+    this.quickFire(i);
   }
 
   /** A band button: that attack, now, at the foe (a blink goes the way you are walking). */
@@ -1319,7 +1330,7 @@ export class CreatureArena extends Phaser.Scene {
       if (p.x < GAME_W / 2 && this.moveStick.id < 0) Object.assign(this.moveStick, { id: p.id, bx: p.x, by: p.y, dx: 0, dy: 0 });
       return;
     }
-    this.fire(this.me, this.sel, p.x - this.me.x, p.y - this.me.y);
+    // (a desktop click on the arena fires nothing: the keys do all of it)
   }
 
   private moveP(p: Phaser.Input.Pointer): void {
@@ -1532,7 +1543,7 @@ export class CreatureArena extends Phaser.Scene {
         else this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 3, t: 0, life: 0.18, col });
         const o = this.other(f);
         const lineHit = (k: number) => {
-          if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 6 * o.scale + 2 && (pierce || !this.blocked(f.x, f.y, o.x, o.y))) this.hit(f, o, Math.round(dmg * k), a);
+          if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 6 * o.scale + 2 && (pierce || !this.blocked(f.x, f.y, o.x, o.y, f))) this.hit(f, o, Math.round(dmg * k), a);
         };
         lineHit(1);
         if (a.mod === 'linger') for (const k of [0.35, 0.7, 1]) this.pool(f, f.x + (x2 - f.x) * k, f.y + (y2 - f.y) * k, 9);
@@ -1646,7 +1657,10 @@ export class CreatureArena extends Phaser.Scene {
             r: 6,
             ...(spec.hp ? { hp: spec.hp, maxHp: spec.hp } : {}),
           }))
-          .filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale);
+          .filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale)
+          // never on its own maker either
+          .filter((q) => Math.hypot(q.x - f.x, q.y - f.y) > q.r + BODY_R * f.scale + 2)
+          .map((q) => ({ ...q, owner: f }));
         if (parts.length) {
           this.barriers.push({ kind: wallLook(a.sp, f.c.element), parts, seed: 1, life: spec.life, max: spec.life, owner: f, shatter: a.sp === 'glacier_slab' });
           this.props.push(...parts);
@@ -1757,7 +1771,7 @@ export class CreatureArena extends Phaser.Scene {
           const x2 = f.x + ux * len;
           const y2 = f.y + uy * len;
           this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 3, t: 0, life: 0.25, col });
-          if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 6 * o.scale + 3 && (f.c.element === 'glow' || !this.blocked(f.x, f.y, o.x, o.y))) this.hit(f, o, dmg, a);
+          if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 6 * o.scale + 3 && (f.c.element === 'glow' || !this.blocked(f.x, f.y, o.x, o.y, f))) this.hit(f, o, dmg, a);
           audio.sfx('arcane_blast', 0.45);
         } });
         f.root = Math.max(f.root, 0.5);
@@ -2873,8 +2887,9 @@ export class CreatureArena extends Phaser.Scene {
     this.tweens.add({ targets: n, y: n.y - 10, alpha: 0, duration: 650, ease: 'Quad.easeOut', onComplete: () => n.destroy() });
   }
 
-  private blocked(x1: number, y1: number, x2: number, y2: number): boolean {
-    return this.props.some((p) => this.segDist(p.x, p.y, x1, y1, x2, y2) < p.r);
+  private blocked(x1: number, y1: number, x2: number, y2: number, by?: Fighter): boolean {
+    // (a wall never blocks the one who put it up)
+    return this.props.some((p) => (!by || p.owner !== by) && this.segDist(p.x, p.y, x1, y1, x2, y2) < p.r);
   }
 
   private segDist(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
@@ -2901,6 +2916,7 @@ export class CreatureArena extends Phaser.Scene {
     // (phasing: cover is not there for it)
     if (!f.st.phase) {
       for (const p of this.props) {
+        if (p.owner === f) continue; // its own wall lets it through
         const d = Math.hypot(nx - p.x, ny - p.y);
         if (d < p.r + r) {
           const k = (p.r + r - d) / (d || 1);
@@ -3059,7 +3075,7 @@ export class CreatureArena extends Phaser.Scene {
     const dx = p.x - f.x;
     const dy = p.y - f.y;
     const dist = Math.hypot(dx, dy) || 1;
-    const clear = !this.blocked(f.x, f.y, p.x, p.y) || f.c.element === 'glow';
+    const clear = !this.blocked(f.x, f.y, p.x, p.y, f) || f.c.element === 'glow';
     // aim: worse when blinded, better the sharper it is -- and a sharp one
     // shoots where you are GOING, not where you were
     const lead = sk > 0.5 ? (sk - 0.5) * 2 * Math.min(0.5, dist / 200) : 0;
@@ -3401,8 +3417,8 @@ export class CreatureArena extends Phaser.Scene {
         if (s.a.mod === 'boomerang' && !s.back) s.grace = 0.35;
         else s.life = 0;
         if (s.a.mod === 'split') this.shatter(s);
-      } else if (!s.pierce && this.props.some((p) => Math.hypot(p.x - s.x, p.y - s.y) < p.r)) {
-        const p = this.props.find((q) => Math.hypot(q.x - s.x, q.y - s.y) < q.r)!;
+      } else if (!s.pierce && this.props.some((p) => p.owner !== s.owner && Math.hypot(p.x - s.x, p.y - s.y) < p.r)) {
+        const p = this.props.find((q) => q.owner !== s.owner && Math.hypot(q.x - s.x, q.y - s.y) < q.r)!;
         if (s.a.mod === 'bounce' && !s.bounced) {
           // off the cover like a ball off a wall
           const nx = (s.x - p.x) / (Math.hypot(s.x - p.x, s.y - p.y) || 1);

@@ -1247,7 +1247,7 @@ export class CreatureHub extends Phaser.Scene {
     const key = (k: string): string => capLabel(codeFor(`creatureclash:${k}`));
     const touch = isTouch();
     const steps: Array<{ demo: string; say: string }> = [
-      { demo: 'clash.move', say: touch ? 'THE STICK MOVES YOUR CREATURE. EACH MOVE BUTTON FIRES THAT MOVE STRAIGHT AT THE FOE.' : 'W A S D MOVES YOUR CREATURE. AIM WITH THE MOUSE AND CLICK TO FIRE THE MOVE YOU HAVE PICKED.' },
+      { demo: 'clash.move', say: touch ? 'THE STICK MOVES YOUR CREATURE. EACH MOVE BUTTON FIRES THAT MOVE STRAIGHT AT THE FOE.' : 'W A S D MOVES YOUR CREATURE. EVERY MOVE AIMS ITSELF AT THE FOE: NO MOUSE NEEDED.' },
       { demo: 'clash.moves', say: 'EVERY CREATURE HAS THREE MOVES: A PLAIN ATTACK AND TWO SPECIALS. AFTER A MOVE IS USED IT HAS TO RECHARGE - ITS COOLDOWN. THE RING ROUND ITS BUTTON FILLS BACK UP, AND THEN IT IS READY.' },
       { demo: 'clash.stats', say: "TAP A CREATURE'S CARD FOR ITS STATS. HP: HOW MUCH IT CAN TAKE. ATTACK: HOW HARD IT HITS. DEFENCE: HOW WELL IT LASTS. SPEED: HOW FAST IT MOVES. MELEE FIGHTS UP CLOSE, RANGED FROM AFAR." },
       { demo: 'clash.elements', say: 'EACH CREATURE HAS AN ELEMENT, AND EVERY HIT IT LANDS CARRIES ITS EDGE: EMBER BURNS, TIDE KNOCKS BACK, FROST SLOWS, VOLT STUNS, STONE TAKES LESS. TAP ? BY A MOVE TO READ JUST WHAT IT DOES.' },
@@ -1259,7 +1259,7 @@ export class CreatureHub extends Phaser.Scene {
         demo: 'clash.keys',
         say: touch
           ? 'ON A PHONE THE CONTROLS SIT BESIDE OR UNDER THE ARENA: THE STICK MOVES, AND EACH MOVE BUTTON FIRES ITS MOVE AT THE FOE.'
-          : `${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} FIRE MOVES 1, 2 AND 3 STRAIGHT AT THE FOE. 1 2 3 FIRE THEM AT THE MOUSE. W A S D MOVES. ${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} CAN BE MOVED IN THE SETTINGS, UNDER CHANGE KEYS.`,
+          : `${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} (OR 1 2 3) FIRE MOVES 1, 2 AND 3 STRAIGHT AT THE FOE. SPACE FIRES THE ONE PICKED. W A S D MOVES. ${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} CAN BE MOVED IN THE SETTINGS, UNDER CHANGE KEYS.`,
       },
     ];
     this.howStep = Phaser.Math.Clamp(this.howStep, 0, steps.length - 1);

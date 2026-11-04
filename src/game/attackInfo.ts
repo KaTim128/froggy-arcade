@@ -187,7 +187,7 @@ function rawInfo(a: Attack, el: Element, scale: number): AttackInfo {
   switch (a.kind) {
     case 'bolt': {
       const r = Math.round(a.reach * SHOT_LIFE);
-      return { ...base, type: 'PROJECTILE', target: 'SINGLE TARGET', range: `LONG RANGE ${r}PX`, reachPx: r, use: 'FAST, CHEAP POKE. AIM AND LEAD THE TARGET.' };
+      return { ...base, type: 'PROJECTILE', target: 'SINGLE TARGET', range: `LONG RANGE ${r}PX`, reachPx: r, use: 'FAST, CHEAP POKE. AIMS ITSELF; DODGE SIDEWAYS SO THEIRS MISS.' };
     }
     case 'spread': {
       const r = Math.round(a.reach * SHOT_LIFE);
