@@ -40,11 +40,11 @@ import { MINI_INFO, MINI_MIN_COST, MINI_PRICE, TEAM_SIZE, drawPool, roleOf, star
 import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, BOSSES, bossById, creatureById, type Attack, type Creature,
+  BATTLE_COST, BATTLE_WIN, BIOMES, CREATURES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
+import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, recruitChosen, canChooseRecruit, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
-type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick';
+type Screen = 'home' | 'recruit' | 'choose' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick';
 const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls', 'minis'];
 
 interface Shown {
@@ -104,6 +104,8 @@ const TEAM_PAGE = 8;
 
 export class CreatureHub extends Phaser.Scene {
   private screen: Screen = 'home';
+  /** Which page of every creature the admin's recruit is on. */
+  private choosePage = 0;
   /** A move's card, when one is open: over the screen and its creatures. */
   private modal: Phaser.GameObjects.Container | null = null;
   private layer!: Phaser.GameObjects.Container;
@@ -276,7 +278,7 @@ export class CreatureHub extends Phaser.Scene {
     if (top) {
       // (LEAVE is in the pause menu: Esc on a keyboard, the gear on a phone)
     } else if (!(this.screen === 'pack' && this.picked)) L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.back(), { width: 44, height: 11 }));
-    ({ home: () => this.home(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), story: () => this.story(), trail: () => this.trail(), ladder: () => this.ladder(), controls: () => this.controls(), minis: () => this.minis(), minipick: () => this.miniPick() })[this.screen]();
+    ({ home: () => this.home(), recruit: () => this.recruit(), choose: () => this.chooseAny(), pack: () => this.pack(), map: () => this.map(), story: () => this.story(), trail: () => this.trail(), ladder: () => this.ladder(), controls: () => this.controls(), minis: () => this.minis(), minipick: () => this.miniPick() })[this.screen]();
     // (on the pack screen the line keeps to the right-hand column, clear of
     // the cards; once one is picked its own panel says who joined)
     const packMsg = this.screen === 'pack';
@@ -970,6 +972,15 @@ export class CreatureHub extends Phaser.Scene {
       L.add(button(this, GAME_W / 2, 132, 'YOUR PACK', () => this.go('pack'), { width: 96, height: 13 }));
       return;
     }
+    // (the admin's test zone, CHOOSE ANY RECRUIT on: pick any creature, free)
+    if (canChooseRecruit()) {
+      L.add(button(this, GAME_W / 2, 132, 'CHOOSE ONE', () => {
+        this.choosePage = 0;
+        this.go('choose');
+      }, { width: 96, height: 13 }));
+      L.add(centerSmall(this, GAME_W / 2, 150, 'ADMIN TEST: PICK ANY CREATURE, FREE', PALETTE.gold));
+      return;
+    }
     const can = ledger.balance() >= packPrice();
     L.add(button(this, GAME_W / 2, 132, packPrice() ? `OPEN  ${packPrice()} TOK` : 'OPEN - FREE', () => {
       const r = openPack();
@@ -981,6 +992,45 @@ export class CreatureHub extends Phaser.Scene {
       this.draw();
     }, { width: 96, height: 13, disabled: !can }));
     if (ledger.balance() < packPrice()) L.add(centerText(this, GAME_W / 2, 154, `YOU HAVE ${ledger.balance()} TOKENS.`, PALETTE.ash));
+  }
+
+  /**
+   * EVERY CREATURE, BY ITS PICTURE (user, 4 Nov: the admin's recruit picks
+   * any one, shown by its image and not its name): a page of them in a grid,
+   * the next page and the one before at the bottom.
+   */
+  private chooseAny(): void {
+    const L = this.layer;
+    L.add(centerText(this, GAME_W / 2, 22, 'CHOOSE A CREATURE', PALETTE.cream));
+    const cols = 8;
+    const rows = 3;
+    const per = cols * rows;
+    const pages = Math.ceil(CREATURES.length / per);
+    this.choosePage = Phaser.Math.Clamp(this.choosePage, 0, pages - 1);
+    const cw = 36;
+    const ch = 40;
+    const x0 = Math.round((GAME_W - (cols * cw + (cols - 1) * 3)) / 2);
+    CREATURES.slice(this.choosePage * per, (this.choosePage + 1) * per).forEach((cr, i) => {
+      const x = x0 + (i % cols) * (cw + 3);
+      const y = 30 + Math.floor(i / cols) * (ch + 3);
+      const el = ELEMENTS[cr.element];
+      const cell = this.add.rectangle(x, y, cw, ch, 0x161a2c).setOrigin(0, 0).setStrokeStyle(1, el.col);
+      cell.setInteractive({ useHandCursor: true });
+      cell.on('pointerover', () => (cell.setFillStyle(0x2a3050).setStrokeStyle(1, PALETTE.gold), audio.sfx('ui_hover')));
+      cell.on('pointerout', () => cell.setFillStyle(0x161a2c).setStrokeStyle(1, el.col));
+      cell.on('pointerdown', () => {
+        audio.sfx('ui_blip');
+        this.say(recruitChosen(cr.id));
+        this.go('home');
+      });
+      L.add(cell);
+      L.add(this.add.rectangle(x + 3, y + ch - 5, cw - 6, 2, el.col).setOrigin(0, 0));
+      this.shown.push({ c: cr, x: x + cw / 2, y: y + 19, s: 1.0, f: 1 });
+    });
+    const py = 166;
+    L.add(button(this, GAME_W / 2 - 50, py, '<', () => ((this.choosePage = (this.choosePage + pages - 1) % pages), this.draw()), { width: 24, height: 12 }));
+    L.add(centerText(this, GAME_W / 2, py - 3, `${this.choosePage + 1} / ${pages}`, PALETTE.fog));
+    L.add(button(this, GAME_W / 2 + 50, py, '>', () => ((this.choosePage = (this.choosePage + 1) % pages), this.draw()), { width: 24, height: 12 }));
   }
 
   /** The nine cards.  Face down until one is chosen; then that one, then the rest. */
