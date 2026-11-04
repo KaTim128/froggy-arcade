@@ -1133,33 +1133,27 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       break;
     }
     case 'zebra': {
-      // ---- THE ZEBRA, REDRAWN (user, 4 Nov: "make zebra look better").  A
-      // long horse's head that tapers to a soft grey muzzle with a nostril
-      // and a mouth line -- not a dark blob over the face -- thin black
-      // stripes arcing over the brow and down the bridge of the nose, tall
-      // ears black at the tips, a tall stiff mane in tight black and white
-      // bands, and the body ringed in thin, even stripes that curve round it
-      // (each in two strokes, a gentle chevron), over a pale belly.
-      const ink = 0x16161a;
-      const muzzle = 0x5a5a64;
-      // the head, long and tapering, then the muzzle and nose
-      head.push(E(5.6, 1.6, 11.4, 6.2, d.skin), E(10.6, 2.8, 4.6, 3.8, muzzle), E(12.2, 2, 1.3, 0.9, 0x101014));
-      head.push(R(10.4, 5.2, 4, 0.7, 0x202026).setAlpha(0.9));
-      // the brow and the bridge of the nose: thin arcs, close together
-      for (let k = 0; k < 5; k++) head.push(R(-2.6 + k * 1.9, -3.2 + k * 0.5, 0.75, 4.4 - k * 0.3, ink, 18 - k * 4));
-      for (let k = 0; k < 3; k++) head.push(R(6.2 + k * 1.3, -1.8 + k * 0.4, 0.7, 2.6, ink, 74));
-      // tall ears, black at the tips, pale inside
-      headBack.push(TA(-2.6, -3.4, 0.4, -4, -1.4, -11, d.skin), TA(-1.9, -8.8, -0.6, -9, -1.4, -11, ink));
-      headBack.push(TA(-1.8, -4.4, -0.4, -4.6, -1.3, -8.4, 0xd8d0d0));
-      headBack.push(TA(0.6, -3.6, 3.2, -4, 2, -10.4, shade(d.skin, 0.1)), TA(1.6, -9, 2.4, -9.2, 2, -10.4, ink));
-      // the mane: a tall stiff brush up the back of the neck, in tight bands
-      for (let k = 0; k < 10; k++) headBack.push(R(-4.2 - k * 0.5, -7.4 + k * 1.7, 2.6, 2.2, k % 2 ? ink : 0xf8f8f4, -22));
-      // the body: thin even stripes curving round it, over a pale belly
-      body.push(E(3, 2, bw * 0.6, bh * 0.75, 0xffffff).setAlpha(0.55));
-      for (let k = 0; k < 9; k++) {
-        const y = -bh + 2.5 + k * (bh * 2 - 5) / 8;
-        body.push(R(-bw * 0.45, y, bw * 0.95, 1, ink, 12), R(bw * 0.42, y + 0.6, bw * 0.85, 1, ink, -10));
+      // ---- A LONG HORSE'S HEAD, STRIPED.  A tapering muzzle with a dark
+      // nose and flared nostril, tall ears, a short stiff mane that stands
+      // up in black and white bands down the neck, black stripes curving
+      // round the body and the head, and a tufted tail.
+      const ink = 0x1a1a1e;
+      // the muzzle, long and tapering, and the dark soft nose
+      head.push(E(6.4, 2, 11, 6.4, d.skin), E(10.2, 3, 5.4, 4.6, 0x3a3a40), E(11.4, 2.2, 1.4, 1, 0x101014));
+      head.push(R(9, 5.4, 4.4, 0.8, ink).setAlpha(0.8));
+      // stripes across the face and down the muzzle
+      for (const [x, y, a] of [[-2.4, -3.4, 20], [0.2, -4, 10], [3, -0.6, 70], [5, -0.4, 75], [7, 0, 80]] as const) head.push(R(x, y, 1.1, 4.6, ink, a));
+      // tall ears, black-tipped
+      headBack.push(TA(-2.6, -3.4, 0.4, -4, -1.4, -11, d.skin), TA(-1.8, -9, -0.6, -9.2, -1.4, -11, ink));
+      headBack.push(TA(0.6, -3.6, 3.2, -4, 2, -10.4, shade(d.skin, 0.1)));
+      // the mane: a stiff brush standing up the back of the neck, banded
+      for (let i = 0; i < 7; i++) headBack.push(R(-4 - i * 0.6, -6 + i * 2.2, 2.4, 3, i % 2 ? ink : 0xf8f8f4, -20));
+      // the body's stripes, curving round it, and a pale belly
+      for (let i = 0; i < 6; i++) {
+        const y = -bh + 3 + i * (bh * 2 - 6) / 5;
+        body.push(R(-1.5, y, bw * 1.5, 1.4, ink, i % 2 ? 14 : -14).setAlpha(0.9));
       }
+      body.push(E(3, 2, bw * 0.6, bh * 0.7, 0xffffff).setAlpha(0.5));
       // a tufted tail
       tailRoot0 = [-bw + 3, bh - 5];
       {
