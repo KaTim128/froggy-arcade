@@ -33,7 +33,7 @@ import { BOSSES, CREATURES, ELEMENTS, type Creature } from './creatures';
 import { roleOf } from './creatureMinis';
 
 export const ULT_UNLOCK_S = 30;
-export const ULT_COOLDOWN_S = 30;
+export const ULT_COOLDOWN_S = 25;
 
 export type UltFx =
   | { k: 'charge'; dist: number; dmg: number }
@@ -142,20 +142,20 @@ function make(k: K, c: Creature, h: number, big: number): UltFx {
     case 'charge': return { k, dist: 90 + v(3) * 10, dmg: Math.round(base * (2.6 + v(5) * 0.15) * big) };
     case 'blink': return { k, dmg: Math.round(base * (2.4 + v(4) * 0.15) * big) };
     case 'nova': return { k, r: 34 + v(6) * 4, dmg: Math.round(base * (2 + v(7) * 0.15) * big), knock: 160 + v(8) * 30 };
-    case 'rage': return { k, t: 5 + v(9) };
+    case 'rage': return { k, t: 4 + v(9) * 0.5 };
     case 'pull': return { k, r: 90 + v(10) * 10, dmg: Math.round(base * (1.2 + v(11) * 0.1) * big) };
     case 'barrage': return { k, n: Math.round((5 + v(12)) * big), dmg: Math.round(base * (0.8 + v(13) * 0.06)), spread: 0.5 + v(14) * 0.08 };
     case 'beam': return { k, len: 200 + v(15) * 15, dmg: Math.round(base * (2.4 + v(16) * 0.15) * big), w: 5 + v(17) };
     case 'meteor': return { k, n: Math.round((3 + (v(18) % 3)) * big), r: 18 + v(19) * 2, dmg: Math.round(base * (1.1 + v(20) * 0.08)) };
     case 'zone': return { k, n: 3 + (v(21) % 3), r: 12 + v(22) * 1.5 };
-    case 'shield': return { k, t: 3 + v(23) * 0.5 };
-    case 'heal': return { k, frac: Math.round((0.18 + v(24) * 0.02) * 100 * Math.min(1.2, big)) / 100 };
-    case 'drain': return { k, t: 3 + v(25) * 0.5, dps: Math.round(base * (0.45 + v(26) * 0.05) * big) };
-    case 'slowfield': return { k, r: 60 + v(27) * 8, t: 3 + v(28) * 0.5 };
+    case 'shield': return { k, t: 2 + v(23) * 0.4 };
+    case 'heal': return { k, frac: Math.round((0.12 + v(24) * 0.015) * 100 * Math.min(1.2, big)) / 100 };
+    case 'drain': return { k, t: 2.5 + v(25) * 0.4, dps: Math.round(base * (0.45 + v(26) * 0.05) * big) };
+    case 'slowfield': return { k, r: 60 + v(27) * 8, t: 2 + v(28) * 0.4 };
     case 'clones': return { k, n: 2 + (v(29) % 2) };
-    case 'invuln': return { k, t: 1.5 + v(30) * 0.25 };
-    case 'stun': return { k, r: 70 + v(1) * 10, t: 1 + v(2) * 0.15 };
-    case 'haste': return { k, t: 4 + v(0) };
+    case 'invuln': return { k, t: 1 + v(30) * 0.2 };
+    case 'stun': return { k, r: 70 + v(1) * 10, t: 0.8 + v(2) * 0.1 };
+    case 'haste': return { k, t: 3 + v(0) * 0.5 };
   }
 }
 
@@ -195,8 +195,10 @@ const RANGE: Record<K, number> = {
  * creature's health, half again for a boss.  What is left (shields, stuns,
  * speed, heals) is capped by its own numbers above.
  */
-const BUDGET = 32;
-const BOSS_BUDGET = 48;
+// (32 / 48 at first: in mirror fights the side with its ultimate ready won
+// 7 of 8 -- one ultimate decided the fight.  Brought down to be an edge, not a win.)
+const BUDGET = 22;
+const BOSS_BUDGET = 34;
 function expected(f: UltFx): number {
   switch (f.k) {
     case 'charge': case 'blink': case 'beam': return f.dmg;

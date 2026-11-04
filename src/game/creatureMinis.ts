@@ -4,13 +4,16 @@
  *   MELEE VS MELEE    pick one of three melee creatures; the other side is a
  *                     melee creature of about the same strength
  *   RANGED VS RANGED  the same, for shooters
- *   3V3 BATTLE        pick three of ten, a mix of roles; the other side gets
- *                     three of its own in the same roles.  One at a time: when
- *                     one faints the next comes in, and the survivor keeps the
- *                     health it had.  Last team standing wins.
+ *   5V5 BATTLE        pick five of twelve, a mix of roles; the other side
+ *                     gets five of its own in the same roles (user, 4 Nov: it
+ *                     was 3v3).  One at a time: when one faints the next comes
+ *                     in, and the survivor keeps the health it had.  Last
+ *                     team standing wins.
  *
- * FIVE TOKENS IN, TEN FOR A WIN, NOTHING FOR A LOSS.  The five is taken once,
- * when the battle is confirmed; the ten is paid once, when the run is won.
+ * WHAT IT COSTS (user, 4 Nov): a duel is 2 tokens in and 5 for a win (3 up);
+ * 5v5 is 5 in and 10 for a win.  Nothing for a loss.  The stake is taken
+ * once, when the battle is confirmed; the prize is paid once, when the run is
+ * won.
  * Mini games use the creatures here, not your own, and give no XP: Story Mode
  * and the Ladder are untouched.
  */
@@ -20,15 +23,24 @@ import { CREATURES, creatureById, type Creature } from './creatures';
 import { traitsOf } from './creatureTraits';
 
 export type MiniKind = 'melee' | 'ranged' | 'team';
-export const MINI_COST = 5;
-export const MINI_WIN = 10;
+/** Each mode's stake and prize (see the top of this file). */
+export const MINI_PRICE: Record<MiniKind, { cost: number; win: number }> = {
+  melee: { cost: 2, win: 5 },
+  ranged: { cost: 2, win: 5 },
+  team: { cost: 5, win: 10 },
+};
+/** The cheapest way in, for the hub's "you need" line. */
+export const MINI_MIN_COST = Math.min(...Object.values(MINI_PRICE).map((p) => p.cost));
+/** The team mode: how many a side, and how many to choose from. */
+export const TEAM_SIZE = 5;
+export const TEAM_POOL = 12;
 /** Every creature in a mini game fights at this level, so a pick is about the creature. */
 export const MINI_LEVEL = 8;
 
 export const MINI_INFO: Record<MiniKind, { title: string; rules: string[] }> = {
   melee: { title: 'MELEE VS MELEE', rules: ['PICK 1 OF 3 MELEE FIGHTERS.', 'YOUR FOE IS MELEE TOO.'] },
   ranged: { title: 'RANGED VS RANGED', rules: ['PICK 1 OF 3 SHOOTERS.', 'YOUR FOE SHOOTS TOO.'] },
-  team: { title: '3V3 BATTLE', rules: ['PICK 3 OF 10. ONE AT A TIME:', 'WHEN ONE FAINTS, THE NEXT GOES IN.'] },
+  team: { title: '5V5 BATTLE', rules: ['PICK 5 OF 12. ONE AT A TIME:', 'WHEN ONE FAINTS, THE NEXT GOES IN.'] },
 };
 
 /** A creature's combat role, read off its kit. */
@@ -74,9 +86,9 @@ export function drawPool(kind: MiniKind, rng: () => number = Math.random): strin
   if (kind !== 'team') return pool.slice(0, 3).map((c) => c.id);
   const by: Record<Role, Creature[]> = { melee: [], ranged: [], support: [] };
   for (const c of pool) by[roleOf(c)].push(c);
-  const out = [...by.melee.slice(0, 4), ...by.ranged.slice(0, 4), ...by.support.slice(0, 2)];
-  for (const c of pool) if (out.length < 10 && !out.includes(c)) out.push(c);
-  return out.slice(0, 10).map((c) => c.id);
+  const out = [...by.melee.slice(0, 5), ...by.ranged.slice(0, 5), ...by.support.slice(0, 2)];
+  for (const c of pool) if (out.length < TEAM_POOL && !out.includes(c)) out.push(c);
+  return out.slice(0, TEAM_POOL).map((c) => c.id);
 }
 
 /**
@@ -120,9 +132,10 @@ export const currentMini = (): MiniRun | null => run;
 
 /** Confirm a pick: five tokens, and the run is on. */
 export function startMini(kind: MiniKind, picks: string[]): { ok: boolean; msg: string; run?: MiniRun } {
-  const want = kind === 'team' ? 3 : 1;
-  if (picks.length !== want || picks.some((p) => !creatureById(p))) return { ok: false, msg: kind === 'team' ? 'PICK THREE.' : 'PICK ONE.' };
-  if (!ledger.debit(MINI_COST, 'creature')) return { ok: false, msg: `A MINI GAME COSTS ${MINI_COST} TOKENS.` };
+  const want = kind === 'team' ? TEAM_SIZE : 1;
+  if (picks.length !== want || picks.some((p) => !creatureById(p))) return { ok: false, msg: kind === 'team' ? `PICK ${TEAM_SIZE}.` : 'PICK ONE.' };
+  const cost = MINI_PRICE[kind].cost;
+  if (!ledger.debit(cost, 'creature')) return { ok: false, msg: `THIS MINI GAME COSTS ${cost} TOKENS.` };
   run = { kind, me: picks.slice(), foe: drawFoes(kind, picks), bout: 0, done: false };
   return { ok: true, msg: 'FIGHT!', run };
 }
@@ -146,8 +159,9 @@ export function boutOver(won: boolean, survivorHp: number): { over: boolean; won
   if (run.me.length && run.foe.length) return { over: false, won, paid: 0 };
   run.done = true;
   const victory = run.foe.length === 0;
-  if (victory) ledger.credit(MINI_WIN, 'game.reward');
-  return { over: true, won: victory, paid: victory ? MINI_WIN : 0 };
+  const win = MINI_PRICE[run.kind].win;
+  if (victory) ledger.credit(win, 'game.reward');
+  return { over: true, won: victory, paid: victory ? win : 0 };
 }
 
 /** Walk away: the five is gone, nothing is paid. */

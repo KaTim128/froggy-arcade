@@ -39,7 +39,7 @@ import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, bossById, 
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel, xpProgress } from '../game/creatureLevel';
 import { ULT_COOLDOWN_S, ULT_UNLOCK_S, ultColour, ultimateOf, type Ultimate, type UltFx } from '../game/ultimates';
-import { MINI_INFO, MINI_LEVEL, MINI_WIN, abandonMini, boutOver, currentMini } from '../game/creatureMinis';
+import { MINI_INFO, MINI_LEVEL, MINI_PRICE, abandonMini, boutOver, currentMini } from '../game/creatureMinis';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, EVADE_CHANCE, EVADE_S, FOCUS_CRIT, FOCUS_S, FURY_MUL, FURY_S, QUICK_RATE, QUICK_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, WALL_DEFAULT, WALL_SPECS, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
@@ -4616,7 +4616,7 @@ export class CreatureArena extends Phaser.Scene {
         return;
       }
       box.add(centerText(this, X, Y - 20, r.won ? 'VICTORY!' : 'DEFEATED', r.won ? PALETTE.gold : 0xff6a6a));
-      box.add(centerText(this, X, Y - 6, r.won ? `+${MINI_WIN} TOKENS` : 'NO TOKENS THIS TIME', r.won ? PALETTE.gold : PALETTE.ash));
+      box.add(centerText(this, X, Y - 6, r.won ? `+${r.paid || MINI_PRICE[currentMini()?.kind ?? 'melee'].win} TOKENS` : 'NO TOKENS THIS TIME', r.won ? PALETTE.gold : PALETTE.ash));
       box.add(button(this, X, Y + 30, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen: 'minis' }), { width: 80, height: 13 }));
     });
   }
