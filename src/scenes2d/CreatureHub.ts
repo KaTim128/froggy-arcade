@@ -42,7 +42,7 @@ import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, retreat, setActive, startLadder } from '../game/creatureClash';
+import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
 type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick';
 const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls', 'minis'];
@@ -377,7 +377,7 @@ export class CreatureHub extends Phaser.Scene {
    * Its level is in a chip on the picture; with `xp` (one you own), the
    * experience towards the next level as a bar, or MAX at the top level.
    */
-  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number, tall = false): void {
+  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number, tall = false, uid?: number): void {
     const L = this.layer;
     const el = ELEMENTS[c.element];
     const artH = big ? 36 : 26;
@@ -429,7 +429,7 @@ export class CreatureHub extends Phaser.Scene {
     const glow = this.add.rectangle(x + 2, y + 2, w - 4, artH + 21, 0xffffff, 0).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold, 0);
     hit.on('pointerover', () => (glow.setFillStyle(0xffffff, 0.06), glow.setStrokeStyle(1, PALETTE.gold, 1), audio.sfx('ui_hover')));
     hit.on('pointerout', () => (glow.setFillStyle(0xffffff, 0), glow.setStrokeStyle(1, PALETTE.gold, 0)));
-    hit.on('pointerdown', () => (audio.sfx('ui_blip'), this.showStats(c, xp)));
+    hit.on('pointerdown', () => (audio.sfx('ui_blip'), this.showStats(c, xp, uid)));
     L.add(glow);
     L.add(hit);
     const tagX = x + w - 4;
@@ -618,7 +618,7 @@ export class CreatureHub extends Phaser.Scene {
    *            point for a guard / reflect / thorns move, one for a heal,
    *            and one for STONE, which shrugs damage off
    */
-  private showStats(c: Creature, xp?: number): void {
+  private showStats(c: Creature, xp?: number, uid?: number): void {
     this.modal?.destroy(true);
     const M = this.add.container(0, 0).setDepth(600);
     this.modal = M;
@@ -692,6 +692,34 @@ export class CreatureHub extends Phaser.Scene {
     M.add(this.add.rectangle(x + w / 2, top + 3, 1, y + h - 19 - top - 3, 0x2a3050).setOrigin(0, 0));
     column(x + w / 2 + 5, 'WEAK AGAINST', 0xff9a9a, t.weaknesses);
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
+    // ---- RELEASE (user, 4 Nov): only on one of your own, in the far corner
+    // -- a long way from CLOSE, in a dark red, so it is never hit by mistake
+    // -- and it asks before it does anything
+    if (uid !== undefined) {
+      M.add(button(this, x + w - 32, y + h - 9, 'RELEASE', () => this.confirmRelease(uid, c), { width: 52, height: 12, fill: 0x3a1420, hoverFill: 0x6a2030, textColor: 0xff9a9a }));
+    }
+  }
+
+  /** Are you sure?  Releasing is for good. */
+  private confirmRelease(uid: number, cr: Creature): void {
+    if (this.dialog) return;
+    const last = store.get().creatures.owned.length === 1;
+    this.dialog = confirmDialog(this, {
+      lines: [`RELEASE ${cr.name.toUpperCase()}?`, 'IT WILL NOT COME BACK.', ...(last ? ['IT IS YOUR LAST ONE.'] : [])],
+      confirm: 'RELEASE',
+      onConfirm: () => {
+        this.dialog = null;
+        this.modal?.destroy(true);
+        this.modal = null;
+        this.say(release(uid));
+        this.screen = needsRecovery() ? 'recruit' : 'home';
+        this.draw();
+      },
+      onCancel: () => {
+        this.dialog?.destroy();
+        this.dialog = null;
+      },
+    });
   }
 
   // ----------------------------------------------------------------- screens
@@ -720,7 +748,7 @@ export class CreatureHub extends Phaser.Scene {
       L.add(centerText(this, x + w / 2, y + 80, 'RECRUIT TO FILL', 0x4a4e68));
     } else {
       const cr = ownedCreature(act)!;
-      this.card(cr, x, y, w, h, true, true, act.xp ?? 0, true);
+      this.card(cr, x, y, w, h, true, true, act.xp ?? 0, true, act.uid);
     }
     // ---- the team, where the second card used to be
     const tx = 104;

@@ -181,6 +181,24 @@ export function setActive(uid: number): Result {
   return ok('READY TO FIGHT.');
 }
 
+/**
+ * RELEASE one (user, 4 Nov: allowed again, from its STATS card, after a
+ * confirmation).  It is gone for good; if it was the main one, the next on
+ * the team takes its place.
+ */
+export function release(uid: number): Result {
+  const c = C();
+  if (c.battle) return no('NOT IN THE MIDDLE OF A BATTLE.');
+  const o = c.owned.find((x) => x.uid === uid);
+  if (!o) return no('NOT YOURS.');
+  edit((s) => {
+    s.owned = s.owned.filter((x) => x.uid !== uid);
+    if (s.active === uid) s.active = s.owned[0]?.uid ?? -1;
+  });
+  store.flush();
+  return ok(`${creatureById(o.id)!.name.toUpperCase()} WANDERS OFF.`);
+}
+
 
 
 // --------------------------------------------------------------- zone battle
