@@ -136,6 +136,14 @@ const HUNT = {
 
 /** His walk to the storage door, metres a second (the last steps up to it are slower). */
 const APPROACH_SPEED = 1.3;
+/**
+ * The stalk's rhythm: STALK_GO seconds coming on in a surge, the rest of the
+ * STALK_CYCLE frozen.  The gain keeps the average pace what the legs ask for:
+ * the mean of 0.5 + 0.5 sin over a half period is 0.5 + 1/pi.
+ */
+const STALK_CYCLE = 2.3;
+const STALK_GO = 1.75;
+const STALK_GAIN = STALK_CYCLE / STALK_GO / (0.5 + 1 / Math.PI);
 
 type Mode = 'hide' | 'exposed';
 type Phase = 'settle' | 'burst' | 'search' | 'approach' | 'watch' | 'leave' | 'lookback' | 'exit' | 'gone' | 'detect' | 'lunge' | 'caught';
@@ -1407,6 +1415,8 @@ export class HotelLobby3D extends Phaser.Scene {
     let faceTo: THREE.Vector3 | null = null;
     let leanWant = 0;
     let crouchK = 0;
+    let stalkHunch = 0;
+    let stalkMenace = 0;
 
     if (this.phase === 'detect') {
       // turned on you, dead still, for one long moment
@@ -1493,13 +1503,38 @@ export class HotelLobby3D extends Phaser.Scene {
         while (off > Math.PI) off -= Math.PI * 2;
         while (off < -Math.PI) off += Math.PI * 2;
         const facing = Phaser.Math.Clamp((Math.cos(off) - 0.35) / 0.65, 0, 1);
-        speedWant = leg.speed * facing;
-        const step = leg.speed * facing * dt;
+        // ---- THE STALK (user list, janitor scene): not a walk but a hunt.
+        // Low and hunched, the head tipped over, the long fingers working,
+        // he comes on in surges -- a few quick, soft steps, slowing -- and
+        // then stops dead mid-stride, his face swinging round to the storage
+        // door's glass, before he goes on.  The same average pace as before
+        // (STALK_GAIN), so every timing built on the walk still holds.  Only
+        // his own slow legs; running away from the front is a run.
+        let pace = 1;
+        if (leg.speed <= APPROACH_SPEED + 0.01) {
+          const ph = (this.clock + 0.7) % STALK_CYCLE;
+          if (ph < STALK_GO) {
+            pace = (0.5 + 0.5 * Math.sin((Math.PI * ph) / STALK_GO)) * STALK_GAIN;
+            crouchK = 0.32 + Math.sin(this.clock * 2.1) * 0.06;
+            tilt = Math.sin(this.clock * 0.55) * 0.32;
+            stalkMenace = 0.22;
+          } else {
+            pace = 0;
+            still = 1;
+            crouchK = 0.42;
+            tilt = 0.5 * Math.sign(Math.sin(this.clock * 0.3)) || 0.5;
+            faceTo = new THREE.Vector3(X1, (WIN.y0 + WIN.y1) / 2, DOOR_Z);
+            stalkMenace = 0.45;
+          }
+          stalkHunch = 0.9;
+        }
+        speedWant = leg.speed * facing * pace;
+        const step = leg.speed * facing * pace * dt;
         this.fpos.addScaledVector(dir.normalize(), Math.min(step, d));
         this.fYaw = this.turnTo(this.fYaw, want, dt * (facing < 0.5 ? 3 : 2.2));
         this.holdT = leg.hold ?? 0;
-        // a slow head, turning as he walks, looking
-        scan = Math.sin(this.clock * 0.9) * 0.35;
+        // a slow head, turning as he walks, looking (not while frozen on the glass)
+        if (!faceTo) scan = Math.sin(this.clock * 0.9) * 0.35;
       } else {
         // there: what he came to do here
         if (leg.look) {
@@ -1575,7 +1610,8 @@ export class HotelLobby3D extends Phaser.Scene {
       bare: lunge ? 1 : 0.4,
       still,
       tilt,
-      hunch: 0.35,
+      hunch: Math.max(0.35, stalkHunch),
+      menace: stalkMenace,
       lean: this.lean,
       crouch: crouchK,
       faceTo: this.faceTo,
