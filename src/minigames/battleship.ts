@@ -586,6 +586,18 @@ function markPad(pond: Pond, at: number, isMine: boolean): void {
   const frog = pond.frogs.find((f) => f.at.includes(at) && f.found.has(at));
   if (frog && (isMine || true)) {
     mark.add(frogArt(sceneRef, frog.kind.tint, false));
+    // ---- FOUND, ON YOUR OWN POND (user list): a frog of yours they have
+    // found is marked, so you can see at a glance which -- a red ring round
+    // each pad they found it on, and once every pad of it is found, a red
+    // cross over it: that one is out.  (Unfound frogs are drawn plain.)
+    if (isMine) {
+      const out = frog.found.size >= frog.kind.size;
+      mark.add(sceneRef.add.ellipse(0, 0, PAD_W - 1, PAD_H - 2).setStrokeStyle(1, 0xff4a4a, 0.95));
+      if (out) {
+        mark.add(sceneRef.add.rectangle(0, 0, 9, 2, 0xff4a4a).setAngle(40));
+        mark.add(sceneRef.add.rectangle(0, 0, 9, 2, 0xff4a4a).setAngle(-40));
+      } else mark.add(sceneRef.add.rectangle(PAD_W / 2 - 3, -PAD_H / 2 + 1, 2, 4, 0xff4a4a));
+    }
     return;
   }
   if (pond.stale.has(at)) {
