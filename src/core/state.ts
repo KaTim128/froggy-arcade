@@ -592,7 +592,10 @@ class Store {
 
   /** True when the run in play is the one that never pays for anything. */
   isAdmin(): boolean {
-    return isAdminName(this.activeSlotName()) && isUnlocked(this.index.active);
+    // (the admin's name and its password, or the password typed as the name:
+    // either way this profile was unlocked with the password on this device,
+    // which is the one thing only the password can do -- core/adminAuth)
+    return isUnlocked(this.index.active) && (isAdminName(this.activeSlotName()) || this.activeSlotName() === 'ADMIN');
   }
 
   /** The admin run proper, which also gets the test buttons in the pause menu. */
