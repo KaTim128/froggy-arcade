@@ -16,6 +16,7 @@
  * what is true.
  */
 
+import { ultimateOf } from '../game/ultimates';
 import { STAGES, WORLDS, lineupFoe, stageLevel, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import { isTouch } from '../core/device';
@@ -570,13 +571,18 @@ export class CreatureHub extends Phaser.Scene {
     const t = traitsOf(c);
     M.add(smallText(this, x + 6, y + 58, t.style, 0x9ad0ff));
     M.add(smallText(this, x + 6, y + 66, t.element.slice(0, 76), el.light));
-    M.add(this.add.rectangle(x + 4, y + 75, w - 8, 1, 0x2a3050).setOrigin(0, 0));
+    // ---- its ULTIMATE (game/ultimates): up 30s into a fight, then every 30s
+    const ult = ultimateOf(c.id);
+    const ulines = ult ? wrapWords(`ULTIMATE - ${ult.name}: ${ult.desc}`.toUpperCase(), 75).slice(0, 3) : [];
+    ulines.forEach((ln, i) => M.add(smallText(this, x + 6, y + 74 + i * 7, ln, i ? 0xf0d890 : 0xffd45e)));
+    const top = y + 74 + ulines.length * 7 + 1;
+    M.add(this.add.rectangle(x + 4, top, w - 8, 1, 0x2a3050).setOrigin(0, 0));
     // ---- strengths | weaknesses, side by side, a bullet each
     const colW = (w - 18) / 2;
     const per = Math.floor((colW - 8) / 4);
     const column = (cx: number, title: string, col: number, items: string[]): void => {
-      M.add(text(this, cx, y + 79, title, col));
-      let ly = y + 90;
+      M.add(text(this, cx, top + 3, title, col));
+      let ly = top + 14;
       for (const item of items) {
         const lines = wrapWords(item.toUpperCase(), per);
         if (ly + lines.length * 7 > y + h - 18) break;
@@ -586,7 +592,7 @@ export class CreatureHub extends Phaser.Scene {
       }
     };
     column(x + 6, 'GOOD AT', PALETTE.mossLight, t.strengths);
-    M.add(this.add.rectangle(x + w / 2, y + 79, 1, h - 98, 0x2a3050).setOrigin(0, 0));
+    M.add(this.add.rectangle(x + w / 2, top + 3, 1, y + h - 19 - top - 3, 0x2a3050).setOrigin(0, 0));
     column(x + w / 2 + 5, 'WEAK AGAINST', 0xff9a9a, t.weaknesses);
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
   }

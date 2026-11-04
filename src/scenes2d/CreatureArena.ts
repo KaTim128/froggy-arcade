@@ -29,7 +29,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
+import { button, centerText, confirmDialog, forfeitLines, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { plainWords } from '../game/plainWords';
@@ -38,6 +38,7 @@ import { SPECIALS } from '../game/specials';
 import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, bossById, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel, xpProgress } from '../game/creatureLevel';
+import { ULT_COOLDOWN_S, ULT_UNLOCK_S, ultColour, ultimateOf, type Ultimate, type UltFx } from '../game/ultimates';
 import { MINI_INFO, MINI_LEVEL, MINI_WIN, abandonMini, boutOver, currentMini } from '../game/creatureMinis';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, EVADE_CHANCE, EVADE_S, FOCUS_CRIT, FOCUS_S, FURY_MUL, FURY_S, QUICK_RATE, QUICK_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
@@ -117,6 +118,11 @@ const ATK_T = 0.28;
 const BODY_R = 7;
 
 interface Fighter {
+  /** ULTIMATE (game/ultimates): its move, and seconds until it can be fired (locked 30, then 30 after each use). */
+  ult: Ultimate | null;
+  ultT: number;
+  /** Fired at least once (until then the badge reads LOCKED). */
+  ultUsed?: boolean;
   c: Creature;
   x: number;
   y: number;
@@ -412,6 +418,8 @@ interface Brain {
 export class CreatureArena extends Phaser.Scene {
   private biome!: Biome;
   private mode: 'zone' | 'ladder' | 'training' | 'story' | 'mini' = 'zone';
+  private ultText: Phaser.GameObjects.BitmapText | null = null;
+  private foeUltText: Phaser.GameObjects.BitmapText | null = null;
   /** Story: which world, which of its stages, and who (drawn when the fight opens, paid at the bell). */
   private storyWorld = 0;
   private storyStage = 0;
@@ -757,6 +765,8 @@ export class CreatureArena extends Phaser.Scene {
     this.input.keyboard!.on('keydown-THREE', () => this.keyFire(2));
     // SPACE: the chosen ability, auto-aimed
     this.input.keyboard!.on('keydown-SPACE', () => this.quickFire(this.sel));
+    // Q: the ULTIMATE, once it is up
+    this.input.keyboard!.on('keydown-Q', () => this.useUlt(this.me));
     this.input.addPointer(2);
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.down(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.moveP(p));
@@ -939,6 +949,7 @@ export class CreatureArena extends Phaser.Scene {
       c, x, y, hp: c.hp, max: c.hp, cds: [0, 0.8, 2], face, scale, burn: 0, slow: 0, stun: 0, stunImmune: 0, blind: 0, shield: 0, invuln: 0, aura: 0, root: 0, dash: null,
       poison: 0, marked: 0, shred: 0, weak: 0, chill: 0, haste: 0, regen: 0, guard: 0, shieldMod: null, st: {}, ref: {},
       kx: 0, ky: 0, flash: 0, moving: false, atk: 0, atkX: 0, atkY: 0, stride: 0,
+      ult: ultimateOf(c.id), ultT: ULT_UNLOCK_S,
     };
   }
 
@@ -1694,6 +1705,10 @@ export class CreatureArena extends Phaser.Scene {
     const eff = ELEMENTS[this.me.c.element];
     this.effLabel = text(this, 8, 20, `${eff.name}: ${eff.effect}`, eff.light).setDepth(51);
     this.labels.push(this.effLabel);
+    // the ultimate's badge text (drawn in drawUlt), and the opponent's countdown
+    this.ultText = smallText(this, ARENA.x + ARENA.w - 54, ARENA.y + ARENA.h - 12, '', PALETTE.cream).setDepth(53);
+    this.foeUltText = smallText(this, ARENA.x + ARENA.w - 5, ARENA.y + 3, '', PALETTE.fog).setOrigin(1, 0).setDepth(53);
+    this.labels.push(this.ultText!, this.foeUltText!);
   }
 
   // ------------------------------------------------------------------ input
@@ -1792,7 +1807,7 @@ export class CreatureArena extends Phaser.Scene {
           // the ability's own pixel icon, as the arena draws it -- not an emoji
           const icon = abilityIconURL(a, ELEMENTS[this.me.c.element].light);
           return { label: `${inf.emoji}\n${word}`, icon, key: keys[i], primary: i === 0 };
-        }),
+        }).concat(this.me.ult ? [{ label: '★\nULT', icon: undefined as unknown as string, key: 'Q' as KeyName, primary: false }] : []),
       },
       'CreatureArena',
     );
@@ -3054,6 +3069,241 @@ export class CreatureArena extends Phaser.Scene {
    * An area going off at (x, y): the hit, and the area specials -- a
    * patch left burning, a second go a moment later, a pull to the middle.
    */
+  // ------------------------------------------------------------- ultimates
+
+  /**
+   * FIRE THE ULTIMATE (game/ultimates).  Only once it is up -- 30 seconds into
+   * the fight, and 30 after the last one -- and only when the creature could
+   * act anyway.  Its name goes up over it, the screen shakes and flashes its
+   * element's colour, and its effects go off one after another.
+   */
+  private useUlt(f: Fighter): boolean {
+    if (!this.started || this.over || this.paused || this.dialog) return false;
+    if (!f.ult || f.ultT > 0 || f.hp <= 0 || !this.canAct(f) || f.dash) return false;
+    f.ultT = ULT_COOLDOWN_S;
+    f.ultUsed = true;
+    const { col, light } = ultColour(f.c.element);
+    const t = centerText(this, f.x, f.y - 20 * f.scale, f.ult.name, light).setDepth(60);
+    backPlate(this, t, col);
+    this.tweens.add({ targets: t, y: t.y - 10, alpha: 0, delay: 700, duration: 500, onComplete: () => t.destroy() });
+    this.cameras.main.shake(220, 0.006);
+    this.cameras.main.flash(110, (col >> 16) & 255, (col >> 8) & 255, col & 255, false);
+    this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 22 * f.scale, t: 0, life: 0.5, col: light });
+    audio.sfx('arcane_blast', 0.7);
+    f.ult.fx.forEach((e, i) => this.time.delayedCall(i * 380, () => !this.over && f.hp > 0 && this.ultFx(f, e)));
+    return true;
+  }
+
+  /** One effect of an ultimate, with its own look and sound. */
+  private ultFx(f: Fighter, e: UltFx): void {
+    const o = this.other(f);
+    const { col, light } = ultColour(f.c.element);
+    const dx = o.x - f.x;
+    const dy = o.y - f.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d;
+    const uy = dy / d;
+    const inArena = (x: number, y: number): [number, number] => [Phaser.Math.Clamp(x, ARENA.x + 10, ARENA.x + ARENA.w - 10), Phaser.Math.Clamp(y, ARENA.y + 10, ARENA.y + ARENA.h - 10)];
+    switch (e.k) {
+      case 'charge':
+        // a long, hard rush straight through them
+        f.dash = { vx: (ux * e.dist) / 0.3, vy: (uy * e.dist) / 0.3, t: 0.3, dmg: e.dmg, hit: false, a: f.c.attacks[0] };
+        for (let k = 0; k < 4; k++) this.time.delayedCall(k * 60, () => this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 8 * f.scale, t: 0, life: 0.3, col: light }));
+        audio.sfx('throw_whoosh', 0.6);
+        break;
+      case 'blink': {
+        // gone, and behind them
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 12 * f.scale, t: 0, life: 0.35, col: 0x101018 });
+        const [bx, by] = inArena(o.x + ux * 18, o.y + uy * 18);
+        f.x = bx;
+        f.y = by;
+        f.face = o.x >= f.x ? 1 : -1;
+        this.fx.push({ kind: 'boom', x: o.x, y: o.y, r: 14, t: 0, life: 0.3, col: light });
+        this.hit(f, o, e.dmg, null);
+        audio.sfx('whack', 0.7);
+        break;
+      }
+      case 'nova':
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: e.r, t: 0, life: 0.45, col }, { kind: 'boom', x: f.x, y: f.y, r: e.r * 0.7, t: 0, life: 0.35, col: light });
+        if (d < e.r + 7 * o.scale) {
+          this.hit(f, o, e.dmg, null);
+          o.kx += ux * e.knock;
+          o.ky += uy * e.knock;
+        }
+        audio.sfx('boom', 0.6);
+        break;
+      case 'rage': {
+        // bigger, faster, harder, for a while
+        const s0 = f.scale;
+        f.scale = s0 * 1.25;
+        f.aura = Math.max(f.aura, e.t);
+        f.haste = Math.max(f.haste, e.t * 0.6);
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 18 * s0, t: 0, life: 0.6, col: 0xff4a3a });
+        this.time.delayedCall(e.t * 1000, () => (f.scale = s0));
+        audio.sfx('stinger', 0.5);
+        break;
+      }
+      case 'pull':
+        if (d < e.r) {
+          o.kx -= ux * 320;
+          o.ky -= uy * 320;
+          this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: o.x, y2: o.y, r: 2, t: 0, life: 0.3, col: light });
+          this.time.delayedCall(260, () => {
+            if (this.over) return;
+            this.fx.push({ kind: 'boom', x: f.x + f.face * 8, y: f.y, r: 14, t: 0, life: 0.3, col });
+            if (Math.hypot(o.x - f.x, o.y - f.y) < 40 * f.scale) this.hit(f, o, e.dmg, null);
+          });
+        }
+        audio.sfx('throw_whoosh', 0.5);
+        break;
+      case 'barrage': {
+        const a = { ...f.c.attacks[0], kind: 'bolt' as const, sp: undefined };
+        const base = Math.atan2(uy, ux);
+        for (let k = 0; k < e.n; k++) {
+          const ang = base + (e.n > 1 ? (k / (e.n - 1) - 0.5) * e.spread : 0);
+          this.time.delayedCall(k * 40, () => {
+            if (this.over) return;
+            this.shots.push({ owner: f, x: f.x + Math.cos(ang) * 8, y: f.y + Math.sin(ang) * 8, vx: Math.cos(ang) * 210, vy: Math.sin(ang) * 210, life: 1.1, dmg: e.dmg, a, pierce: false, t: 0, ang });
+          });
+        }
+        audio.sfx('throw_whoosh', 0.6);
+        break;
+      }
+      case 'beam': {
+        const x2 = f.x + ux * e.len;
+        const y2 = f.y + uy * e.len;
+        this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: e.w, t: 0, life: 0.4, col: light }, { kind: 'beam', x: f.x, y: f.y, x2, y2, r: e.w * 0.4, t: 0, life: 0.4, col: 0xffffff });
+        if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < e.w + 6 * o.scale) this.hit(f, o, e.dmg, null);
+        audio.sfx('arcane_blast', 0.6);
+        break;
+      }
+      case 'meteor':
+        for (let k = 0; k < e.n; k++) {
+          const [mx, my] = inArena(o.x + (Math.random() - 0.5) * 34, o.y + (Math.random() - 0.5) * 26);
+          this.fx.push({ kind: 'warn', x: mx, y: my, r: e.r, t: 0, life: 0.6 + k * 0.18, col });
+          this.time.delayedCall(600 + k * 180, () => {
+            if (this.over) return;
+            this.fx.push({ kind: 'boom', x: mx, y: my, r: e.r, t: 0, life: 0.45, col: 0xffb040 });
+            audio.sfx('arcane_blast', 0.45);
+            if (Math.hypot(o.x - mx, o.y - my) < e.r + 7 * o.scale) this.hit(f, o, e.dmg, null);
+          });
+        }
+        break;
+      case 'zone':
+        for (let k = 0; k < e.n; k++) {
+          const a = (k / e.n) * Math.PI * 2;
+          const [zx, zy] = inArena(o.x + Math.cos(a) * 14, o.y + Math.sin(a) * 10);
+          this.pool(f, zx, zy, e.r);
+          this.fx.push({ kind: 'ring', x: zx, y: zy, r: e.r, t: 0, life: 0.4, col });
+        }
+        break;
+      case 'shield':
+        f.shield = Math.max(f.shield, e.t);
+        f.shieldMod = null;
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 14 * f.scale, t: 0, life: 0.6, col: 0xdcefff });
+        audio.sfx('heal_up', 0.4);
+        break;
+      case 'heal':
+        this.heal(f, Math.round(f.max * e.frac));
+        this.floatNum(f, Math.round(f.max * e.frac), 0x8ae88a, '+');
+        for (let k = 0; k < 3; k++) this.time.delayedCall(k * 120, () => this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: (8 + k * 6) * f.scale, t: 0, life: 0.4, col: 0x8ae88a }));
+        audio.sfx('heal_up', 0.6);
+        break;
+      case 'drain': {
+        let n = Math.round(e.t * 4);
+        const per = Math.max(1, Math.round(e.dps / 4));
+        this.time.addEvent({
+          delay: 250,
+          repeat: n - 1,
+          callback: () => {
+            if (this.over || f.hp <= 0 || o.hp <= 0 || --n < 0) return;
+            if (Math.hypot(o.x - f.x, o.y - f.y) > 150) return;
+            this.fx.push({ kind: 'beam', x: o.x, y: o.y, x2: f.x, y2: f.y, r: 1.5, t: 0, life: 0.22, col: light });
+            this.hit(f, o, per, null);
+            this.heal(f, per);
+          },
+        });
+        break;
+      }
+      case 'slowfield':
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: e.r, t: 0, life: 0.7, col: light });
+        if (d < e.r) o.slow = Math.max(o.slow, e.t);
+        audio.sfx('item_thud', 0.5);
+        break;
+      case 'clones':
+        for (let k = 0; k < e.n; k++) {
+          this.decoy(f);
+          const mi = this.minions[this.minions.length - 1];
+          if (mi) {
+            const [cx, cy] = inArena(f.x + Math.cos(k * 2.1) * 26, f.y + Math.sin(k * 2.1) * 18);
+            mi.x = cx;
+            mi.y = cy;
+          }
+        }
+        break;
+      case 'invuln':
+        f.invuln = Math.max(f.invuln, e.t);
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 16 * f.scale, t: 0, life: 0.8, col: 0xffffff });
+        audio.sfx('chime', 0.5);
+        break;
+      case 'stun':
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: e.r, t: 0, life: 0.4, col: 0xfff080 });
+        if (d < e.r) {
+          o.stun = Math.max(o.stun, e.t);
+          this.fx.push({ kind: 'spark', x: o.x, y: o.y - 8, r: 6, t: 0, life: 0.5, col: 0xfff080 });
+        }
+        audio.sfx('spot_slam', 0.5);
+        break;
+      case 'haste':
+        f.haste = Math.max(f.haste, e.t);
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 10 * f.scale, t: 0, life: 0.4, col: 0xf0fff4 });
+        break;
+    }
+  }
+
+  /**
+   * THE ULTIMATE ON THE HUD: your badge in the arena's bottom-right corner --
+   * LOCKED with the seconds to go, READY and pulsing with its key, or
+   * cooling with its seconds -- and the opponent's, small, top right.
+   */
+  private drawUlt(u: Phaser.GameObjects.Graphics): void {
+    if (!this.ultText || !this.foeUltText) return;
+    const show = !!this.me.ult && !this.over && !this.band && !this.touch;
+    const w = 66;
+    const x = ARENA.x + ARENA.w - w - 3;
+    const y = ARENA.y + ARENA.h - 15;
+    const f = this.me;
+    const ready = f.ultT <= 0 && this.started;
+    const locked = !f.ultUsed;
+    if (show) {
+      const pulse = 0.6 + Math.sin(this.time.now / 140) * 0.4;
+      u.fillStyle(ready ? 0x3a1a58 : 0x10101c, 0.9).fillRect(x, y, w, 12);
+      u.lineStyle(1, ready ? 0xffd45e : locked ? 0x4a4a68 : 0x9a6aff, ready ? pulse : 1).strokeRect(x, y, w, 12);
+      if (!ready) u.fillStyle(locked ? 0x4a4a68 : 0x9a6aff, 0.8).fillRect(x + 1, y + 10, Math.round((w - 2) * (1 - f.ultT / (locked ? ULT_UNLOCK_S : ULT_COOLDOWN_S))), 1);
+      // a star
+      const sc = ready ? 0xffd45e : 0x8a8ab0;
+      const pts: Phaser.Math.Vector2[] = [];
+      for (let k = 0; k < 10; k++) {
+        const ang = -Math.PI / 2 + (k * Math.PI) / 5;
+        const r = k % 2 ? 2 : 4.6;
+        pts.push(new Phaser.Math.Vector2(x + 7 + Math.cos(ang) * r, y + 6 + Math.sin(ang) * r));
+      }
+      u.fillStyle(sc, 1).fillPoints(pts, true);
+    }
+    // the opponent's chip: a dark plate so it reads over any floor
+    const fo2 = this.foe;
+    if (fo2.ult && !this.over && !this.training && this.foeUltText) {
+      const tw = this.foeUltText.width + 6;
+      const rdy = fo2.ultT <= 0 && this.started;
+      u.fillStyle(0x10101c, 0.85).fillRect(ARENA.x + ARENA.w - 2 - tw, ARENA.y + 1, tw, 9);
+      u.lineStyle(1, rdy ? 0xff6a6a : 0x4a4a68, 1).strokeRect(ARENA.x + ARENA.w - 2 - tw, ARENA.y + 1, tw, 9);
+    }
+    this.ultText.setVisible(show).setText(ready ? 'ULT  [Q]' : locked ? `LOCKED ${Math.ceil(f.ultT)}` : `ULT ${Math.ceil(f.ultT)}S`).setTint(ready ? 0xffd45e : locked ? 0x8a8ab0 : 0xc8a8ff);
+    const fo = this.foe;
+    const foeShow = !!fo.ult && !this.over && !this.training;
+    this.foeUltText.setVisible(foeShow).setText(fo.ultT <= 0 && this.started ? 'FOE ULT READY' : `FOE ULT ${Math.ceil(fo.ultT)}S`).setTint(fo.ultT <= 0 && this.started ? 0xff8a8a : 0xb0b0d0);
+  }
+
   private burst(f: Fighter, x: number, y: number, r: number, dmg: number, a: Attack, look: 'ring' | 'boom', again = true): void {
     const col = ELEMENTS[f.c.element].col;
     this.fx.push(look === 'ring' ? { kind: 'ring', x, y, r, t: 0, life: 0.35, col } : { kind: 'boom', x, y, r, t: 0, life: 0.35, col });
@@ -3434,6 +3684,8 @@ export class CreatureArena extends Phaser.Scene {
     // (QUICKEN: the cooldowns run faster while it lasts)
     const cdRate = (f.st.b_quicken ?? 0) > 0 ? QUICK_RATE : 1;
     for (let i = 0; i < 3; i++) f.cds[i] = Math.max(0, f.cds[i] - dt * cdRate);
+    // (the ultimate's clock runs only while the fight is on)
+    if (this.started && !this.over) f.ultT = Math.max(0, f.ultT - dt);
     for (const k of ['slow', 'stun', 'stunImmune', 'blind', 'shield', 'invuln', 'aura', 'root', 'flash'] as const) f[k] = Math.max(0, f[k] - dt);
     if (f.burn > 0) {
       const before = Math.floor(f.burn);
@@ -3501,6 +3753,14 @@ export class CreatureArena extends Phaser.Scene {
   // ---------------------------------------------------------------------- AI
 
   private think(dt: number, f: Fighter = this.foe, me: Fighter = this.me, B: Brain = this.foeBrain): void {
+    // ---- ITS ULTIMATE, by the same clock as yours: once it is up, fired
+    // when it would do some good (a heal when hurt, the rest in range)
+    if (f.ult && f.ultT <= 0 && this.started && this.canAct(f) && !f.dash) {
+      const d = Math.hypot(me.x - f.x, me.y - f.y);
+      const lead = f.ult.fx[0].k;
+      const want = lead === 'heal' ? f.hp < f.max * 0.6 : lead === 'shield' || lead === 'invuln' ? d < f.ult.range || f.hp < f.max * 0.4 : d < f.ult.range;
+      if (want && Math.random() < dt * (0.8 + this.skill * 2)) this.useUlt(f);
+    }
     // WHAT IT THINKS IS YOU: a decoy draws it while it lasts, and a you it
     // cannot see is wherever it last saw you
     const decoy = this.minions.find((mi) => mi.kind === 'decoy' && mi.owner === me);
@@ -4720,7 +4980,10 @@ export class CreatureArena extends Phaser.Scene {
         const secs = left >= 10 ? `${Math.ceil(left)}` : (Math.ceil(left * 10) / 10).toFixed(1);
         touchControls.setCooldown(keys[i], left > 0 ? Phaser.Math.Clamp(left / a.cd, 0, 1) : null, secs);
       });
+      // the ULT button counts down too
+      if (this.me.ult) touchControls.setCooldown('Q', this.me.ultT > 0 ? Phaser.Math.Clamp(this.me.ultT / ULT_COOLDOWN_S, 0, 1) : null, `${Math.ceil(this.me.ultT)}`);
     }
+    this.drawUlt(u);
     // the chosen attack's line, fading
     const showing = this.infoT > 0 && !this.over && !this.dialog;
     this.info.setVisible(showing).setAlpha(Math.min(1, this.infoT * 3));
