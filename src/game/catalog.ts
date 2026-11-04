@@ -136,6 +136,9 @@ export const FURNITURE: FurnitureDef[] = [
   F('fur_frog_statue', 'FROG STATUE', 'decor', 0, 14, 18, false, 0x5aa85f, 0x2f6b36, 'EARNED, NOT BOUGHT', true),
 ];
 
+// ---- DEARER FURNITURE (user): 1.5x the list prices above, rounded to the dollar.
+for (const f of FURNITURE) f.price = Math.round(f.price * 1.5);
+
 // ------------------------------------------------------------- cosmetics
 
 /**
@@ -330,6 +333,10 @@ export const COSMETICS: CosmeticDef[] = [
   { id: 'hair_col_silver', name: 'DYE: SILVER', slot: 'dye', shop: 'barber', price: 12, cols: { r: 0xc8ccd2, G: 0xb0b4ba, g: 0x8a8e94 } },
   { id: 'hair_col_red', name: 'DYE: FIERY RED', slot: 'dye', shop: 'barber', price: 12, cols: { r: 0xc8401e, G: 0xb03418, g: 0x882612 } },
 ];
+
+// ---- DEARER ON THE HIGH STREET (user): clothes 1.2x, a haircut 1.3x, on the
+// list prices above, rounded to the dollar.  Anything free stays free.
+for (const c of COSMETICS) c.price = Math.round(c.price * (c.shop === 'barber' ? 1.3 : 1.2));
 
 /** The cosmetics the drifter starts in, owned from the beginning. */
 export const STARTER_COSMETICS = ['cos_coat_olive', 'cos_trousers_baggy', 'cos_boots_worn', 'cos_scarf_grubby', 'cos_beanie', 'cos_no_hat', 'cos_no_glasses'];
