@@ -634,74 +634,124 @@ function groundShadow(scene: Phaser.Scene, x: number, w: number): void {
   scene.add.ellipse(x + 3, GROUND_Y + 1, w, 5, 0x1a3a14, 0.35).setDepth(19);
 }
 
-/** The player: a round frog in a garden, facing the fence. */
+/**
+ * The player: a round frog in a garden, facing the fence.
+ *
+ * TEXTURED, AND NOT THE COLOUR OF THE LAWN (user, 4 Nov).  A dark outline
+ * all the way round, a deeper jade skin with darker blotches and fine
+ * speckle, a warm yellow belly, orange toe pads and a gold eye ring -- so he
+ * reads against the grass rather than melting into it.  The eyes stay where
+ * they were (-6/6, -23): the status marks sit over them.
+ */
 function makeFrog(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameObjects.Container {
-  const parts = [
-    scene.add.ellipse(-7, -3, 10, 5, PALETTE.moss),
-    scene.add.ellipse(7, -3, 10, 5, PALETTE.moss),
-    scene.add.ellipse(0, -13, 24, 20, PALETTE.mossLight),
-    scene.add.ellipse(0, -9, 14, 10, 0xcfe8a0),
-    scene.add.ellipse(11, -15, 9, 5, PALETTE.moss),
-    scene.add.circle(-6, -23, 4, PALETTE.cream),
-    scene.add.circle(6, -23, 4, PALETTE.cream),
-    scene.add.circle(-5, -23, 2, PALETTE.black),
-    scene.add.circle(7, -23, 2, PALETTE.black),
-    scene.add.rectangle(2, -16, 9, 1, PALETTE.moss),
-    // lit from the left: a sheen on the crown, shade under the belly
-    scene.add.ellipse(-4, -19, 9, 4, 0xa8e090).setAlpha(0.85),
-    scene.add.ellipse(3, -5, 16, 3, PALETTE.moss).setAlpha(0.5),
-    // and a glint in each eye
-    scene.add.rectangle(-7, -25, 1, 1, 0xffffff),
-    scene.add.rectangle(5, -25, 1, 1, 0xffffff),
-  ];
-  return scene.add.container(x, groundY, parts).setDepth(20);
+  const g = scene.add.graphics();
+  const ink = 0x10240e;
+  const skin = 0x2f8f5a;
+  const skinLit = 0x5cc47e;
+  const skinDark = 0x1d5e3a;
+  const belly = 0xf2d36b;
+  // outline first, a pixel bigger than everything that goes on it
+  g.fillStyle(ink, 1);
+  g.fillEllipse(-7, -3, 13, 7).fillEllipse(7, -3, 13, 7).fillEllipse(0, -13, 27, 23).fillEllipse(11, -15, 12, 8);
+  g.fillCircle(-6, -23, 5.5).fillCircle(6, -23, 5.5);
+  // the back legs, folded, with orange toes
+  g.fillStyle(skinDark, 1).fillEllipse(-7, -3, 11, 5).fillEllipse(7, -3, 11, 5);
+  g.fillStyle(0xf08a3a, 1).fillRect(-13, -2, 2, 1.5).fillRect(-10, -1, 2, 1.5).fillRect(11, -2, 2, 1.5).fillRect(8, -1, 2, 1.5);
+  // body: shade, skin, the lit crown
+  g.fillStyle(skinDark, 1).fillEllipse(0, -13, 25, 21);
+  g.fillStyle(skin, 1).fillEllipse(-0.5, -14, 23, 18);
+  g.fillStyle(skinLit, 1).fillEllipse(-3, -18, 14, 8);
+  // belly, with a soft fold line
+  g.fillStyle(0xd9b04a, 1).fillEllipse(0, -8.5, 16, 11);
+  g.fillStyle(belly, 1).fillEllipse(-0.5, -9, 14, 9);
+  g.lineStyle(1, 0xd9b04a, 0.9).lineBetween(-4, -9, 4, -9);
+  // the throwing arm, out towards the fence
+  g.fillStyle(skinDark, 1).fillEllipse(11, -15, 10, 6);
+  g.fillStyle(skin, 1).fillEllipse(11, -15.5, 8, 4);
+  g.fillStyle(0xf08a3a, 1).fillCircle(15.5, -15, 1.2);
+  // blotches and speckle across the back
+  g.fillStyle(skinDark, 1);
+  for (const [bx, by, br] of [[-8, -14, 2.2], [-3, -21, 1.6], [6, -18, 2], [8, -11, 1.5], [-9, -8, 1.4], [2, -14, 1.1]] as const) g.fillCircle(bx, by, br);
+  g.fillStyle(0x8ad8a0, 0.9);
+  for (const [sx, sy] of [[-6, -17], [-1, -19], [4, -21], [-9, -12], [9, -16], [1, -12]] as const) g.fillRect(sx, sy, 1, 1);
+  // the mouth line
+  g.lineStyle(1, ink, 1).lineBetween(-2, -16, 7, -16);
+  // eyes: gold ring, cream, black, a glint
+  g.fillStyle(0xe0b040, 1).fillCircle(-6, -23, 4.4).fillCircle(6, -23, 4.4);
+  g.fillStyle(0xfff4d8, 1).fillCircle(-6, -23, 3.4).fillCircle(6, -23, 3.4);
+  g.fillStyle(PALETTE.black, 1).fillCircle(-5, -23, 2).fillCircle(7, -23, 2);
+  g.fillStyle(0xffffff, 1).fillRect(-7, -25, 1, 1).fillRect(5, -25, 1, 1);
+  // a crisp lit edge on the crown
+  g.lineStyle(1, 0xa8f0b8, 0.7).beginPath();
+  g.arc(-1, -13, 10.5, Math.PI * 1.1, Math.PI * 1.55);
+  g.strokePath();
+  return scene.add.container(x, groundY, [g]).setDepth(20);
 }
 
 /**
  * The opponent: long, low, tan and spiny, so that at 320 pixels wide nobody
- * mistakes him for a second frog.
+ * mistakes him for a second frog.  Outlined, with rows of scales, dark bands
+ * down the back and round the tail, and a pale belly.
  */
 /** The lizard, side on, facing left.  Also the opponent at the air hockey table. */
 export function makeLizard(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameObjects.Container {
-  const hide = 0xc39a3e;
-  const dark = 0x8a6a22;
-  const parts: Phaser.GameObjects.GameObject[] = [
-    // tail, thinning away to the right
-    scene.add.triangle(22, -8, 0, 0, 20, 4, 0, 7, dark).setOrigin(0.5, 0.5),
-    scene.add.triangle(14, -8, 0, 0, 12, 3, 0, 6, hide).setOrigin(0.5, 0.5),
-    // legs, splayed the way a lizard's are
-    scene.add.ellipse(-6, -3, 11, 4, dark),
-    scene.add.ellipse(8, -3, 11, 4, dark),
-    scene.add.ellipse(-11, -2, 5, 3, dark),
-    scene.add.ellipse(13, -2, 5, 3, dark),
-    // body and belly
-    scene.add.ellipse(0, -9, 30, 13, hide),
-    scene.add.ellipse(0, -6, 22, 6, 0xe6d296),
-  ];
+  const g = scene.add.graphics();
+  const ink = 0x3a2408;
+  const hide = 0xc9962f;
+  const lit = 0xe8c262;
+  const dark = 0x7a5414;
+  const belly = 0xf0deaa;
+  const tri = (pts: number[], col: number): void => {
+    g.fillStyle(col, 1).fillTriangle(pts[0], pts[1], pts[2], pts[3], pts[4], pts[5]);
+  };
+  // outline
+  g.fillStyle(ink, 1);
+  g.fillEllipse(0, -9, 33, 16).fillEllipse(-13, -12, 20, 14);
+  tri([-27, -11, -18, -15, -18, -7], ink);
+  tri([12, -12, 36, -7, 12, -3], ink);
+  g.fillEllipse(-6, -3, 13, 6).fillEllipse(8, -3, 13, 6);
+  // tail, banded, thinning away to the right
+  tri([12, -11, 34, -7.5, 12, -4], hide);
+  g.fillStyle(dark, 1);
+  for (const tx of [16, 21, 26, 30]) g.fillRect(tx, -10 + (tx - 16) * 0.14, 2, 6 - (tx - 16) * 0.3);
+  // legs, splayed, with toes
+  g.fillStyle(dark, 1).fillEllipse(-6, -3, 11, 4).fillEllipse(8, -3, 11, 4);
+  g.fillStyle(ink, 1);
+  for (const fx of [-12, -10, 12, 14]) g.fillRect(fx, -1.5, 1, 2);
+  // body: hide, a lit back, the belly
+  g.fillStyle(hide, 1).fillEllipse(0, -9, 30, 13);
+  g.fillStyle(lit, 1).fillEllipse(-2, -12.5, 22, 4);
+  g.fillStyle(belly, 1).fillEllipse(0, -5.5, 22, 5);
+  // dark bands across the back
+  g.fillStyle(dark, 0.9);
+  for (const bx of [-7, -1, 5, 11]) g.fillRect(bx, -15, 2.5, 6);
+  // rows of scales: a pale and a dark dot, alternating
+  for (let row = 0; row < 3; row++)
+    for (let k = 0; k < 7; k++) {
+      const sx = -11 + k * 4 + (row % 2) * 2;
+      const sy = -13 + row * 2.6;
+      g.fillStyle(k % 2 ? 0xf4d88a : 0x9a6a1a, 0.85).fillRect(sx, sy, 1, 1);
+    }
   // a spiny ridge down the back
-  for (const [sx, sh] of [[-6, 5], [0, 6], [6, 5], [11, 4]]) {
-    parts.push(scene.add.triangle(sx, -15, 0, sh, 2.5, 0, 5, sh, dark).setOrigin(0.5, 1));
+  for (const [sx, sh] of [[-8, 4], [-3, 5], [2, 5.5], [7, 5], [12, 3.5]] as const) {
+    tri([sx - 2, -14.5, sx, -14.5 - sh, sx + 2, -14.5], ink);
+    tri([sx - 1.2, -14.5, sx, -14.5 - sh + 1.3, sx + 1.2, -14.5], 0xe0a84a);
   }
-  // spots, so he is patterned rather than painted
-  for (const [px, py] of [[-4, -11], [3, -9], [9, -11]]) {
-    parts.push(scene.add.circle(px, py, 1.6, dark).setAlpha(0.8));
-  }
-  parts.push(
-    // head and snout, pointed away at the fence
-    scene.add.ellipse(-13, -12, 17, 11, hide),
-    scene.add.triangle(-22, -11, 0, 3, 8, 0, 8, 6, hide).setOrigin(0.5, 0.5),
-    scene.add.rectangle(-20, -10, 8, 1, dark),
-    // the eye: a slit, not a frog's saucer
-    scene.add.circle(-15, -16, 3.2, PALETTE.gold),
-    scene.add.rectangle(-15, -16, 1, 4, PALETTE.black),
-    // a throat that reads as a lizard's dewlap
-    scene.add.ellipse(-16, -7, 7, 4, 0xd9b45a),
-    // the sun along his back and the top of his head, and a glint in the eye
-    scene.add.ellipse(-2, -13, 18, 2, 0xe8c870).setAlpha(0.8),
-    scene.add.ellipse(-14, -16, 8, 2, 0xe8c870).setAlpha(0.7),
-    scene.add.rectangle(-16, -17, 1, 1, 0xffffff),
-  );
-  return scene.add.container(x, groundY, parts).setDepth(20);
+  // head and snout, pointed at the fence
+  g.fillStyle(hide, 1).fillEllipse(-13, -12, 17, 11);
+  tri([-26, -11, -18, -14.5, -18, -7.5], hide);
+  g.fillStyle(lit, 1).fillEllipse(-14, -15.5, 10, 3);
+  g.fillStyle(0xe8c26a, 1).fillEllipse(-16, -7, 8, 4);
+  g.lineStyle(1, ink, 1).lineBetween(-25, -10, -14, -9);
+  g.fillStyle(ink, 1).fillRect(-24, -12, 1, 1);
+  // scaly cheek
+  g.fillStyle(dark, 0.8).fillRect(-12, -12, 1, 1).fillRect(-10, -10, 1, 1).fillRect(-9, -13, 1, 1);
+  // the eye: gold, a slit, a glint
+  g.fillStyle(ink, 1).fillCircle(-15, -16, 4);
+  g.fillStyle(0xf0c030, 1).fillCircle(-15, -16, 3.2);
+  g.fillStyle(PALETTE.black, 1).fillRect(-15.5, -18, 1, 4);
+  g.fillStyle(0xffffff, 1).fillRect(-17, -18, 1, 1);
+  return scene.add.container(x, groundY, [g]).setDepth(20);
 }
 
 // --------------------------------------------------------------------- hud
