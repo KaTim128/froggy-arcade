@@ -1258,36 +1258,64 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
   // ================================================================ BOSSES
   // ---- (5 Nov) five more, each its own shape
   roc: (t) => {
-    // a vast storm bird: two great wings beating, a hooked beak, talons hanging
+    // (5 Nov, redrawn) a vast storm bird: two great wings of fanned feathers
+    // beating, a crest, a hooked beak, a fanned tail and talons
     const B = new Build();
-    const beat = Math.sin(t * 5) * 3;
-    for (const k of [-1, 1]) {
-      B.tri(-1, -2, -12, -5 - beat * k * 0.2 - beat, -4, 3, 'd', 1.4, 0.5);
-      B.tri(-2, -1, -9, -9 - beat, 2, -2, 'b', 1.2, 0.5);
+    const beat = Math.sin(t * 5);
+    const GOLD = 0xf0c050;
+    // the far wing, darker, behind
+    for (let f = 0; f < 5; f++) {
+      const a = -2.5 + f * 0.22 + beat * 0.18;
+      const L = 12 - f * 1.4;
+      B.tri(-1, -2.4, 1.4, -1, -1 + Math.cos(a) * L, -2 + Math.sin(a) * L, 'd', 1, 0.3);
     }
-    B.e(1, 1, 6, 4.2, 'b', -0.2, 1.4);
-    B.tri(-5, 1, -11, 4, -5, 4, 'd', 1, 0.4);
-    B.c(6.4, -3, 3, 'b', 1.2);
-    B.tri(8.6, -4, 12, -2.4, 8.8, -1.4, 0xf0c050, 0.6, 0.3);
-    B.dl(9.6, -2.6, 11.2, -1.8, 0.3, 'k');
-    for (const u of [-1, 2]) B.cap(u, 4.6, u + 0.6, 8.4, 0.7, 0.5, 0xf0c050, 0.4);
-    B.eye(7.2, -3.6, 0.9);
-    B.dl(-2, -3, 3, -1, 0.35, 'l').dl(-4, 0, 1, 2, 0.35, 'l');
+    // the tail fan
+    for (let f = 0; f < 3; f++) B.tri(-5, 1.4, -5, 3.6, -11.6 + f * 0.6, -0.6 + f * 2.4, 'd', 0.8, 0.3);
+    B.e(0.6, 1, 6.2, 4.2, 'b', -0.2, 1.4);
+    B.e(2.6, 2.6, 3.4, 2.4, 'l', -0.1, 0.8);
+    // the near wing, in front
+    for (let f = 0; f < 5; f++) {
+      const a = -2.75 + f * 0.24 + beat * 0.22;
+      const L = 12.5 - f * 1.5;
+      B.tri(-1.6, -1.6, 1.2, 0.4, -0.4 + Math.cos(a) * L, -1.4 + Math.sin(a) * L, f % 2 ? 'b' : 'l', 1, 0.3);
+    }
+    B.c(6.4, -3.2, 3, 'b', 1.2);
+    for (let i = 0; i < 3; i++) B.tri(4.4 + i * 0.6, -5.4, 5.4 + i * 0.6, -5.6, 2.6 + i * 0.4, -8.4 + i * 0.5 + Math.sin(t * 4 + i) * 0.3, 'l', 0.3);
+    B.tri(8.6, -4.2, 12.2, -2.6, 8.8, -1.6, GOLD, 0.6, 0.3);
+    B.tri(11, -3, 12.2, -2.6, 11.4, -1.4, GOLD, 0.2);
+    for (const u of [-1, 2]) B.cap(u, 4.6, u + 0.6, 8.4, 0.7, 0.5, GOLD, 0.4);
+    B.dl(9.6, -2.8, 11.2, -2, 0.3, 'k');
+    B.eye(7.2, -3.8, 0.9);
+    B.dl(5.8, -4.8, 8.2, -4.4, 0.35, 'k');
     return B.done();
   },
   colossus: (t) => {
-    // a walking machine of stone and brass: block body, a cog turning in its chest, piston arms
+    // (5 Nov, more detail) a walking machine of stone and brass: riveted
+    // plates, brass pauldrons, a cog turning in its chest, a glowing visor,
+    // heavy fists on piston arms
     const B = new Build();
     const step = Math.sin(t * 3) * 0.7;
-    for (const [u, ph] of [[-4, 0], [3, Math.PI]] as const) B.box(u, 6.5 + Math.sin(t * 3 + ph) * 0.6, 3.2, 6, 0.6, 'd', 0, 0.8);
+    const BRASS = 0xc8a040;
+    const BRASS2 = 0x8a7040;
+    for (const [u, ph] of [[-4, 0], [3, Math.PI]] as const) B.box(u, 6.5 + Math.sin(t * 3 + ph) * 0.6, 3.4, 6, 0.6, 'd', 0, 0.8);
     B.box(0, -1 + step * 0.3, 15, 11, 1.6, 'b', 0, 1.4);
     B.box(0, -9 + step * 0.3, 7, 5, 1, 'b', 0, 1);
-    for (const k of [-1, 1]) B.cap(k * 8, -3, k * 11, 3, 1.4, 1.8, 0x8a7040, 0.6);
+    for (const k of [-1, 1]) {
+      B.c(k * 7.6, -5 + step * 0.3, 2.6, BRASS, 0.8);
+      B.cap(k * 8, -3, k * 10.6, 2.6, 1.3, 1.5, BRASS2, 0.6);
+      B.box(k * 10.8, 4.2, 3.4, 3, 0.8, 'd', 0, 0.5);
+    }
     const spin = t * 2;
-    B.ring(0, -0.5 + step * 0.3, 3.4, 0.9, 0xc8a040);
-    for (let i = 0; i < 6; i++) B.dl(Math.cos(spin + i) * 2.4, -0.5 + Math.sin(spin + i) * 2.4 + step * 0.3, Math.cos(spin + i) * 4.4, -0.5 + Math.sin(spin + i) * 4.4 + step * 0.3, 0.6, 0xc8a040);
-    B.de(2, -9.4 + step * 0.3, 1.6, 0.9, 0xffb040).glow(2, -9.4 + step * 0.3, 0.6, 0xffe060);
-    B.dl(-6, -5, -3, -5, 0.3, 'k').dl(3, 3, 6, 3, 0.3, 'k');
+    const cy = -0.5 + step * 0.3;
+    B.ring(0, cy, 3.4, 0.9, BRASS);
+    for (let i = 0; i < 6; i++) B.dl(Math.cos(spin + i) * 2.4, cy + Math.sin(spin + i) * 2.4, Math.cos(spin + i) * 4.4, cy + Math.sin(spin + i) * 4.4, 0.6, BRASS);
+    B.dc(0, cy, 1, 0xffb040);
+    // the visor, the rivets, the seams
+    B.dl(-2.6, -9.4 + step * 0.3, 2.6, -9.4 + step * 0.3, 0.8, 0x2a1a10);
+    B.dl(-2.2, -9.4 + step * 0.3, 2.2, -9.4 + step * 0.3, 0.4, Math.sin(t * 4) > -0.6 ? 0xffb040 : 0xffe060);
+    for (const [u, v] of [[-6, -5], [6, -5], [-6, 3.2], [6, 3.2], [-3, -11], [3, -11]] as const) B.dc(u, v + step * 0.3, 0.35, BRASS);
+    B.dl(-7, -1 + step * 0.3, -4.4, -1 + step * 0.3, 0.3, 'k').dl(4.4, 1.6 + step * 0.3, 7, 1.6 + step * 0.3, 0.3, 'k');
+    B.dl(-0.2, 3.6 + step * 0.3, -0.2, 4.4 + step * 0.3, 0.3, 'k');
     return B.done();
   },
   oracle: (t) => {
@@ -1435,22 +1463,34 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     return B.done();
   },
   seraph: (t) => {
+    // (5 Nov, redrawn) a burning eye in three pairs of wings, each wing a fan
+    // of long feathers, a gold band round the eye and a halo over it
     const B = new Build();
     const beat = Math.sin(t * 2.5) * 0.08;
     const b = Math.sin(t * 4) * 0.3;
-    for (const [a, len] of [[-0.5, 12], [0.15, 11], [0.75, 9]] as const) {
+    const WING = 0xfff0d0;
+    const WING2 = 0xf0d8a0;
+    const GOLD = 0xffd060;
+    for (const [a, len, tone] of [[-0.55, 12.5, WING2], [0.1, 11.5, WING], [0.7, 9, WING2]] as const) {
       for (const k of [-1, 1]) {
-        const ang = (a + beat) * k;
-        B.tri(k * 1.6, -2 + b, k * Math.cos(ang) * len, -2 + Math.sin(a) * len * 0.8 + b, k * 3.6, 1.5 + b, 0xfff0d0, 1.2, 0.4);
+        for (let f = 0; f < 3; f++) {
+          const ang = a + beat * k + (f - 1) * 0.17;
+          const L = len - f * 1.3;
+          B.tri(k * 1.8, -1.6 + b, k * Math.cos(ang) * L, -2 + Math.sin(ang) * L * 0.8 + b, k * 3.4, 1.4 + b, tone, 1, 0.3);
+        }
       }
     }
-    for (let i = 0; i < 3; i++) B.tri(-1.4 + i, 3 + b, -0.4 + i, 3 + b, -0.9 + i + Math.sin(t * 8 + i) * 0.5, 7 + Math.sin(t * 6 + i) + b, FLAME, 0.8);
+    for (let i = 0; i < 3; i++) B.tri(-1.4 + i, 3 + b, -0.4 + i, 3 + b, -0.9 + i + Math.sin(t * 8 + i) * 0.5, 7.4 + Math.sin(t * 6 + i) + b, FLAME, 0.8);
     B.c(0, -1 + b, 4.6, 'b', 1.4);
-    B.de(0, -1 + b, 2.4, 1.5, 0xffffff).dc(0.5, -1 + b, 1.2, 0xff6a20).dc(0.6, -1 + b, 0.5, 'k');
-    for (const k of [-1, 1]) B.dl(k * 2.4, -1 + b, k * 8, -5 + b, 0.2, 'd');
-    // the halo: its own ring, meant to float
+    // the gold band, the eye, and the quills down each wing
+    B.de(0, -1 + b, 3.6, 2.5, GOLD);
+    B.de(0, -1 + b, 2.6, 1.6, 0xffffff).dc(0.5, -1 + b, 1.2, 0xff6a20).dc(0.6, -1 + b, 0.5, 'k');
+    for (const k of [-1, 1]) {
+      B.dl(k * 3, -1.6 + b, k * 9.6, -6.6 + b, 0.25, 'd').dl(k * 3, -0.8 + b, k * 9.8, -1.4 + b, 0.25, 'd').dl(k * 3, 0 + b, k * 7, 3 + b, 0.25, 'd');
+    }
+    B.dc(0, -4.4 + b, 0.6, GOLD).dc(0, 2.4 + b, 0.6, GOLD);
     B.group = 1;
-    B.ring(0, -9 + b * 0.5, 4.6, 0.5, 0xffd060);
+    B.ring(0, -9 + b * 0.5, 4.6, 0.5, GOLD);
     return B.done();
   },
   hydra: (t) => {
@@ -1490,40 +1530,60 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     return B.done();
   },
   queen: (t) => {
+    // (5 Nov, redrawn) a clockwork spider queen: a brass abdomen that is a
+    // clock face with turning hands, a crowned head with mandibles, and
+    // jointed legs of darker brass
     const B = new Build();
     const BRASS = 0xc8962a;
     const DARK = 0x8a6a2a;
     for (let i = 0; i < 4; i++) {
       const st = Math.sin(t * 5 + i * 1.6) * 0.8;
       for (const k of [-1, 1]) {
-        const u0 = 1 + i * 0.7;
+        const u0 = 0.6 + i * 0.8;
         const kx = u0 + k * (3 + i);
-        B.cap(u0, 0, kx, -6 + i - st, 0.45, 0.4, DARK, 0.4).cap(kx, -6 + i - st, u0 + k * (6 + i * 1.6), 7.2, 0.4, 0.3, DARK, 0.2);
+        B.cap(u0, 0, kx, -6 + i - st, 0.6, 0.5, DARK, 0.4).c(kx, -6 + i - st, 0.7, BRASS, 0.3).cap(kx, -6 + i - st, u0 + k * (6 + i * 1.6), 7.2, 0.5, 0.3, DARK, 0.2);
       }
     }
-    B.e(-5, 0, 6.4, 5.4, BRASS, 0, 1.2);
-    B.c(0, -0.4, 1.6, DARK, 1);
-    B.c(4, -1, 3, DARK, 1);
-    for (let i = -1; i <= 1; i++) B.tri(4 + i * 1.5 - 0.6, -3.6, 4 + i * 1.5 + 0.6, -3.6, 4 + i * 1.5, -6, 0xffd060, 0.4);
-    const rot = t * 1.5;
-    for (let i = 0; i < 8; i++) B.dc(-5 + Math.cos(rot + (i / 8) * Math.PI * 2) * 3.2, Math.sin(rot + (i / 8) * Math.PI * 2) * 3.2, 0.7, DARK);
-    B.dc(-5, 0, 1.8, Math.sin(t * 6) > 0 ? 0xfff4a0 : 0xf0d030);
-    B.glow(5, -1.4, 0.6, 0x6affff).glow(5.8, -0.4, 0.6, 0x6affff);
+    B.e(-5, 0, 6.6, 5.6, BRASS, 0, 1.2);
+    B.e(0.4, -0.4, 2.2, 2, DARK, 0, 1);
+    B.c(4, -1.2, 3, DARK, 1);
+    // mandibles, and the crown
+    const nip = Math.sin(t * 4) * 0.4;
+    B.tri(5.6, -0.4, 8.6, 0.2 + nip, 6, 1, BRASS, 0.3).tri(5.4, 0.6, 8, 2.2 - nip, 5.2, 1.8, BRASS, 0.3);
+    for (let i = -1; i <= 1; i++) B.tri(4 + i * 1.5 - 0.6, -3.8, 4 + i * 1.5 + 0.6, -3.8, 4 + i * 1.5, -6.4 - (i === 0 ? 0.8 : 0), 0xffd060, 0.4);
+    // the clock: a ring of hour marks, and two hands going round
+    B.de(-5, 0, 4.4, 4, 0xf0e0b0);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      B.dl(-5 + Math.cos(a) * 3.2, Math.sin(a) * 3, -5 + Math.cos(a) * 3.9, Math.sin(a) * 3.7, i % 3 ? 0.25 : 0.45, DARK);
+    }
+    const hh = t * 0.6;
+    const mm = t * 3;
+    B.dl(-5, 0, -5 + Math.cos(hh) * 1.8, Math.sin(hh) * 1.7, 0.45, 0x3a2a10).dl(-5, 0, -5 + Math.cos(mm) * 2.9, Math.sin(mm) * 2.7, 0.3, 0x3a2a10);
+    B.dc(-5, 0, 0.6, Math.sin(t * 6) > 0 ? 0xfff4a0 : 0xf0d030);
+    for (let i = 0; i < 6; i++) B.dc(-5 + Math.cos(i + 0.5) * 5.6, Math.sin(i + 0.5) * 4.8, 0.35, 0xffe9a0);
+    B.glow(5, -1.6, 0.6, 0x6affff).glow(5.9, -0.6, 0.55, 0x6affff).glow(3.8, -0.4, 0.4, 0x6affff);
     return B.done();
   },
   maw: (t) => {
+    // (5 Nov, more detail) a man-eating plant: a heavy stem with leaves up it,
+    // roots in the floor, curling vines, and spotted jaws snapping
     const B = new Build();
     const open = (Math.sin(t * 2) + 1) / 2;
     const LEAF = 0x2e6a1e;
-    for (const k of [-1, 1]) B.e(k * 5.6, 6, 4.4, 1.5, LEAF, k * 0.12, 0.8);
-    B.cap(0, 6.4, 0.6, -2.6, 1.9, 1.5, 0x3a5a1e, 1.4);
-    // the two jaws, hinged at the top of the stem, opening and shutting
+    const STEM = 0x3a5a1e;
+    for (const k of [-1, 1]) B.e(k * 5.6, 6, 4.6, 1.6, LEAF, k * 0.12, 0.8);
+    for (const k of [-1, 1]) B.cap(k * 1.4, 6, k * 4.6, 7.6, 0.5, 0.3, 0x2a3a14, 0.3);
+    B.cap(0, 6.4, 0.6, -2.6, 2.2, 1.6, STEM, 1.4);
+    // leaves up the stem, and two vines curling out
+    B.tri(0.6, 3, -4.6, 0.4 + Math.sin(t * 2) * 0.5, -0.6, 4.4, LEAF, 0.4).tri(1, 1, 5, -1.4 + Math.sin(t * 2 + 1) * 0.5, 1.4, 2.6, LEAF, 0.4);
+    B.chain([[-1, 2], [-4, -1], [-5.4, -3.4 + Math.sin(t * 3) * 0.6], [-4.4, -5]], 0.6, 0.3, STEM, 0.4);
+    B.chain([[1.4, 4], [5.6, 3], [7.2, 1 + Math.sin(t * 3 + 1) * 0.6]], 0.6, 0.3, STEM, 0.4);
     const up = 0.3 + open * 0.45;
-    B.c(1, -4, 2.2, 'b', 1);
-    B.e(1 + Math.cos(-up) * 4.2, -4 + Math.sin(-up) * 4.2, 4.6, 2.4, 'b', -up, 1);
-    B.e(1 + Math.cos(up) * 4.2, -4 + Math.sin(up) * 4.2, 4.6, 2.4, 'b', up, 1);
+    B.c(1, -4, 2.4, 'b', 1);
+    B.e(1 + Math.cos(-up) * 4.2, -4 + Math.sin(-up) * 4.2, 4.8, 2.5, 'b', -up, 1);
+    B.e(1 + Math.cos(up) * 4.2, -4 + Math.sin(up) * 4.2, 4.8, 2.5, 'b', up, 1);
     B.cutTri(1.6, -4, 11, -4 - (1.2 + open * 4.2), 11, -4 + (1.2 + open * 4.2));
-    // the red inside of the trap, between the jaws
     B.e(4.6, -4, 3.4, 0.5 + open * 2.4, 0xc84a5a, 0, 0.3);
     for (let i = 0; i < 4; i++) {
       const q = 3.6 + i * 1.5;
@@ -1531,47 +1591,101 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
       B.dt(q - 0.5, -4 - gap - 0.4, q + 0.5, -4 - gap - 0.4, q, -4 - gap + 0.9, IVORY);
       B.dt(q - 0.5, -4 + gap + 0.4, q + 0.5, -4 + gap + 0.4, q, -4 + gap - 0.9, IVORY);
     }
+    // spots on the outside of the jaws, veins on the leaves
+    for (const [u, v] of [[2.6, -7.4], [4.6, -8], [2.8, -0.8], [4.8, -0.2]] as const) B.dc(u + (v < -4 ? -open : open) * 0.6, v + (v < -4 ? -open : open) * 1.4, 0.5, 'l');
+    B.dl(-5, 6, 0, 5.4, 0.25, 'l').dl(5, 6, 0.4, 5.4, 0.25, 'l');
     B.dc(-0.6, -4.6, 0.7, 0xffe060);
     return B.done();
   },
   cloud: (t) => {
+    // (5 Nov, redrawn) a thunderhead with a heavy dark belly, pale boiling
+    // tops, a scowl over its one eye and lightning showing through it
     const B = new Build();
     const boil = t * 2;
-    for (const [u, v, r] of [[-6, 0, 4.5], [-2, -2.5, 5], [3, -2, 5.2], [6.5, 0.5, 4], [0, 1.5, 5.5]] as const) B.c(u, v + Math.sin(boil + u) * 0.4, r, 0x5a5a72, 1.6);
-    B.de(0, -0.5, 2.8, 1.7, 0xf8f8ff).dc(0.6, -0.5, 1.4, 'b').dc(0.8, -0.5, 0.6, 'k');
+    const DARK = 0x3e3e54;
+    const MID = 0x5a5a72;
+    const LIGHT = 0x8a8aa6;
+    B.e(0, 3, 9.6, 3, DARK, 0, 1.4);
+    for (const [u, v, r] of [[-6, 0, 4.5], [-2, -2.5, 5], [3, -2, 5.2], [6.5, 0.5, 4], [0, 1.5, 5.5]] as const) B.c(u, v + Math.sin(boil + u) * 0.4, r, MID, 1.6);
+    for (const [u, v, r] of [[-3, -5.8, 3], [2.4, -5.6, 3.3], [-6.4, -2.6, 2.2]] as const) B.c(u, v + Math.sin(boil * 1.3 + u) * 0.5, r, LIGHT, 1.2);
+    // the lightning inside it, flickering
+    if (Math.sin(t * 7) > 0.4) {
+      B.dl(-6, 2, -4, 3.4, 0.35, 0xfff4a0).dl(-4, 3.4, -5, 4.6, 0.35, 0xfff4a0);
+      B.dl(5, 1.4, 6.6, 3, 0.35, 0xfff4a0).dl(6.6, 3, 5.6, 4, 0.35, 0xfff4a0);
+    }
+    // the eye under a scowl
+    B.de(0, -0.5, 2.9, 1.8, 0xf8f8ff).dc(0.6, -0.4, 1.4, 'b').dc(0.8, -0.4, 0.6, 'k');
+    B.dl(-3, -2.6, 0, -2.1, 0.5, 0x2a2a3a).dl(0, -2.1, 3, -2.9, 0.5, 0x2a2a3a);
+    B.dl(-7, 3.6, 7, 3.6, 0.3, 0x2e2e40);
     return B.done();
   },
   wyrm: (t) => {
+    // (5 Nov, more detail) a great burrowing worm breaking out of the floor:
+    // ringed armour on every hump, a horned and plated head, a jaw of teeth
     const B = new Build();
     for (const [u, r, ph] of [[-8, 3.2, 0], [-3, 3.8, 1.2]] as const) {
       const up = Math.sin(t * 2 + ph) * 0.8;
       B.e(u, 5 - up, r + 0.4, r + 1, 'b', 0, 0.6);
     }
-    B.chain([[2, 5], [2.8, 1.6], [3.8, -1.6], [4.8, -4.4]], 2.4, 1.8, 'b', 1);
+    B.chain([[2, 5], [2.8, 1.6], [3.8, -1.6], [4.8, -4.4]], 2.5, 1.9, 'b', 1);
     B.cutBox(0, 9.2, 30, 7);
-    B.e(5.6, -5.2, 3, 2, 'b', 0, 1);
-    B.tri(7.4, -5.6, 10.4, -4.6, 7.4, -3.6, 'l', 0.4);
-    B.tri(4.4, -6.6, 5.6, -6.8, 4, -10, IVORY, 0.3).tri(3, -5.8, 0.4, -8 + Math.sin(t * 3), 3.4, -4.6, 'd', 0.6);
+    B.e(5.6, -5.2, 3.2, 2.1, 'b', 0, 1);
+    const bite = Math.max(0, Math.sin(t * 2.6)) * 0.9;
+    B.tri(7.4, -5.8, 10.6, -5, 7.4, -4.4, 'l', 0.4);
+    B.tri(7.2, -4.2, 10, -3.2 + bite, 7, -3, 'd', 0.4);
+    B.tri(4.4, -6.6, 5.6, -6.8, 4, -10.4, IVORY, 0.3).tri(5.8, -6.9, 6.8, -6.8, 6.6, -9.4, IVORY, 0.3).tri(3, -5.8, 0.4, -8 + Math.sin(t * 3), 3.4, -4.6, 'd', 0.6);
+    // debris round the holes it came out of
     B.group = 1;
     for (const [u, r] of [[-8, 3.6], [-3, 4.2], [2.4, 3]] as const) B.e(u, 5.6, r * 1.3, 0.9, 0x2a221a, 0, 0);
+    for (const [u, v, r] of [[-12, 5, 0.9], [-5.6, 4.8, 0.7], [0.2, 5, 0.8], [5.4, 5.2, 0.9]] as const) B.c(u, v, r, 0x6a5a48, 0.2);
     B.group = 0;
-    for (let i = 0; i < 3; i++) B.dl(1.6 + i * 0.9, 3.4 - i * 2.4, 4 + i * 0.9, 3 - i * 2.4, 0.3, 'd');
+    // the armour rings and head plates, the teeth
+    for (const [u, r] of [[-8, 3.4], [-3, 4]] as const) for (let k = -1; k <= 1; k++) B.dl(u + k * r * 0.55, 1.6, u + k * r * 0.55, 6.4, 0.35, 'd');
+    for (let i = 0; i < 4; i++) B.dl(1.6 + i * 0.9, 3.8 - i * 2.4, 4.2 + i * 0.9, 3.2 - i * 2.4, 0.35, 'd');
+    B.dl(4, -6.6, 6.8, -7, 0.35, 'd').dl(3.6, -5.2, 6.6, -5.6, 0.3, 'l');
+    for (let i = 0; i < 3; i++) B.dt(7.8 + i, -4.6, 8.4 + i, -4.6, 8.1 + i, -3.8, IVORY);
     B.glow(6.4, -6, 0.6, 0xff6a20);
     return B.done();
   },
   sphinx: (t) => {
+    // (5 Nov, redrawn) a winged lion with a pharaoh's face: a striped blue and
+    // gold headdress falling to its shoulders, a cobra on its brow, feathered
+    // wings, a tufted tail
     const B = new Build();
     const st = Math.sin(t * 5) * 0.6;
-    for (const [u, p] of [[-5, st], [-3, -st], [3.5, st], [5.5, -st]] as const) B.cap(u, 3, u + p * 0.3, 7.4, 1.1, 1.1, 0xc8a050, 0.5);
-    for (const k of [0, 1]) B.tri(-3 + k * 2, -0.6, -8 + k * 3, -10 + k * 1.5 + Math.sin(t * 2) * 0.6, 1 + k * 2, -1.6, k ? 0xfff0d0 : 0xd8c8a0, 1, 0.3);
-    B.chain([[-7, 1], [-9.4, -1], [-10, -3 + Math.sin(t * 3)]], 0.4, 0.35, 0xc8a050, 0.5).c(-10, -3.4 + Math.sin(t * 3), 1, 0x6a4a1a, 0.4);
-    B.e(0, 1.2, 7.4, 3.6, 0xe8c070, 0, 1.4);
-    B.c(6.6, -2.6, 4.2, 0x8a6a2a, 1.2);
-    B.e(7.6, -2.6, 2.2, 2.6, 0xd8e8f0, 0, 0.6);
-    B.dt(6.4, -4.4, 7.2, -4.7, 6.6, -1.8, 0xffffff).dl(7.4, -3, 7.8, -3, 0.35, 0x3a4a5a).dl(8.6, -3, 9, -3, 0.35, 0x3a4a5a);
+    const FUR = 0xe8c070;
+    const FUR2 = 0xc8a050;
+    const NEMES = 0x2a4a9a;
+    const GOLD = 0xffd060;
+    const SKIN = 0xd8a878;
+    for (const [u, p] of [[-5, st], [-3, -st], [3.5, st], [5.5, -st]] as const) B.cap(u, 3, u + p * 0.3, 7.4, 1.2, 1.1, FUR2, 0.5);
+    for (const k of [0, 1]) {
+      const fl = Math.sin(t * 2) * 0.6;
+      const tone = k ? 0xfff0d0 : 0xd8c8a0;
+      B.tri(-3 + k * 2, -0.6, -8 + k * 3, -10 + k * 1.5 + fl, 1 + k * 2, -1.6, tone, 1, 0.3);
+      B.tri(-3 + k * 2, -0.6, -10 + k * 3, -7 + k * 1.5 + fl, -1 + k * 2, -0.6, tone, 0.8, 0.3);
+      B.tri(-3 + k * 2, -0.6, -10.6 + k * 3, -3.6 + k * 1.5 + fl, -3 + k * 2, 0.6, tone, 0.8, 0.3);
+    }
+    B.chain([[-7, 1], [-9.4, -1], [-10, -3 + Math.sin(t * 3)]], 0.45, 0.35, FUR2, 0.5).c(-10, -3.4 + Math.sin(t * 3), 1.1, 0x6a4a1a, 0.4);
+    B.e(0, 1.2, 7.4, 3.6, FUR, 0, 1.4);
+    B.e(4.6, 0.6, 3, 3.2, FUR, 0, 1);
+    // the headdress, its lappets falling to the chest, and the face in it
+    B.e(6.4, -3, 3.8, 3.9, NEMES, 0, 1.2);
+    B.tri(4, -1.4, 9, -1.4, 6.8, 3.4, NEMES, 0.6);
+    B.e(8, -2.8, 2.1, 2.6, SKIN, 0, 0.6);
+    B.tri(7.4, -0.4, 8.8, -0.4, 8.2, 1.8, 0x6a4a1a, 0.3);
+    for (let i = 0; i < 4; i++) B.dl(3.2, -5.6 + i * 1.3, 5.6, -5.6 + i * 1.3, 0.35, GOLD);
+    B.dl(5.4, -6.4, 9.6, -5.6, 0.4, GOLD);
+    B.dl(7.6, -3.4, 8.8, -3.4, 0.35, 'k').dl(8.8, -3.4, 9.4, -3, 0.25, 'k').dc(8.4, -3.2, 0.35, 0x2a4a6a);
+    B.dl(9.2, -2.4, 9.6, -1.6, 0.25, 0x8a5a3a).dl(8.6, -1.2, 9.4, -1.2, 0.25, 0x8a4a3a);
+    B.dl(5.4, 0.4, 7.8, 0.4, 0.35, GOLD).dl(5.2, 1.6, 7.6, 1.6, 0.35, GOLD);
+    B.tri(8.2, -6.2, 9, -6.2, 8.6, -7.8, GOLD, 0.2);
+    B.dc(8.6, -6.6, 0.3, 0xff3a3a);
     return B.done();
   },
   kraken: (t) => {
+    // (5 Nov, more detail) a great kraken: a ridged mantle, a scowl, suckers
+    // down every arm, and one arm raised to strike
     const B = new Build();
     for (let i = 0; i < 8; i++) {
       const a = Math.PI * 0.05 + (i / 7) * Math.PI * 0.9;
@@ -1581,24 +1695,40 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
         const r = 3 + k * 1.9;
         pts.push([Math.cos(a + curl * k * 0.12) * r, 3 + Math.sin(a + curl * k * 0.1) * r * 0.45]);
       }
-      B.chain(pts, 1.4, 0.4, 'd', 0.8);
+      B.chain(pts, 1.5, 0.4, 'd', 0.8);
+      for (let k = 1; k < 5; k++) B.dc(pts[k][0], pts[k][1] + 0.3, 0.3, 'l');
     }
-    B.e(0, -2, 5, 5.6, 'b', 0, 1.6);
-    B.de(-2, -5, 1.5, 2, 'l').eye(-2, 0.4, 1.6).eye(2.2, 0.4, 1.6);
-    for (let i = 0; i < 6; i++) B.dc(-6 + i * 2.4, 4.6, 0.4, 'l');
+    // the raised arm, curling over
+    const w = Math.sin(t * 2.4) * 1;
+    B.chain([[4, 0], [8, -2], [9.6 + w * 0.4, -6], [8 + w, -8.6], [6.4 + w, -8]], 1.4, 0.4, 'd', 0.8);
+    B.e(0, -2.6, 5.4, 6.2, 'b', 0, 1.6);
+    B.tri(-2, -7.6, 2, -7.6, 0, -10.4, 'b', 0.8);
+    B.de(-2.4, -5.6, 1.5, 2, 'l').dc(1.6, -7, 0.6, 'l').dc(-0.4, -8.4, 0.5, 'l');
+    B.eye(-2, 0.2, 1.6).eye(2.2, 0.2, 1.6);
+    B.dl(-3.8, -1.8, -0.8, -1.2, 0.5, 'k').dl(0.8, -1.2, 3.8, -1.8, 0.5, 'k');
+    B.dl(-1, 2.6, 1, 2.6, 0.35, 'k');
     return B.done();
   },
   mammoth: (t) => {
+    // (5 Nov, more detail) a shaggy mammoth: domed head, a flapping ear,
+    // long curling tusks, layered coat, frost on its back
     const B = new Build();
     const sw = Math.sin(t * 2) * 0.8;
     const HAIR = 0x6a4a30;
-    for (const u of [-6, -3, 2.5, 5.5]) B.box(u, 5.2, 2.6, 4.6, 0.8, 0x3a2a1e, 0, 0.6);
-    for (let i = 0; i < 9; i++) B.tri(-8 + i * 2 - 1, 2.6, -8 + i * 2 + 1, 2.6, -8.6 + i * 2, 5.4, HAIR, 0.4);
+    const HAIR2 = 0x5a3e28;
+    for (const u of [-6, -3, 2.5, 5.5]) B.box(u, 5.2, 2.8, 4.6, 0.8, 0x3a2a1e, 0, 0.6);
+    for (let i = 0; i < 9; i++) B.tri(-8 + i * 2 - 1, 2.6, -8 + i * 2 + 1, 2.6, -8.6 + i * 2 + Math.sin(t * 2 + i) * 0.3, 5.8, HAIR, 0.4);
     B.e(-1, -0.4, 8.4, 5.2, HAIR, 0, 1.6);
-    B.c(7, -3, 3.6, 0x5a3e28, 1.4);
-    B.chain([[9, -2], [10 + sw * 0.4, 2], [9.4 + sw, 5]], 1, 0.6, 0x5a3e28, 0.8);
-    B.chain([[8.4, -0.4], [11.4, 1.4], [13, -1.6]], 0.6, 0.35, IVORY, 0.4);
-    B.de(5, -3, 1.4, 2, 0x4a3424).de(-3, -4, 4, 1, 'l').dl(-6, 0, 3, -0.6, 0.3, 0x4a3424).eye(8, -3.8, 0.6);
+    B.e(-3, -4.8, 3.6, 1.1, 0xd8ecf4, 0, 0.5);
+    B.c(7, -3, 3.6, HAIR2, 1.4);
+    B.c(6.2, -6, 2.4, HAIR2, 1);
+    B.e(4.8, -2.4, 1.6, 2.6, 0x4a3424, Math.sin(t * 1.5) * 0.2, 0.6);
+    B.chain([[9, -2], [10 + sw * 0.4, 2], [9.4 + sw, 5]], 1.1, 0.6, HAIR2, 0.8);
+    B.chain([[8.4, -0.4], [11.4, 1.8], [13.6, 0.4], [13.4, -2]], 0.7, 0.35, IVORY, 0.4);
+    // the coat's layers, the eye
+    for (let i = 0; i < 5; i++) B.dl(-8 + i * 3.4, 0.4, -7 + i * 3.4, 3.6, 0.35, 0x4a3424);
+    B.dl(-6, -1.8, 3, -2.4, 0.3, 0x4a3424).dl(5.4, -6.6, 7.4, -7.4, 0.3, 'l');
+    B.de(-3, -4, 4, 1, 'l').eye(8, -3.8, 0.6);
     return B.done();
   },
 };
