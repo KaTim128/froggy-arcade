@@ -925,14 +925,10 @@ export class CreatureHub extends Phaser.Scene {
     // nothing is shown and nothing is spent: LEAVE walks away for free.
     if (team && !paidTeamPool()) {
       L.add(smallText(this, 8, 37, `${pr.cost} TOKENS IN, ${pr.win} FOR A WIN.`, PALETTE.gold));
-      L.add(this.add.rectangle(GAME_W / 2, 92, 230, 74, 0x181c36).setStrokeStyle(1, PALETTE.gold));
-      L.add(centerText(this, GAME_W / 2, 66, `PAY ${pr.cost} TOKENS TO SEE THE POOL`, PALETTE.cream));
-      L.add(centerSmall(this, GAME_W / 2, 80, `TEN CREATURES, DRAWN AT RANDOM. PICK ${TEAM_SIZE}.`, PALETTE.fog));
-      L.add(centerSmall(this, GAME_W / 2, 88, 'PAID ONCE: LEAVING THE PICK AND COMING BACK', PALETTE.fog));
-      L.add(centerSmall(this, GAME_W / 2, 95, 'SHOWS THE SAME TEN, FOR NOTHING MORE.', PALETTE.fog));
-      L.add(centerSmall(this, GAME_W / 2, 106, 'DO NOT LIKE THE IDEA? LEAVE COSTS NOTHING.', PALETTE.ash));
+      L.add(this.add.rectangle(GAME_W / 2, 90, 230, 28, 0x181c36).setStrokeStyle(1, PALETTE.gold));
+      L.add(centerText(this, GAME_W / 2, 90, `PAY ${pr.cost} TOKENS TO SEE THE POOL`, PALETTE.cream));
       const can = ledger.balance() >= pr.cost;
-      L.add(button(this, GAME_W / 2 - 52, GAME_H - 30, can ? `PAY ${pr.cost}` : `NEED ${pr.cost}`, () => {
+      L.add(button(this, GAME_W / 2 - 60, GAME_H - 30, can ? `PLAY - ${pr.cost} TOKENS` : `NEED ${pr.cost}`, () => {
         const r = payForTeamPool();
         if (!r.ok) {
           this.say(r);
@@ -943,8 +939,8 @@ export class CreatureHub extends Phaser.Scene {
         this.miniPool = paidTeamPool() ?? [];
         this.miniPicks = [];
         this.draw();
-      }, { width: 90, height: 15, disabled: !can }));
-      L.add(button(this, GAME_W / 2 + 52, GAME_H - 30, 'LEAVE', () => this.go('minis'), { width: 90, height: 15, fill: 0x1c2142 }));
+      }, { width: 110, height: 15, disabled: !can }));
+      L.add(button(this, GAME_W / 2 + 60, GAME_H - 30, 'LEAVE', () => this.go('minis'), { width: 110, height: 15, fill: 0x1c2142 }));
       return;
     }
     L.add(smallText(this, 8, 37, team ? `PAID. ${pr.win} FOR A WIN.` : `${pr.cost} TOKENS IN, ${pr.win} FOR A WIN.`, PALETTE.gold));
