@@ -21,6 +21,14 @@
  * traps; the maze has more loops (so a tadpole still has somewhere to run),
  * and the two start nearer, not at the far ends.)
  *
+ * (User, 5 Nov: "the tadpole should be faster, make the AI smarter but not
+ * impossible -- medium".  The tadpole is the quicker of the two both ways
+ * round now; the computer's tadpole flees by the water it reaches before the
+ * frog, at their real speeds, prefers water with turnings in it to pockets,
+ * and no longer dithers on the spot; the computer's frog heads you off more
+ * often and looks further ahead; traps hold for less and fade after 5 s.
+ * Tuned with simulateCroaked (tools/croaked_sim.mjs): see TUNE.)
+ *
  * A NEW MAZE EVERY ROUND, AND EVERY CORNER OF IT REACHABLE.  It is carved as a
  * perfect maze (one path between any two cells), then most of its dead ends
  * are knocked through and a few more walls opened, so there are loops to
@@ -52,24 +60,57 @@ const CELL = 11;
 /** How long the frog has to catch the tadpole. */
 const HUNT_S = 60;
 /** Cells a second, whoever is playing which: the tadpole is always the quicker. */
-const SURVIVOR_SPEED = 6.2;
-const HUNTER_SPEED = 5.1;
+/**
+ * THE TUNING, in one place (the simulation can try others: simulateCroaked).
+ * (user, 5 Nov: "the tadpole should be faster, make the AI smarter but not
+ * impossible -- medium")
+ */
+export const TUNE = {
+  // (5 Nov, tuned with simulateCroaked for a medium game: a steady stand-in
+  // player wins about 2 rounds in 3 as the frog and 1 in 3 as the tadpole --
+  // where it has to eat every fly -- and a careless one far fewer)
+  /** You are the tadpole: your speed (was 6.2), and the computer frog's. */
+  survivor: 8.8,
+  hunter: 5.1,
+  /** You are the frog: yours, and the computer tadpole's (was 5.2: now the quicker, as it should be). */
+  playerFrog: 6.5,
+  playerTadpole: 7.6,
+  /** The computer tadpole: how much it second-guesses (was 3.2), and the odds it sees a trap (was 0.15). */
+  runnerJitter: 1,
+  playerSpot: 0.8,
+  /** The computer frog: how often it heads you off (was 0.25), and how far ahead it looks (was 2). */
+  cutOff: 0.4,
+  lookAhead: 3,
+  /** Your traps, as the frog: how long one holds (was 3.4), how often (was 1.6), how many at once (was 5). */
+  playerTrapHold: 1.6,
+  playerTrapCooldown: 2.5,
+  playerMaxTraps: 3,
+  /** The computer frog's traps: how long one holds you (was 2.2), and the odds it lays one at a junction (was 0.5). */
+  trapHold: 1.4,
+  aiTrapOdds: 0.3,
+  /**
+   * How long a trap stays on the water before it fades (was for ever).  A
+   * trap the tadpole has seen is a wall to it, so a few that never went
+   * walled the loops shut, and the round was the frog's every time.
+   */
+  trapLife: 5,
+};
+
 /** When YOU are the frog: the frog is the quicker, and the tadpole slows to a chase it can lose. */
-const PLAYER_FROG_SPEED = 6.5;
-const PLAYER_TADPOLE_SPEED = 5.2;
+
 /** Traps: how many may lie at once, the wait between two, and how long one holds. */
 const MAX_TRAPS = 3;
 const TRAP_COOLDOWN = 4;
-const TRAP_HOLD = 2.2;
+
 /** The player-frog's own: more of them, sooner, holding longer. */
-const PLAYER_MAX_TRAPS = 5;
-const PLAYER_TRAP_COOLDOWN = 1.6;
-const PLAYER_TRAP_HOLD = 3.4;
-const maxTraps = (): number => (role === 'frog' ? PLAYER_MAX_TRAPS : MAX_TRAPS);
+
+
+const maxTraps = (): number => (role === 'frog' ? TUNE.playerMaxTraps : MAX_TRAPS);
 /** The odds the computer's tadpole spots a trap it is about to swim into. */
 const SPOT_TRAP = 0.4;
 /** ...and the player-frog's tadpole is less watchful. */
-const PLAYER_SPOT_TRAP = 0.15;
+
+
 /** How close counts as caught, in cells. */
 const CATCH = 0.95;
 
@@ -86,6 +127,8 @@ interface Mover {
   speed: number;
   /** Seconds left stuck in a trap (0: free). */
   held: number;
+  /** A runner that has broken off to flee keeps fleeing until it is well clear (no dithering). */
+  fleeing?: boolean;
 }
 
 let apiRef: MinigameApi | null = null;
@@ -112,6 +155,18 @@ let settled = false;
 let traps = new Set<string>();
 let trapCd = 0;
 let spotted = new Map<string, boolean>();
+/** When each trap was laid (the round's clock), so old ones fade. */
+let trapAt = new Map<string, number>();
+
+/** Traps older than their life fade away. */
+function expireTraps(): void {
+  for (const [k, at] of trapAt) {
+    if (clock - at < TUNE.trapLife) continue;
+    trapAt.delete(k);
+    traps.delete(k);
+    spotted.delete(k);
+  }
+}
 
 const open = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < COLS && y < ROWS && grid[y][x];
 const keyOf = (x: number, y: number): string => `${x},${y}`;
@@ -282,8 +337,10 @@ function flyField(ok: (x: number, y: number) => boolean): number[][] {
 }
 
 /** How near the frog may be before the tadpole stops eating and runs; and how wide a berth its path keeps. */
-const FLEE_AT = 3;
-const BERTH = 2;
+// (5 Nov: 3 and 2 -- it fed right up to the frog's nose and was cornered in
+// seconds; now it breaks off sooner and gives the frog a wider berth)
+const FLEE_AT = 6;
+const BERTH = 4;
 
 /**
  * THE TADPOLE RUNS -- AND EATS.  The computer's tadpole has the same job you
@@ -307,7 +364,12 @@ const BERTH = 2;
  */
 function runnerChoice(m: Mover): Dir | null {
   if (!you) return null;
-  const hunter = distances(grid, you.tx, you.ty);
+  return runnerMind(m, you, role === 'frog' ? TUNE.playerSpot : SPOT_TRAP, role === 'frog' ? TUNE.runnerJitter : 0.8);
+}
+
+/** How the runner thinks, whoever is running from whom (`spot`: the odds it sees a trap; `jitter`: how much it second-guesses). */
+function runnerMind(m: Mover, h: Mover, spot: number, jitter: number): Dir | null {
+  const hunter = distances(grid, h.tx, h.ty);
   const hd = (x: number, y: number): number => (hunter[y][x] < 0 ? 99 : hunter[y][x]);
   // the ways out it will take: open, and not a trap it has seen
   const ways: Dir[] = [];
@@ -318,21 +380,34 @@ function runnerChoice(m: Mover): Dir | null {
     // a trap ahead: seen (once, by the odds) it is a wall; unseen it is swum into
     const tk = keyOf(nx, ny);
     if (traps.has(tk)) {
-      if (!spotted.has(tk)) spotted.set(tk, Math.random() < (role === 'frog' ? PLAYER_SPOT_TRAP : SPOT_TRAP));
+      if (!spotted.has(tk)) spotted.set(tk, Math.random() < spot);
       if (spotted.get(tk)) continue;
     }
     ways.push(d);
   }
+  // ---- WHICH MIND: it breaks off at FLEE_AT, and does not go back to
+  // feeding until it is well clear -- it used to flip between the two at
+  // every cell, and dither on the spot until the frog arrived
+  const here = hd(m.cx, m.cy);
+  if (here <= FLEE_AT) m.fleeing = true;
+  else if (here > FLEE_AT + 4) m.fleeing = false;
   // ---- FEEDING
-  if (flies.size && hd(m.cx, m.cy) > FLEE_AT) {
-    const food = flyField((x, y) => hd(x, y) > BERTH);
+  if (flies.size && !m.fleeing) {
+    // safe water: a wide berth from the frog, and somewhere it gets to well
+    // before the frog could -- each at its own speed
+    const mineAll = distances(grid, m.cx, m.cy);
+    const vt0 = Math.max(0.1, m.speed);
+    const vf0 = Math.max(0.1, h.speed);
+    const food = flyField((x, y) => hd(x, y) > BERTH && (mineAll[y][x] < 0 || mineAll[y][x] / vt0 + 0.4 < hd(x, y) / vf0));
     let best: Dir | null = null;
     let near = Infinity;
     for (const d of ways) {
       const v = food[m.cy + DY[d]][m.cx + DX[d]];
       if (v < 0) continue;
       // (a hair against turning back, and a hair of chance between equals)
-      const s = v + (d === ((m.dir + 2) % 4) ? 0.4 : 0) + Math.random() * 0.3;
+      // (turning back costs 3 steps: it used to turn on the spot whenever
+      // the nearest fly changed, and dither there until the frog came)
+      const s = v + (d === ((m.dir + 2) % 4) ? 3 : 0) + Math.random() * 0.3;
       if (s < near) {
         near = s;
         best = d;
@@ -346,12 +421,42 @@ function runnerChoice(m: Mover): Dir | null {
   for (const d of ways) {
     const nx = m.cx + DX[d];
     const ny = m.cy + DY[d];
-    // room to run: the cells it reaches first, from there, not passing back through here
-    const mine = distances(grid, nx, ny, keyOf(m.cx, m.cy));
+    // ROOM TO RUN: the water it gets to before the frog does, from there, not
+    // passing back through here -- counted in TIME, each at its own speed, so
+    // a quicker tadpole knows it can slip round a loop the frog is on
+    // (only through water it reaches FIRST: a way that runs through the frog
+    // is no way out at all -- it used to count the water beyond the frog, and
+    // swim straight at it)
+    const vt = Math.max(0.1, m.speed);
+    const vf = Math.max(0.1, h.speed);
+    const safe = (x: number, y: number, steps: number): boolean => hunter[y][x] < 0 || (hunter[y][x] >= 2 && steps / vt + 0.2 < hunter[y][x] / vf);
     let room = 0;
-    for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) if (mine[j][i] >= 0 && mine[j][i] < 14 && (hunter[j][i] < 0 || mine[j][i] + 1 < hunter[j][i])) room++;
-    const back = d === ((m.dir + 2) % 4) ? -3 : 0;
-    const s = hunter[ny][nx] * 2 + room * 0.6 + back + Math.random() * (role === 'frog' ? 3.2 : 0.8);
+    // (and the junctions in it: water with places to turn is a way out; a
+    // pocket with none, however roomy, is where it gets cornered)
+    let turns = 0;
+    if (safe(nx, ny, 1)) {
+      const seen = new Set<string>([keyOf(m.cx, m.cy), keyOf(nx, ny)]);
+      const q: Array<[number, number, number]> = [[nx, ny, 1]];
+      for (let qi = 0; qi < q.length; qi++) {
+        const [x, y, st] = q[qi];
+        room++;
+        if ([0, 1, 2, 3].filter((k) => open(x + DX[k], y + DY[k])).length >= 3) turns++;
+        // (the whole maze, not 18 steps: a pocket that looks roomy close to is a trap)
+        if (st >= 60) continue;
+        for (let k = 0; k < 4; k++) {
+          const ax = x + DX[k];
+          const ay = y + DY[k];
+          if (!open(ax, ay) || seen.has(keyOf(ax, ay)) || !safe(ax, ay, st + 1)) continue;
+          seen.add(keyOf(ax, ay));
+          q.push([ax, ay, st + 1]);
+        }
+      }
+    }
+    const back = d === ((m.dir + 2) % 4) ? -5 : 0;
+    // (room to run counts for more than plain distance: open water beats a
+    // corner -- and with no safe water left anywhere, the farthest way from it)
+    // (and keeping its way: it used to rock on the spot while the frog closed)
+    const s = room > 0 ? 1000 + hunter[ny][nx] * 1.5 + Math.min(room, 40) * 0.5 + turns * 6 + back + Math.random() * jitter : hunter[ny][nx] * 3 + back * 1.6;
     if (s > score) {
       score = s;
       best = d;
@@ -369,8 +474,8 @@ function hunterChoice(m: Mover): Dir | null {
   aiTraps();
   let gx = you.tx;
   let gy = you.ty;
-  if (Math.random() < 0.25) {
-    for (let i = 0; i < 2 && open(gx + DX[you.dir], gy + DY[you.dir]); i++) {
+  if (Math.random() < TUNE.cutOff) {
+    for (let i = 0; i < TUNE.lookAhead && open(gx + DX[you.dir], gy + DY[you.dir]); i++) {
       gx += DX[you.dir];
       gy += DY[you.dir];
     }
@@ -399,7 +504,8 @@ function landed(m: Mover): boolean {
   const k = keyOf(m.cx, m.cy);
   if (!traps.delete(k)) return false;
   spotted.delete(k);
-  m.held = role === 'frog' ? PLAYER_TRAP_HOLD : TRAP_HOLD;
+  m.held = role === 'frog' ? TUNE.playerTrapHold : TUNE.trapHold;
+  lastSim.trapped++;
   audio.sfx('ui_blip', 0.6);
   return true;
 }
@@ -413,7 +519,8 @@ function dropTrap(): boolean {
   const k = keyOf(x, y);
   if (traps.has(k)) return false;
   traps.add(k);
-  trapCd = role === 'frog' ? PLAYER_TRAP_COOLDOWN : TRAP_COOLDOWN;
+  trapAt.set(k, clock);
+  trapCd = role === 'frog' ? TUNE.playerTrapCooldown : TRAP_COOLDOWN;
   audio.sfx('water_plip', 0.5);
   return true;
 }
@@ -426,7 +533,7 @@ function aiTraps(): void {
   if (role !== 'survivor' || !them || !you || trapCd > 0) return;
   const exits = [0, 1, 2, 3].filter((d) => open(them!.cx + DX[d], them!.cy + DY[d])).length;
   const far = Math.abs(them.cx - you.tx) + Math.abs(them.cy - you.ty);
-  if (exits >= 3 && far >= 3 && Math.random() < 0.5) dropTrap();
+  if (exits >= 3 && far >= 3 && Math.random() < TUNE.aiTrapOdds) dropTrap();
 }
 
 /**
@@ -442,7 +549,7 @@ function arrived(m: Mover): void {
   const k = keyOf(m.tx, m.ty);
   if (flies.delete(k)) {
     audio.sfx('water_plip', role === 'frog' ? 0.12 : 0.25);
-    const base = role === 'frog' ? PLAYER_FROG_SPEED : HUNTER_SPEED;
+    const base = role === 'frog' ? TUNE.playerFrog : TUNE.hunter;
     if (frog) frog.speed = base * (1 + 0.12 * (1 - flies.size / Math.max(1, fliesAtStart)));
     if (!flies.size) end(role !== 'frog', role === 'frog' ? 'IT ATE EVERY FLY!' : 'EVERY FLY EATEN!');
   }
@@ -459,10 +566,11 @@ function newRound(): void {
   const b = nearTwoThirds(grid, a[0], a[1]);
   const mine = role === 'frog' ? a : b;
   const theirs = role === 'frog' ? b : a;
-  you = mover(mine[0], mine[1], role === 'frog' ? PLAYER_FROG_SPEED : SURVIVOR_SPEED);
-  them = mover(theirs[0], theirs[1], role === 'frog' ? PLAYER_TADPOLE_SPEED : HUNTER_SPEED);
+  you = mover(mine[0], mine[1], role === 'frog' ? TUNE.playerFrog : TUNE.survivor);
+  them = mover(theirs[0], theirs[1], role === 'frog' ? TUNE.playerTadpole : TUNE.hunter);
   traps = new Set();
   spotted = new Map();
+  trapAt = new Map();
   trapCd = 1.5;
   flies = new Set();
   // the flies, in every open cell, whichever side you are on: the tadpole eats them either way
@@ -751,7 +859,7 @@ export const croaked: MinigameModule = {
     steps: [
       { say: 'AFTER PLAY, PICK A SIDE: BIG FROG HUNTS, THE SURVIVOR RUNS.', demo: 'croak.pick' },
       { say: `BIG FROG: CATCH THE TADPOLE IN ${HUNT_S} SECONDS, BEFORE IT EATS EVERY FLY. YOU ARE THE QUICKER, SO RUN IT DOWN OR TRAP IT.`, demo: 'croak.hunt' },
-      { say: `SPACE DROPS A TRAP WHERE YOU STAND (${PLAYER_MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, phone: `TAP TRAP TO DROP ONE WHERE YOU STAND (${PLAYER_MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, demo: 'croak.trap' },
+      { say: `SPACE DROPS A TRAP WHERE YOU STAND (${TUNE.playerMaxTraps} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, phone: `TAP TRAP TO DROP ONE WHERE YOU STAND (${TUNE.playerMaxTraps} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, demo: 'croak.trap' },
       { say: 'SURVIVOR: YOU ARE THE SMALL ONE. EAT EVERY FLY, AND MIND THE FAINT RINGS - THE FROG\'S TRAPS.', demo: 'croak.survive' },
       { say: 'W A S D OR THE ARROWS STEER. PRESS A WAY EARLY AND YOU TURN AT THE NEXT GAP.', phone: 'THE STICK STEERS. PUSH A WAY EARLY AND YOU TURN AT THE NEXT GAP.', demo: 'croak.steer' },
     ],
@@ -851,6 +959,7 @@ export const croaked: MinigameModule = {
     }
     if (phase !== 'play' || !you || !them) return;
     trapCd = Math.max(0, trapCd - dt);
+    expireTraps();
     // the way asked for: held, or the last one pressed
     for (const [d, name] of [[0, 'up'], [1, 'right'], [2, 'down'], [3, 'left']] as Array<[Dir, string]>) if (keys[name]?.some((x) => x.isDown)) you.want = d;
     // (from a standstill, a press sets off at once)
@@ -911,3 +1020,81 @@ export const croaked: MinigameModule = {
     sceneRef = null;
   },
 };
+
+// ------------------------------------------------------------------ tuning (dev)
+
+/**
+ * A HEADLESS ROUND, FOR TUNING (dev only: tools/croaked_sim).  The same maze,
+ * movers, minds, traps and rules as a real round, with a stand-in for the
+ * player: a frog that chases the short way and lays traps at junctions, or a
+ * tadpole that feeds and runs as the computer's does -- each `noise` of the
+ * time it simply turns a random way, as a person does.  The share of rounds
+ * the stand-in wins, playing `r`.
+ */
+/** What the last simulation saw: mean round length, mean share of flies left at the end, and how the frog's traps did. */
+export const lastSim = { t: 0, left: 0, trapped: 0 };
+export function simulateCroaked(r: Role, rounds = 100, noise = 0.15, tune: Partial<typeof TUNE> = {}, botSpot = 0.5): number {
+  const keep = { apiRef, sceneRef, wallsG };
+  const was = { ...TUNE };
+  Object.assign(TUNE, tune);
+  apiRef = null;
+  sceneRef = null;
+  wallsG = null;
+  let wins = 0;
+  lastSim.t = lastSim.left = lastSim.trapped = 0;
+  const randomWay = (m: Mover): Dir | null => {
+    const ways = ([0, 1, 2, 3] as Dir[]).filter((d) => open(m.cx + DX[d], m.cy + DY[d]));
+    return ways.length ? ways[Math.floor(Math.random() * ways.length)] : null;
+  };
+  const frogBot = (m: Mover): Dir | null => {
+    if (!them) return null;
+    if (Math.random() < noise) return randomWay(m);
+    const exits = [0, 1, 2, 3].filter((d) => open(m.cx + DX[d], m.cy + DY[d])).length;
+    if (botSpot >= 0 && exits >= 3 && Math.abs(m.cx - them.tx) + Math.abs(m.cy - them.ty) >= 3 && Math.random() < 0.5) dropTrap();
+    const toIt = distances(grid, them.tx, them.ty);
+    let best: Dir | null = null;
+    let near = Infinity;
+    for (const d of [0, 1, 2, 3] as Dir[]) {
+      const nx = m.cx + DX[d];
+      const ny = m.cy + DY[d];
+      if (!open(nx, ny) || toIt[ny][nx] < 0) continue;
+      if (toIt[ny][nx] < near) {
+        near = toIt[ny][nx];
+        best = d;
+      }
+    }
+    return best;
+  };
+  const tadBot = (m: Mover): Dir | null => (Math.random() < noise ? randomWay(m) : runnerMind(m, them!, botSpot, 0.8));
+  for (let n = 0; n < rounds; n++) {
+    role = r;
+    settled = false;
+    phase = 'play';
+    newRound();
+    const dt = 1 / 30;
+    let caught = false;
+    for (let t = 0; t < 240 && !settled; t += dt) {
+      trapCd = Math.max(0, trapCd - dt);
+      expireTraps();
+      step(you!, dt, r === 'frog' ? frogBot : tadBot);
+      if (settled) break;
+      step(them!, dt, r === 'frog' ? runnerChoice : hunterChoice);
+      clock += dt;
+      const a = posOf(you!);
+      const b = posOf(them!);
+      if (Math.hypot(a.x - b.x, a.y - b.y) < CATCH) {
+        caught = true;
+        end(r === 'frog', '');
+      } else if (r === 'frog' && clock >= HUNT_S) end(false, '');
+    }
+    // (won: the frog caught it before the flies ran out, or the tadpole ate them all)
+    if (r === 'frog' ? caught && flies.size > 0 : flies.size === 0) wins++;
+    lastSim.t += clock / rounds;
+    lastSim.left += flies.size / Math.max(1, fliesAtStart) / rounds;
+  }
+  ({ apiRef, sceneRef, wallsG } = keep);
+  Object.assign(TUNE, was);
+  phase = 'pick';
+  settled = false;
+  return wins / rounds;
+}
