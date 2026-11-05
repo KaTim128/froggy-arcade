@@ -1962,8 +1962,17 @@ export class CreatureArena extends Phaser.Scene {
   private fireOnce(f: Fighter, i: number, ax: number, ay: number): boolean {
     if (f.cds[i] > 0 || !this.canAct(f) || f.dash || f.hp <= 0) return false;
     const a = f.c.attacks[i];
-    // a boss's floor mechanic runs on its own clock, not as a button
-    if (a.sp && SPECIALS[a.sp]?.ai === 'never') return false;
+    // a boss's floor mechanic runs on its own clock, not as a button -- but a
+    // boss on your own team (the admin's recruit) fires it at them, on its timer
+    if (a.sp && SPECIALS[a.sp]?.ai === 'never') {
+      const def = f.c.boss;
+      if (f !== this.me || !def) return false;
+      const o = this.other(f);
+      this.bossPattern(def, { x: o.x, y: o.y }, f);
+      f.cds[i] = def.every;
+      f.atk = 0.25;
+      return true;
+    }
     let m = Math.hypot(ax, ay) || 1;
     let ux = ax / m;
     let uy = ay / m;
@@ -5696,13 +5705,15 @@ export class CreatureArena extends Phaser.Scene {
    * One round of what this boss does to the floor (see the table at the
    * top).  `at` is where it is aimed: you, normally.
    */
-  private bossPattern(def: BossDef, at = { x: this.me.x, y: this.me.y }): void {
-    const foe = this.foe;
+  // (whose it is: the boss you fight -- or, on an admin's team, yours, at them)
+  private bossPattern(def: BossDef, at = { x: this.me.x, y: this.me.y }, who: Fighter = this.foe): void {
+    const foe = who;
+    const lead0 = who === this.foe ? this.meV : { x: 0, y: 0 };
     const col = ELEMENTS[foe.c.element];
     const cx = (x: number) => Phaser.Math.Clamp(x, ARENA.x + 10, ARENA.x + ARENA.w - 10);
     const cy = (y: number) => Phaser.Math.Clamp(y, ARENA.y + 10, ARENA.y + ARENA.h - 10);
     const put = (h: Omit<Hazard, 't0' | 'dmg' | 'r' | 'kind'> & Partial<Pick<Hazard, 'dmg' | 'r' | 'kind'>>): void => {
-      this.hazards.push({ kind: 'mark', r: def.r, dmg: def.dmg, ...h, x: cx(h.x), y: cy(h.y), t0: h.t });
+      this.hazards.push({ kind: 'mark', r: def.r, dmg: def.dmg, ...h, x: cx(h.x), y: cy(h.y), t0: h.t, owner: who });
     };
     switch (def.pattern) {
       case 'teleport': {
@@ -5711,13 +5722,13 @@ export class CreatureArena extends Phaser.Scene {
           const a = (i / def.n) * Math.PI * 2 + Math.random();
           put({ x: at.x + Math.cos(a) * (i === 0 ? 0 : 26), y: at.y + Math.sin(a) * (i === 0 ? 0 : 20), t: 1.2 + i * 0.15 });
         }
-        this.blinkIn();
+        this.blinkIn(who);
         break;
       }
       case 'meteor': {
         // one on you, one where you are running to, the rest round about:
         // the shadow grows for a second and a half, then it lands -- hard
-        const lead = { x: at.x + this.meV.x * 1.2, y: at.y + this.meV.y * 1.2 };
+        const lead = { x: at.x + lead0.x * 1.2, y: at.y + lead0.y * 1.2 };
         for (let i = 0; i < def.n; i++) {
           const base = i === 0 ? at : i === 1 ? lead : { x: at.x + (Math.random() - 0.5) * 120, y: at.y + (Math.random() - 0.5) * 80 };
           put({ kind: 'meteor', x: base.x, y: base.y, t: 1.6 + i * 0.25 });
@@ -5745,7 +5756,7 @@ export class CreatureArena extends Phaser.Scene {
       case 'roots': {
         // under you, and where you are going
         put({ x: at.x, y: at.y, t: 1.0, holds: true });
-        for (let i = 1; i < def.n; i++) put({ x: at.x + this.meV.x * 0.5 * i + (Math.random() - 0.5) * 24, y: at.y + this.meV.y * 0.5 * i + (Math.random() - 0.5) * 20, t: 1.1 + i * 0.3, holds: true });
+        for (let i = 1; i < def.n; i++) put({ x: at.x + lead0.x * 0.5 * i + (Math.random() - 0.5) * 24, y: at.y + lead0.y * 0.5 * i + (Math.random() - 0.5) * 20, t: 1.1 + i * 0.3, holds: true });
         break;
       }
       case 'lightning': {
@@ -5810,9 +5821,9 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   /** The lich's trick: gone in a puff, and back somewhere that can see you. */
-  private blinkIn(): void {
-    const foe = this.foe;
-    const spot = this.sightSpot(foe, true);
+  private blinkIn(who: Fighter = this.foe): void {
+    const foe = who;
+    const spot = this.sightSpot(foe, true, this.other(who));
     if (!spot) return;
     const col = ELEMENTS[foe.c.element];
     this.fx.push({ kind: 'ring', x: spot.x, y: spot.y, r: 14, t: 0, life: 0.6, col: col.light });

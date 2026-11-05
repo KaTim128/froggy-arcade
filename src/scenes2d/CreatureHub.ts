@@ -381,6 +381,14 @@ export class CreatureHub extends Phaser.Scene {
    * Its level is in a chip on the picture; with `xp` (one you own), the
    * experience towards the next level as a bar, or MAX at the top level.
    */
+  /** One line of text in the house type, or the small type if it would run past `maxW`. */
+  private fitLine(x: number, y: number, s: string, col: number, maxW: number): Phaser.GameObjects.BitmapText {
+    const t = text(this, x, y, s, col);
+    if (t.width <= maxW) return t;
+    t.destroy();
+    return smallText(this, x, y + 1, s, col);
+  }
+
   private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number, tall = false, uid?: number): void {
     const L = this.layer;
     const el = ELEMENTS[c.element];
@@ -391,7 +399,9 @@ export class CreatureHub extends Phaser.Scene {
     L.add(this.add.rectangle(x + 2, y + 2, w - 4, artH, el.dark, 0.55).setOrigin(0, 0));
     L.add(this.add.rectangle(x + 2, y + 2 + artH * 0.6, w - 4, artH * 0.4, el.col, 0.18).setOrigin(0, 0));
     L.add(this.add.ellipse(x + w / 2, y + artH - 2, 30, 6, 0x000000, 0.3));
-    this.shown.push({ c, x: x + w / 2, y: y + (big ? 20 : 15), s: big ? 1.6 : 1.2, f: 1 });
+    // (a boss's body is twice a creature's: drawn smaller, so it stays in its frame)
+    const bossK = c.boss ? 0.62 : 1;
+    this.shown.push({ c, x: x + w / 2, y: y + (big ? 20 : 15) + (c.boss ? 4 : 0), s: (big ? 1.6 : 1.2) * bossK, f: 1 });
     // the element, in a chip on the picture's corner
     const tag = text(this, x + w - 6, y + 5, el.name, el.light).setOrigin(1, 0);
     L.add(this.add.rectangle(x + w - 3, y + 3, Math.ceil(tag.width) + 6, 11, 0x0a0d1e, 0.85).setOrigin(1, 0).setStrokeStyle(1, el.col));
@@ -402,9 +412,11 @@ export class CreatureHub extends Phaser.Scene {
     L.add(this.add.rectangle(x + 3, y + 3, Math.ceil(lvT.width) + 6, 11, 0x0a0d1e, 0.85).setOrigin(0, 0).setStrokeStyle(1, lv.max ? PALETTE.gold : 0x6a7090));
     L.add(lvT);
     let ty = y + artH + 4;
-    L.add(text(this, x + 4, ty, c.name.toUpperCase(), PALETTE.cream).setMaxWidth(w - 6));
+    // (a name or role too long for the card goes in the small type, on its
+    // one line -- never wrapped on to the line under it)
+    L.add(this.fitLine(x + 4, ty, c.name.toUpperCase(), PALETTE.cream, w - 6));
     ty += 9;
-    L.add(text(this, x + 4, ty, c.role, el.light).setMaxWidth(w - 6));
+    L.add(this.fitLine(x + 4, ty, c.role, el.light, w - 6));
     if (!big) return;
     ty += 10;
     // ---- each stat on one row: its name, a bar, its number -- the bar
@@ -466,10 +478,11 @@ export class CreatureHub extends Phaser.Scene {
       L.addAt(chip, L.getIndex(g));
       // (an icon is 11px wide, centred: x+3..x+13; the name starts after it)
       drawAbilityIcon(g, a, x + 8, ty + 4 + mid, el.light);
-      const name = text(this, x + 15, ty + 1 + mid, a.name, PALETTE.cream);
-      L.add(name);
       // the "?" that says there is more to read
       const qx = x + w - 9;
+      // (a long name -- a boss's PHANTOM BLINK -- in the small type, clear of the "?")
+      const name = this.fitLine(x + 15, ty + 1 + mid, a.name, PALETTE.cream, qx - 3 - (x + 15));
+      L.add(name);
       L.add(this.add.rectangle(qx - 1, ty - 1 + mid, 7, 10, 0x3a4470).setOrigin(0, 0));
       L.add(text(this, qx, ty + 1 + mid, '?', PALETTE.gold));
       // the damage, left of the "?" -- where the name leaves room for it
@@ -1008,19 +1021,22 @@ export class CreatureHub extends Phaser.Scene {
     const cols = 8;
     const rows = 3;
     const per = cols * rows;
-    const pages = Math.ceil(CREATURES.length / per);
+    // (user, 5 Nov: the bosses too, after the creatures)
+    const all = [...CREATURES, ...BOSSES];
+    const pages = Math.ceil(all.length / per);
     this.choosePage = Phaser.Math.Clamp(this.choosePage, 0, pages - 1);
     const cw = 36;
     const ch = 40;
     const x0 = Math.round((GAME_W - (cols * cw + (cols - 1) * 3)) / 2);
-    CREATURES.slice(this.choosePage * per, (this.choosePage + 1) * per).forEach((cr, i) => {
+    all.slice(this.choosePage * per, (this.choosePage + 1) * per).forEach((cr, i) => {
+      const isBoss = !!cr.boss;
       const x = x0 + (i % cols) * (cw + 3);
       const y = 30 + Math.floor(i / cols) * (ch + 3);
       const el = ELEMENTS[cr.element];
       // ticked: gold, filled, with a tick in the corner; tap again to untick
       const on = this.chosen.has(cr.id);
       const fill = on ? 0x3a3418 : 0x161a2c;
-      const cell = this.add.rectangle(x, y, cw, ch, fill).setOrigin(0, 0).setStrokeStyle(on ? 2 : 1, on ? PALETTE.gold : el.col);
+      const cell = this.add.rectangle(x, y, cw, ch, fill).setOrigin(0, 0).setStrokeStyle(on || isBoss ? 2 : 1, on || isBoss ? PALETTE.gold : el.col);
       cell.setInteractive({ useHandCursor: true });
       cell.on('pointerover', () => (cell.setFillStyle(on ? 0x4a4420 : 0x2a3050), audio.sfx('ui_hover')));
       cell.on('pointerout', () => cell.setFillStyle(fill));
@@ -1038,7 +1054,13 @@ export class CreatureHub extends Phaser.Scene {
         L.add(tick);
       }
       L.add(this.add.rectangle(x + 3, y + ch - 5, cw - 6, 2, el.col).setOrigin(0, 0));
-      this.shown.push({ c: cr, x: x + cw / 2, y: y + 19, s: 1.0, f: 1 });
+      // (a boss is drawn smaller to fit its cell, under a little crown)
+      this.shown.push({ c: cr, x: x + cw / 2, y: y + (isBoss ? 22 : 19), s: isBoss ? 0.62 : 1.0, f: 1 });
+      if (isBoss) {
+        const crown = this.add.graphics();
+        crown.fillStyle(PALETTE.gold, 1).fillTriangle(x + 4, y + 9, x + 6, y + 4, x + 8, y + 9).fillTriangle(x + 7, y + 9, x + 9, y + 3, x + 11, y + 9).fillTriangle(x + 10, y + 9, x + 12, y + 4, x + 14, y + 9).fillRect(x + 4, y + 9, 10, 2);
+        L.add(crown);
+      }
     });
     const py = 166;
     L.add(button(this, GAME_W / 2 - 50, py, '<', () => ((this.choosePage = (this.choosePage + pages - 1) % pages), this.draw()), { width: 24, height: 12 }));
