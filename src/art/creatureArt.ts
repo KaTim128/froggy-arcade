@@ -20,13 +20,17 @@ export interface Drawable {
   body: Body | BossBody;
 }
 
-const BOSS_BODIES: BossBody[] = ['lich', 'seraph', 'hydra', 'queen', 'maw', 'cloud', 'wyrm', 'sphinx', 'kraken', 'mammoth'];
+const BOSS_BODIES: BossBody[] = ['lich', 'seraph', 'hydra', 'queen', 'maw', 'cloud', 'wyrm', 'sphinx', 'kraken', 'mammoth', 'roc', 'colossus', 'oracle', 'leviathan', 'serpentking'];
 const FPS = 12;
 
 /** What each body is covered in (art/sdf surface). */
 export const MATERIAL: Partial<Record<Body | BossBody, Mat>> = {};
 const put = (m: Mat, ...bodies: (Body | BossBody)[]) => bodies.forEach((b) => (MATERIAL[b] = m));
 put('fur', 'mole', 'hound', 'ferret', 'fox', 'lynx', 'bear', 'sloth', 'hare', 'boar', 'ram', 'stag', 'yeti', 'hedgehog', 'otter', 'badger', 'ermine', 'mouse', 'possum', 'walrus', 'zebra', 'camel', 'koala', 'beaver', 'moose', 'lemur', 'goat', 'squirrel', 'raccoon', 'skunk', 'porcupine', 'bat', 'moth', 'rhino', 'sphinx', 'mammoth');
+put('feather', 'roc');
+put('shell', 'colossus', 'oracle');
+put('skin', 'leviathan');
+put('scale', 'serpentking');
 put('scale', 'serpent', 'gecko', 'newt', 'salamander', 'crocodile', 'shark', 'puffer', 'angler', 'eel', 'seahorse', 'ray', 'pangolin', 'narwhal', 'hydra', 'wyrm');
 put('feather', 'owl', 'heron', 'falcon', 'crow', 'penguin', 'chick', 'parrot', 'flamingo', 'swan', 'vulture', 'peacock', 'seraph');
 put('shell', 'crab', 'beetle', 'scorpion', 'centipede', 'mantis', 'spider', 'golem', 'obelisk', 'lobster', 'cricket', 'ladybug', 'wasp', 'bee', 'firefly', 'dragonfly', 'urchin', 'armadillo', 'tortoise', 'starfish', 'roller', 'snail', 'lich', 'queen');
@@ -36,7 +40,7 @@ const CACHE_MAX = 600;
 
 /** How wide the shadow under it is, in units. */
 const WIDE: Partial<Record<Body | BossBody, number>> = {
-  crab: 15, ray: 15, slug: 17, centipede: 18, spider: 16, bat: 8, hydra: 20, queen: 20, kraken: 22, mammoth: 20, wyrm: 20, seraph: 14, cloud: 18, maw: 16, lich: 12, sphinx: 18,
+  crab: 15, ray: 15, slug: 17, centipede: 18, spider: 16, bat: 8, hydra: 20, queen: 20, kraken: 22, mammoth: 20, wyrm: 20, seraph: 14, cloud: 18, maw: 16, lich: 12, sphinx: 18, roc: 18, colossus: 16, oracle: 16, leviathan: 24, serpentking: 18,
   newt: 16, eel: 16, gecko: 16, ferret: 16, rhino: 16, bear: 16, urchin: 14, tortoise: 16, boar: 15, falcon: 10, firefly: 10, bee: 10,
 };
 

@@ -1256,6 +1256,84 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     return B.done();
   },
   // ================================================================ BOSSES
+  // ---- (5 Nov) five more, each its own shape
+  roc: (t) => {
+    // a vast storm bird: two great wings beating, a hooked beak, talons hanging
+    const B = new Build();
+    const beat = Math.sin(t * 5) * 3;
+    for (const k of [-1, 1]) {
+      B.tri(-1, -2, -12, -5 - beat * k * 0.2 - beat, -4, 3, 'd', 1.4, 0.5);
+      B.tri(-2, -1, -9, -9 - beat, 2, -2, 'b', 1.2, 0.5);
+    }
+    B.e(1, 1, 6, 4.2, 'b', -0.2, 1.4);
+    B.tri(-5, 1, -11, 4, -5, 4, 'd', 1, 0.4);
+    B.c(6.4, -3, 3, 'b', 1.2);
+    B.tri(8.6, -4, 12, -2.4, 8.8, -1.4, 0xf0c050, 0.6, 0.3);
+    B.dl(9.6, -2.6, 11.2, -1.8, 0.3, 'k');
+    for (const u of [-1, 2]) B.cap(u, 4.6, u + 0.6, 8.4, 0.7, 0.5, 0xf0c050, 0.4);
+    B.eye(7.2, -3.6, 0.9);
+    B.dl(-2, -3, 3, -1, 0.35, 'l').dl(-4, 0, 1, 2, 0.35, 'l');
+    return B.done();
+  },
+  colossus: (t) => {
+    // a walking machine of stone and brass: block body, a cog turning in its chest, piston arms
+    const B = new Build();
+    const step = Math.sin(t * 3) * 0.7;
+    for (const [u, ph] of [[-4, 0], [3, Math.PI]] as const) B.box(u, 6.5 + Math.sin(t * 3 + ph) * 0.6, 3.2, 6, 0.6, 'd', 0, 0.8);
+    B.box(0, -1 + step * 0.3, 15, 11, 1.6, 'b', 0, 1.4);
+    B.box(0, -9 + step * 0.3, 7, 5, 1, 'b', 0, 1);
+    for (const k of [-1, 1]) B.cap(k * 8, -3, k * 11, 3, 1.4, 1.8, 0x8a7040, 0.6);
+    const spin = t * 2;
+    B.ring(0, -0.5 + step * 0.3, 3.4, 0.9, 0xc8a040);
+    for (let i = 0; i < 6; i++) B.dl(Math.cos(spin + i) * 2.4, -0.5 + Math.sin(spin + i) * 2.4 + step * 0.3, Math.cos(spin + i) * 4.4, -0.5 + Math.sin(spin + i) * 4.4 + step * 0.3, 0.6, 0xc8a040);
+    B.de(2, -9.4 + step * 0.3, 1.6, 0.9, 0xffb040).glow(2, -9.4 + step * 0.3, 0.6, 0xffe060);
+    B.dl(-6, -5, -3, -5, 0.3, 'k').dl(3, 3, 6, 3, 0.3, 'k');
+    return B.done();
+  },
+  oracle: (t) => {
+    // a robed seer floating over a stone sundial, a glowing gnomon behind it
+    const B = new Build();
+    const bob = Math.sin(t * 2) * 0.8;
+    B.e(0, 7, 9, 2.6, 0x8a8470, 0, 0.8);
+    B.tri(0, 7, 1.5, 7, 0, 1.5, 0x5a5440, 0.3);
+    for (let i = 0; i < 12; i++) B.dl(Math.cos(i * 0.52) * 7, 7 + Math.sin(i * 0.52) * 2, Math.cos(i * 0.52) * 8.2, 7 + Math.sin(i * 0.52) * 2.3, 0.3, 'k');
+    B.tri(-5, 4 + bob, 5, 4 + bob, 0, -8 + bob, 'b', 1.4, 0.6);
+    B.c(0.6, -7 + bob, 3, 'l', 1.2);
+    B.de(1.6, -7 + bob, 1.6, 0.9, 0xfff4c0).dc(2, -7 + bob, 0.5, 'k');
+    B.group = 1;
+    B.ring(0.4, -7 + bob, 4.8 + Math.sin(t * 3) * 0.3, 0.5, 0xffe060);
+    return B.done();
+  },
+  leviathan: (t) => {
+    // a long whale of ice breaking up through the floor: back, fin, a frosted tail
+    const B = new Build();
+    const roll = Math.sin(t * 1.8) * 0.8;
+    B.e(0, 3 + roll * 0.3, 12, 5.4, 'b', 0, 1.6);
+    B.tri(-10, 2, -16, -3 + roll, -15, 5, 'b', 1, 0.5);
+    B.tri(-1, -2, 3, -2, -2, -7.5 - roll * 0.4, 'd', 0.6);
+    B.cutBox(0, 9.6, 34, 6);
+    B.e(8, 4, 4, 2.4, 'l', 0, 0.8);
+    B.dl(4, 5.6, 11, 5.6, 0.4, 'k');
+    B.eye(9, 1.6, 0.9);
+    for (let i = 0; i < 4; i++) B.tri(-6 + i * 4, -1.6, -5 + i * 4, -1.6, -5.5 + i * 4, -4 - (i % 2), 0xe8fcff, 0.3);
+    B.glow(-14, -2 + roll, 0.6, 0xbfe8ff);
+    return B.done();
+  },
+  serpentking: (t) => {
+    // a crowned snake of ash: coils on the ground, a raised hood, a crown of embers
+    const B = new Build();
+    const sway = Math.sin(t * 2.4) * 1.2;
+    B.e(-4, 6, 8, 3, 'd', 0, 1);
+    B.e(2, 5, 6, 2.6, 'b', 0, 1);
+    B.chain([[3, 4], [4.5, 0], [5 + sway * 0.3, -4], [5.4 + sway * 0.5, -7]], 2.2, 1.6, 'b', 1);
+    B.e(5.6 + sway * 0.5, -8, 3.6, 2.6, 'b', 0, 1);
+    B.e(5.2 + sway * 0.5, -6.6, 4.4, 3.4, 'd', 0, 0.6);
+    for (let i = 0; i < 3; i++) B.tri(4 + i * 1.6 + sway * 0.5, -10, 5 + i * 1.6 + sway * 0.5, -10, 4.5 + i * 1.6 + sway * 0.5, -12.6 - (i === 1 ? 1 : 0), 0xffb040, 0.3);
+    B.eye(6.8 + sway * 0.5, -8.4, 0.8, 0xff3a1a);
+    B.dl(8 + sway * 0.5, -7.4, 10 + sway * 0.5, -7 + Math.sin(t * 9) * 0.6, 0.3, 0xff3a1a);
+    for (let i = 0; i < 4; i++) B.dl(-9 + i * 3, 5.2, -8 + i * 3, 6.8, 0.4, 0xff6a20);
+    return B.done();
+  },
   lich: (t) => {
     const B = new Build();
     const w = Math.sin(t * 4) * 2 * 0.6;

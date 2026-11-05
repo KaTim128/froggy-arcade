@@ -39,7 +39,7 @@ export type Body =
   | 'camel' | 'flamingo' | 'shark' | 'lobster' | 'koala' | 'ladybug' | 'beaver' | 'moose' | 'narwhal' | 'lemur'
   | 'cricket' | 'pangolin' | 'goat' | 'squirrel' | 'swan' | 'raccoon' | 'vulture' | 'skunk' | 'axolotl' | 'peacock';
 /** The ten bosses' bodies: none of them is a normal creature's. */
-export type BossBody = 'lich' | 'seraph' | 'hydra' | 'queen' | 'maw' | 'cloud' | 'wyrm' | 'sphinx' | 'kraken' | 'mammoth';
+export type BossBody = 'lich' | 'seraph' | 'hydra' | 'queen' | 'maw' | 'cloud' | 'wyrm' | 'sphinx' | 'kraken' | 'mammoth' | 'roc' | 'colossus' | 'oracle' | 'leviathan' | 'serpentking';
 
 /** What an attack does when you let it go. */
 export type AttackKind =
@@ -289,7 +289,9 @@ const ROSTER: Def[] = [
  *   tentacles  a wall of tentacles rolls across from one side
  *   quake      it stamps, and rings of shockwave run out from it
  */
-export type BossPattern = 'teleport' | 'meteor' | 'tribeam' | 'webs' | 'roots' | 'lightning' | 'burrow' | 'charge' | 'tentacles' | 'quake';
+export type BossPattern = 'teleport' | 'meteor' | 'tribeam' | 'webs' | 'roots' | 'lightning' | 'burrow' | 'charge' | 'tentacles' | 'quake'
+  // (5 Nov: the lich and the maw given mechanics of their own, and five new bosses)
+  | 'souls' | 'inhale' | 'spiral' | 'checker' | 'clockhand' | 'flood' | 'trail';
 
 export interface BossDef {
   pattern: BossPattern;
@@ -309,63 +311,94 @@ type BossSpec = Def & { boss: BossDef };
 export const BOSSES: BossSpec[] = [
   {
     id: 'b_lich', name: 'The Lantern Lich', element: 'murk', body: 'lich', role: 'AREA CONTROL', moves: 'FLOATS, ROBES TRAILING',
-    strong: 'COMES THROUGH WALLS: NOWHERE IS SAFE', weak: 'FRAIL BETWEEN ITS BLINKS', hp: 400, speed: 48, cry: 'voice_whisper',
-    attacks: [N('GRAVE LIGHT', 'spread', 9, 1.1, 170), SP('phantom_blink'), SP('raise_husks')],
-    boss: { pattern: 'teleport', trick: 'BLINKS TO YOUR SIDE', blurb: 'A NECROMANCER WITH A LANTERN OF SOULS. HIDE, AND IT FINDS YOU.', every: 4.5, n: 3, r: 14, dmg: 13 },
+    strong: 'ITS SOULS HUNT YOU ROUND COVER', weak: 'FRAIL UP CLOSE', hp: 400, speed: 48, cry: 'voice_whisper',
+    attacks: [A('GRAVE LIGHT', 'bolt', 9, 1.0, 190, 'homing'), SP('phantom_blink'), SP('raise_husks')],
+    boss: { pattern: 'souls', trick: 'SOULS DRIFT AFTER YOU', blurb: 'A NECROMANCER WITH A LANTERN OF SOULS. IT LETS THEM LOOSE, AND THEY FOLLOW YOU.', every: 4.5, n: 3, r: 14, dmg: 13 },
   },
   {
     id: 'b_seraph', name: 'Starfall Seraph', element: 'ember', body: 'seraph', role: 'ZONER', moves: 'HANGS IN THE AIR ON SIX WINGS',
     strong: 'CALLS DOWN METEORS', weak: 'SLOW TO TURN, AND ITS WINGS ARE WIDE', hp: 420, speed: 42, cry: 'arcane_blast',
-    attacks: [N('SUNSPARK', 'bolt', 11, 0.8, 210), SP('meteor_fall'), SP('halo_prison')],
+    attacks: [A('SUNSPARK', 'arc', 10, 1.0, 150, 'echo'), SP('meteor_fall'), SP('halo_prison')],
     boss: { pattern: 'meteor', trick: 'METEORS FALL', blurb: 'IT RINGS THE SKY LIKE A BELL, AND THE STARS FALL. WATCH THE SHADOWS.', every: 5.5, n: 3, r: 20, dmg: 26 },
   },
   {
     id: 'b_hydra', name: 'The Mire Hydra', element: 'murk', body: 'hydra', role: 'ZONER', moves: 'WADES ON A HEAVY BODY',
     strong: 'THREE HEADS, THREE LINES OF BREATH', weak: 'SLOW, AND THE GAPS BETWEEN THE LINES', hp: 460, speed: 38, cry: 'poison_hiss',
-    attacks: [N('BILE SPIT', 'bolt', 11, 0.7, 190), SP('tri_breath'), SP('regrow_head')],
+    attacks: [A('BILE SPIT', 'bolt', 9, 0.8, 190, 'poison'), SP('tri_breath'), SP('regrow_head')],
     boss: { pattern: 'tribeam', trick: 'THREE HEADS BREATHE', blurb: 'THREE NECKS, ONE TEMPER. STAND BETWEEN THE BREATHS.', every: 4.2, n: 3, r: 7, dmg: 18 },
   },
   {
     id: 'b_queen', name: 'The Brass Matriarch', element: 'volt', body: 'queen', role: 'TRAPPER', moves: 'EIGHT BRASS LEGS',
     strong: 'WEBS THE FLOOR AROUND YOU', weak: 'HER BODY IS SLOW TO TURN', hp: 420, speed: 54, cry: 'voice_robot',
-    attacks: [N('ARC NEEDLE', 'bolt', 10, 0.55, 230), SP('web_field'), SP('brood_clock')],
+    attacks: [A('ARC NEEDLE', 'bolt', 10, 0.6, 230, 'drill'), SP('web_field'), SP('brood_clock')],
     boss: { pattern: 'webs', trick: 'WEBS THE FLOOR', blurb: 'A CLOCKWORK SPIDER-QUEEN. HER WEBS HOLD WHATEVER STEPS IN THEM.', every: 4.5, n: 4, r: 13, dmg: 11 },
   },
   {
     id: 'b_maw', name: 'The Green Maw', element: 'moss', body: 'maw', role: 'DEFENDER', moves: 'DRAGS ITSELF ON ROOTS',
-    strong: 'ROOTS FROM BELOW, AND IT HEALS', weak: 'BARELY MOVES', hp: 480, speed: 30, cry: 'branch_creak',
-    attacks: [N('SEED VOLLEY', 'spread', 9, 1.2, 170), SP('root_eruption'), SP('devour')],
-    boss: { pattern: 'roots', trick: 'ROOTS GRAB', blurb: 'A FLYTRAP AS BIG AS A CART. ITS ROOTS ARE EVERYWHERE YOU STAND.', every: 3.8, n: 3, r: 15, dmg: 12 },
+    strong: 'DRAGS YOU IN WITH ONE BREATH, AND IT HEALS', weak: 'BARELY MOVES', hp: 480, speed: 30, cry: 'branch_creak',
+    attacks: [A('SEED VOLLEY', 'spread', 8, 1.2, 170, 'split'), SP('root_eruption'), SP('devour')],
+    boss: { pattern: 'inhale', trick: 'IT BREATHES YOU IN', blurb: 'A FLYTRAP AS BIG AS A CART. IT BREATHES IN, AND YOU ARE PULLED TOWARD ITS JAWS.', every: 4.2, n: 1, r: 18, dmg: 16 },
   },
   {
     id: 'b_cloud', name: 'Thunderhead', element: 'gale', body: 'cloud', role: 'HARASSER', moves: 'DRIFTS FAST, LOW AND HEAVY',
     strong: 'LIGHTNING MARCHES AT YOU', weak: 'NOTHING SOLID TO IT - LOW HEALTH', hp: 360, speed: 64, cry: 'wind_gust',
-    attacks: [N('SQUALL', 'spread', 9, 0.9, 200), SP('walk_lightning'), SP('storm_eye')],
+    attacks: [A('SQUALL', 'spread', 9, 0.9, 200, 'wave'), SP('walk_lightning'), SP('storm_eye')],
     boss: { pattern: 'lightning', trick: 'LIGHTNING WALKS', blurb: 'A STORM WITH ONE EYE IN IT. THE BOLTS WALK STRAIGHT AT YOU.', every: 4, n: 7, r: 11, dmg: 14 },
   },
   {
     id: 'b_wyrm', name: 'The Deep Wyrm', element: 'stone', body: 'wyrm', role: 'AMBUSHER', moves: 'SWIMS THROUGH THE GROUND',
     strong: 'GOES UNDER AND COMES UP BESIDE YOU', weak: 'EXPOSED EACH TIME IT SURFACES', hp: 440, speed: 52, cry: 'crumble',
-    attacks: [N('GRAVEL SPRAY', 'spread', 10, 1, 180), SP('surface_strike'), SP('cave_in')],
+    attacks: [A('GRAVEL BURST', 'nova', 12, 1.2, 46, 'push'), SP('surface_strike'), SP('cave_in')],
     boss: { pattern: 'burrow', trick: 'SURFACES BESIDE YOU', blurb: 'A WYRM THAT SWIMS IN STONE. FEEL FOR WHERE IT WILL COME UP.', every: 4.5, n: 1, r: 18, dmg: 18 },
   },
   {
     id: 'b_sphinx', name: 'The Mirror Sphinx', element: 'glow', body: 'sphinx', role: 'CHARGER', moves: 'PROWLS ON FOUR PAWS',
     strong: 'A MIRROR GUARD, THEN A POUNCE ACROSS THE ARENA', weak: 'THE POUNCE IS TELEGRAPHED', hp: 400, speed: 58, cry: 'glass_crack',
-    attacks: [N('GLINT DART', 'bolt', 10, 0.6, 230), SP('pounce_line'), SP('mirror_riddle')],
+    attacks: [A('GLINT DART', 'bolt', 10, 0.7, 230, 'bounce'), SP('pounce_line'), SP('mirror_riddle')],
     boss: { pattern: 'charge', trick: 'POUNCES ACROSS', blurb: 'A WINGED LION IN A MASK OF GLASS. WATCH THE LINE IT DRAWS.', every: 4.5, n: 1, r: 9, dmg: 22 },
   },
   {
     id: 'b_kraken', name: 'The Salt Kraken', element: 'tide', body: 'kraken', role: 'AREA CONTROL', moves: 'HAULS ITSELF ON EIGHT ARMS',
     strong: 'A WALL OF TENTACLES ACROSS THE FLOOR', weak: 'ITS HEAD IS AN EASY TARGET', hp: 440, speed: 40, cry: 'splash',
-    attacks: [N('INK JET', 'bolt', 11, 0.7, 200), SP('tentacle_waves'), SP('ink_blackout')],
+    attacks: [A('INK JET', 'spread', 9, 1.0, 190, 'weaken'), SP('tentacle_waves'), SP('ink_blackout')],
     boss: { pattern: 'tentacles', trick: 'TENTACLES SWEEP', blurb: 'IT CAME UP OUT OF THE SALT. ITS ARMS ROLL IN LIKE WAVES.', every: 5, n: 5, r: 13, dmg: 13 },
   },
   {
     id: 'b_mammoth', name: 'The Old Mammoth', element: 'frost', body: 'mammoth', role: 'JUGGERNAUT', moves: 'TRAMPLES ON FOUR LEGS',
     strong: 'STAMPS, AND THE GROUND RINGS', weak: 'THE SLOWEST THING IN THE ARENA', hp: 480, speed: 36, cry: 'bin_land',
-    attacks: [N('FROST BREATH', 'spread', 11, 1.3, 160), SP('quake_rings'), SP('glacier_drift')],
+    attacks: [A('FROST BREATH', 'beam', 12, 1.1, 90, 'chill'), SP('quake_rings'), SP('glacier_drift')],
     boss: { pattern: 'quake', trick: 'SHOCKWAVES', blurb: 'TUSKS LIKE ICICLES. WHEN IT STAMPS, JUMP THE RINGS OR STAND FAR OFF.', every: 4.8, n: 10, r: 9, dmg: 14 },
+  },
+  // ---- (user, 5 Nov: five more -- every move, mechanic and ultimate their own)
+  {
+    id: 'b_roc', name: 'The Tempest Roc', element: 'gale', body: 'roc', role: 'DIVER', moves: 'SOARS ON VAST WINGS',
+    strong: 'COMES DOWN OUT OF THE SKY', weak: 'SLOW TO TURN BETWEEN DIVES', hp: 410, speed: 52, cry: 'wind_gust',
+    attacks: [A('TALON DIVE', 'dash', 15, 1.3, 230, 'crit'), SP('sky_spiral'), SP('skyfall')],
+    boss: { pattern: 'spiral', trick: 'STRIKES SPIRAL OUT', blurb: 'A BIRD THE SIZE OF A STORM. ITS STRIKES WIND OUT FROM THE MIDDLE OF THE ARENA.', every: 5, n: 10, r: 13, dmg: 15 },
+  },
+  {
+    id: 'b_colossus', name: 'The Clockwork Colossus', element: 'stone', body: 'colossus', role: 'FORTRESS', moves: 'CLANKS ON IRON LEGS',
+    strong: 'THE WHOLE FLOOR IS ITS WEAPON', weak: 'SLOW: SPEED 36', hp: 480, speed: 36, cry: 'item_thud',
+    attacks: [A('COG LOB', 'arc', 13, 1.3, 120, 'vortex'), SP('gear_grid'), SP('piston_punch')],
+    boss: { pattern: 'checker', trick: 'THE FLOOR TICKS', blurb: 'A MACHINE OF STONE AND BRASS. EVERY OTHER TILE OF THE FLOOR GOES OFF, THEN THE REST.', every: 5.2, n: 1, r: 12, dmg: 16 },
+  },
+  {
+    id: 'b_oracle', name: 'The Sundial Oracle', element: 'glow', body: 'oracle', role: 'CONTROLLER', moves: 'DRIFTS ON A STONE DIAL',
+    strong: 'SEES WHERE YOU WILL BE', weak: 'FRAIL UP CLOSE', hp: 380, speed: 46, cry: 'chime',
+    attacks: [A('SUN RAY', 'beam', 12, 1.0, 150, 'mark'), SP('sun_dial'), SP('foresight')],
+    boss: { pattern: 'clockhand', trick: 'THE HAND SWEEPS ROUND', blurb: 'IT KEEPS THE TIME OF THE SUN. ITS SHADOW SWEEPS ROUND IT LIKE THE HAND OF A CLOCK.', every: 4.6, n: 8, r: 6, dmg: 16 },
+  },
+  {
+    id: 'b_leviathan', name: 'The Frost Leviathan', element: 'frost', body: 'leviathan', role: 'TIDECALLER', moves: 'SWIMS THROUGH THE ICE',
+    strong: 'FLOODS HALF THE ARENA AT ONCE', weak: 'HEAVY TO TURN', hp: 460, speed: 40, cry: 'water_plip',
+    attacks: [A('ICE HARPOON', 'snare', 11, 1.4, 170, 'shred'), SP('ice_flood'), SP('hail_ring')],
+    boss: { pattern: 'flood', trick: 'THE ICE WATER FLOODS', blurb: 'A WHALE OF ICE UNDER THE FLOOR. ONE SIDE OF THE ARENA FLOODS: BE ON THE OTHER.', every: 5.6, n: 1, r: 0, dmg: 18 },
+  },
+  {
+    id: 'b_serpentking', name: 'The Ash Serpent King', element: 'ember', body: 'serpentking', role: 'STALKER', moves: 'COILS AND STRIKES',
+    strong: 'BURNS THE GROUND YOU LEFT', weak: 'LONG, AND SLOW TO COIL', hp: 420, speed: 50, cry: 'poison_hiss',
+    attacks: [A('SCORCH COIL', 'dash', 13, 1.2, 220, 'linger'), SP('ember_trail'), SP('tail_sweep')],
+    boss: { pattern: 'trail', trick: 'FIRE WHERE YOU WALKED', blurb: 'A CROWNED SNAKE OF ASH. WHEREVER YOU HAVE JUST BEEN, THE GROUND CATCHES FIRE.', every: 4.2, n: 6, r: 11, dmg: 14 },
   },
 ];
 
@@ -402,7 +435,7 @@ if (import.meta.env?.DEV) {
   // EVERY SPECIAL BELONGS TO EXACTLY ONE CREATURE, and the first move is always plain
   const used = new Map<string, string>();
   for (const c of [...ROSTER, ...BOSSES]) {
-    if (c.attacks[0].sp || c.attacks[0].mod !== 'none') throw new Error(`creatures: ${c.id}'s first move must be a plain attack`);
+    if (c.attacks[0].sp || (c.attacks[0].mod !== 'none' && !('boss' in c))) throw new Error(`creatures: ${c.id}'s first move must be a plain attack`);
     for (const a of c.attacks.slice(1)) {
       if (!a.sp) throw new Error(`creatures: ${c.id} "${a.name}" is not a special`);
       if (used.has(a.sp)) throw new Error(`creatures: "${a.sp}" belongs to both ${used.get(a.sp)} and ${c.id}`);
@@ -424,6 +457,15 @@ if (import.meta.env?.DEV) {
     if (!ok) throw new Error(`creatures: "${a.name}" cannot have "${a.mod}" on a ${a.kind}`);
   }
   if (ROSTER.length !== 90) throw new Error('creatures: the roster is ninety');
+  // ---- NO TWO BOSSES ALIKE (user, 5 Nov: "some of their attacks are the
+  // same"): each one's plain attack carries an effect no other boss's does,
+  // and each has a floor mechanic of its own
+  const effects = BOSSES.map((b) => b.attacks[0].mod);
+  const twinEffect = effects.find((m, i) => effects.indexOf(m) !== i);
+  if (twinEffect) throw new Error(`creatures: two bosses' plain attacks both "${twinEffect}"`);
+  const patterns = BOSSES.map((b) => b.boss.pattern);
+  const twinPattern = patterns.find((m, i) => patterns.indexOf(m) !== i);
+  if (twinPattern) throw new Error(`creatures: two bosses share the floor mechanic "${twinPattern}"`);
 }
 
 export const creatureById = (id: string): Creature | undefined => CREATURES.find((c) => c.id === id) ?? BOSSES.find((b) => b.id === id);

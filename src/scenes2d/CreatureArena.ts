@@ -322,6 +322,8 @@ interface Hazard {
   go?: () => void;
   /** Whose it is (a boss's, unless a move of a creature's put it down). */
   owner?: Fighter;
+  /** It drifts after its target at this speed (px/s) until it goes off. */
+  seek?: number;
 }
 
 /**
@@ -2647,6 +2649,61 @@ export class CreatureArena extends Phaser.Scene {
         } });
         f.root = Math.max(f.root, 1);
         return true;
+      // ---- (5 Nov) the five new bosses' own moves
+      case 'skyfall': {
+        // up out of reach; the shadow follows them; down on the shadow
+        f.invuln = Math.max(f.invuln, 1.25);
+        f.st.invis = Math.max(f.st.invis ?? 0, 1.2);
+        const mark: Hazard = { kind: 'mark', x: o.x, y: o.y, r: 18, t: 1.2, t0: 1.2, dmg: a.dmg, owner: f, seek: 46, go: () => {
+          if (this.over || f.hp <= 0) return;
+          f.x = cx(mark.x);
+          f.y = cy(mark.y);
+          f.st.invis = 0;
+          this.cameras.main.shake(140, 0.006);
+        } };
+        this.hazards.push(mark);
+        audio.sfx('wind_gust', 0.6);
+        return true;
+      }
+      case 'piston_punch': {
+        // a line out at them, then the fist down it
+        const len = a.reach;
+        this.hazards.push({ kind: 'line', x: f.x, y: f.y, x2: cx(f.x + ux * len), y2: cy(f.y + uy * len), r: 7, t: 0.5, t0: 0.5, dmg: a.dmg, owner: f, go: () => {
+          if (this.segDist(o.x, o.y, f.x, f.y, f.x + ux * len, f.y + uy * len) < 11) {
+            o.kx += ux * 340;
+            o.ky += uy * 340;
+          }
+          audio.sfx('item_thud', 0.6);
+        } });
+        return true;
+      }
+      case 'foresight': {
+        // where they will be in a second
+        const v = o === this.me ? this.meV : { x: 0, y: 0 };
+        this.hazards.push({ kind: 'mark', x: cx(o.x + v.x), y: cy(o.y + v.y), r: 16, t: 1.0, t0: 1.0, dmg: a.dmg, owner: f });
+        audio.sfx('chime', 0.5);
+        return true;
+      }
+      case 'hail_ring':
+        f.st.hail = a.reach;
+        f.st.n_hail = 6;
+        audio.sfx('glass_crack', 0.4);
+        return true;
+      case 'tail_sweep': {
+        // a half circle in front of it, thrown back
+        const fa = Math.atan2(o.y - f.y, o.x - f.x);
+        for (let k = 0; k <= 6; k++) {
+          const sa = fa - Math.PI / 2 + (k / 6) * Math.PI;
+          this.fx.push({ kind: 'spark', x: f.x + Math.cos(sa) * a.reach * 0.8, y: f.y + Math.sin(sa) * a.reach * 0.8, r: 4, t: 0, life: 0.3, col });
+        }
+        if (Math.hypot(o.x - f.x, o.y - f.y) < a.reach + 6 * o.scale) {
+          this.hit(f, o, dmg, a);
+          o.kx += ux * 300;
+          o.ky += uy * 300;
+        }
+        audio.sfx('throw_whoosh', 0.6);
+        return true;
+      }
       case 'storm_eye':
         f.st.eye = 4;
         audio.sfx('wind_gust', 0.6);
@@ -4463,6 +4520,114 @@ export class CreatureArena extends Phaser.Scene {
         every(1000, Math.round(e.t), () => (this.heal(f, BANISH_HEAL), this.floatNum(f, BANISH_HEAL, 0x8ae88a, '+')));
         audio.sfx('chime', 0.5);
         break;
+      // ---- (5 Nov) the five new bosses' ultimates
+      case 'hurricane': {
+        // the whole arena whirls: round and round, and the debris hits
+        const mx = ARENA.x + ARENA.w / 2;
+        const my = ARENA.y + ARENA.h / 2;
+        let cd = 0;
+        every(50, Math.round(e.t / 0.05), () => {
+          const dx2 = o.x - mx;
+          const dy2 = o.y - my;
+          const dd = Math.hypot(dx2, dy2) || 1;
+          if (!o.st.anchor) {
+            o.kx += (-dy2 / dd) * 70;
+            o.ky += (dx2 / dd) * 70;
+          }
+          for (let k = 0; k < 2; k++) {
+            const a = Math.random() * Math.PI * 2;
+            const r = 20 + Math.random() * 70;
+            this.fx.push({ kind: 'spark', x: mx + Math.cos(a) * r * 1.4, y: my + Math.sin(a) * r * 0.7, r: 2, t: 0, life: 0.25, col: 0xf0fff4 });
+          }
+          cd -= 0.05;
+          if (cd <= 0) {
+            cd = 0.5;
+            this.hit(f, o, Math.max(1, Math.round(e.dps / 2)), null);
+          }
+        });
+        this.cameras.main.shake(300, 0.004);
+        audio.sfx('wind_gust', 0.8);
+        break;
+      }
+      case 'pendulum': {
+        // a blade hung from the top wall, swinging the width of the arena
+        const px = ARENA.x + ARENA.w / 2;
+        const py = ARENA.y + 2;
+        const len = ARENA.h * 0.92;
+        let time = 0;
+        let cd = 0;
+        every(40, Math.round(e.t / 0.04), () => {
+          time += 0.04;
+          cd -= 0.04;
+          const a = Math.PI / 2 + Math.sin(time * 2.2) * 1.15;
+          const x2 = px + Math.cos(a) * len;
+          const y2 = py + Math.sin(a) * len;
+          this.fx.push({ kind: 'beam', x: px, y: py, x2, y2, r: 1, t: 0, life: 0.05, col: 0x8a8a9a }, { kind: 'boom', x: x2, y: y2, r: 7, t: 0, life: 0.05, col: light });
+          if (cd <= 0 && Math.hypot(o.x - x2, o.y - y2) < 9 + 5 * o.scale) {
+            cd = 0.6;
+            this.hit(f, o, e.dmg, null);
+          }
+        });
+        audio.sfx('throw_whoosh', 0.6);
+        break;
+      }
+      case 'judgement': {
+        // a cross of light through them, the width and height of the arena
+        const [jx, jy] = [o.x, o.y];
+        this.fx.push({ kind: 'beam', x: ARENA.x, y: jy, x2: ARENA.x + ARENA.w, y2: jy, r: 0.8, t: 0, life: 1, col: 0xfff4c0 }, { kind: 'beam', x: jx, y: ARENA.y, x2: jx, y2: ARENA.y + ARENA.h, r: 0.8, t: 0, life: 1, col: 0xfff4c0 });
+        later(1000, () => {
+          this.fx.push({ kind: 'beam', x: ARENA.x, y: jy, x2: ARENA.x + ARENA.w, y2: jy, r: 6, t: 0, life: 0.4, col: 0xffffff }, { kind: 'beam', x: jx, y: ARENA.y, x2: jx, y2: ARENA.y + ARENA.h, r: 6, t: 0, life: 0.4, col: 0xffffff });
+          this.cameras.main.flash(150, 255, 250, 210, false);
+          if (Math.abs(o.y - jy) < 8 + 5 * o.scale || Math.abs(o.x - jx) < 8 + 5 * o.scale) this.hit(f, o, e.dmg, null);
+          audio.sfx('arcane_blast', 0.8);
+        });
+        break;
+      }
+      case 'iceberg': {
+        const [ix, iy] = inArena(o.x, o.y);
+        this.fx.push({ kind: 'warn', x: ix, y: iy, r: 22, t: 0, life: 0.7, col: 0xbfe8ff });
+        later(700, () => {
+          this.fx.push({ kind: 'boom', x: ix, y: iy, r: 22, t: 0, life: 0.45, col: 0xe8fcff });
+          this.cameras.main.shake(200, 0.008);
+          const dd = Math.hypot(o.x - ix, o.y - iy);
+          if (dd < 22 + 5 * o.scale) {
+            this.hit(f, o, e.dmg, null);
+            o.kx += ((o.x - ix) / (dd || 1)) * 320;
+            o.ky += ((o.y - iy) / (dd || 1)) * 320;
+          }
+          // and it stays, as cover
+          const parts: Prop[] = [[-7, 0], [7, 0], [0, -6]].map(([u, v]) => ({ x: Phaser.Math.Clamp(ix + u, ARENA.x + 6, ARENA.x + ARENA.w - 6), y: Phaser.Math.Clamp(iy + v, ARENA.y + 6, ARENA.y + ARENA.h - 6), r: 7, hp: 30, maxHp: 30 }));
+          const clear = parts.filter((q) => Math.hypot(q.x - o.x, q.y - o.y) > q.r + BODY_R * o.scale + 2 && Math.hypot(q.x - f.x, q.y - f.y) > q.r + BODY_R * f.scale + 2);
+          if (clear.length) {
+            this.barriers.push({ kind: wallLook('glacier_slab', 'frost'), parts: clear, seed: 1, life: 6, max: 6, owner: null });
+            this.props.push(...clear);
+            this.repaintCover();
+          }
+          audio.sfx('glass_crack', 0.7);
+        });
+        break;
+      }
+      case 'constrict': {
+        // a ring of fire round where they stand, tightening
+        const [ccx, ccy] = [o.x, o.y];
+        const n = Math.round(e.t / 0.1);
+        let cd = 0;
+        every(100, n, (k) => {
+          const r = 42 - (30 * k) / n;
+          for (let q = 0; q < 10; q++) {
+            const a = (q / 10) * Math.PI * 2 + k * 0.25;
+            this.fx.push({ kind: 'spark', x: ccx + Math.cos(a) * r, y: ccy + Math.sin(a) * r * 0.8, r: 3, t: 0, life: 0.12, col: q % 2 ? 0xff6a20 : 0xffb040 });
+          }
+          cd -= 0.1;
+          const dd = Math.hypot((o.x - ccx), (o.y - ccy) / 0.8);
+          if (cd <= 0 && Math.abs(dd - r) < 7 + 4 * o.scale) {
+            cd = 0.5;
+            this.hit(f, o, Math.max(1, Math.round(e.dps / 2)), null);
+          }
+        });
+        audio.sfx('poison_hiss', 0.6);
+        break;
+      }
       case 'snowball':
         this.minions.push({ owner: f, kind: 'snowball', x: f.x + ux * 10, y: f.y + uy * 10, ang: 0, life: 3, hp: 0, cd: 0, dmg: e.dmg, vx: ux * 130, vy: uy * 130, size: 1 });
         audio.sfx('throw_whoosh', 0.5);
@@ -4601,6 +4766,12 @@ export class CreatureArena extends Phaser.Scene {
       to.st.gulp = 0;
       this.heal(to, Math.round(to.max * 0.22));
       this.floatNum(to, 0, 0x8ae88a, 'GULP ');
+      return;
+    }
+    // a ring of hail: each stone takes one shot
+    if ((to.st.hail ?? 0) > 0 && (to.st.n_hail ?? 0) > 0 && shotLike) {
+      to.st.n_hail -= 1;
+      this.fx.push({ kind: 'spark', x: to.x, y: to.y - 4, r: 6, t: 0, life: 0.2, col: 0xe8fcff });
       return;
     }
     // a sponge puff (ultimate) soaks it up, to fire back when it ends
@@ -5649,6 +5820,13 @@ export class CreatureArena extends Phaser.Scene {
     // heat lance, a dive bomb, the maw's jaws)
     for (const h of this.hazards) {
       h.t -= dt;
+      if (h.seek && h.t > 0) {
+        const tg = this.other(h.owner ?? this.foe);
+        const dd = Math.hypot(tg.x - h.x, tg.y - h.y) || 1;
+        const st = Math.min(dd, h.seek * dt);
+        h.x += ((tg.x - h.x) / dd) * st;
+        h.y += ((tg.y - h.y) / dd) * st;
+      }
       if (h.t > 0) continue;
       const own = h.owner ?? this.foe;
       const tgt = this.other(own);
@@ -5817,6 +5995,89 @@ export class CreatureArena extends Phaser.Scene {
         for (let i = 0; i < 3; i++) put({ kind: 'ring', x: foe.x, y: foe.y, r: 30 + i * 32, t: 1.0 + i * 0.45 });
         audio.sfx('item_thud', 0.6);
         break;
+      // ---- (5 Nov) the lich's and the maw's own, and the five new bosses'
+      case 'souls':
+        // souls let loose round the arena, drifting after you round the cover
+        for (let i = 0; i < def.n; i++) {
+          const a = (i / def.n) * Math.PI * 2 + Math.random();
+          put({ x: ARENA.x + ARENA.w / 2 + Math.cos(a) * ARENA.w * 0.4, y: ARENA.y + ARENA.h / 2 + Math.sin(a) * ARENA.h * 0.4, t: 2.6 + i * 0.3, seek: 34 });
+        }
+        audio.sfx('voice_whisper', 0.5);
+        break;
+      case 'inhale': {
+        // it breathes in: you are dragged toward its jaws, and they snap shut
+        const tg = this.other(foe);
+        const dd = Math.hypot(tg.x - foe.x, tg.y - foe.y) || 1;
+        put({ x: foe.x + ((tg.x - foe.x) / dd) * 16, y: foe.y + ((tg.y - foe.y) / dd) * 12, t: 1.3, r: def.r });
+        let k = 0;
+        this.time.addEvent({
+          delay: 50,
+          repeat: 23,
+          callback: () => {
+            if (this.over || foe.hp <= 0 || tg.st.anchor) return;
+            const d2 = Math.hypot(tg.x - foe.x, tg.y - foe.y) || 1;
+            tg.kx += ((foe.x - tg.x) / d2) * 34;
+            tg.ky += ((foe.y - tg.y) / d2) * 34;
+            if (k++ % 3 === 0) this.fx.push({ kind: 'spark', x: tg.x + (Math.random() - 0.5) * 12, y: tg.y + (Math.random() - 0.5) * 10, r: 2, t: 0, life: 0.3, col: col.light });
+          },
+        });
+        audio.sfx('wind_gust', 0.6);
+        break;
+      }
+      case 'spiral':
+        // strikes winding out from the middle of the arena, one after another
+        for (let i = 0; i < def.n; i++) {
+          const a = i * 0.95 + Math.random() * 0.2;
+          const rr = 8 + i * 11;
+          put({ x: ARENA.x + ARENA.w / 2 + Math.cos(a) * rr, y: ARENA.y + ARENA.h / 2 + Math.sin(a) * rr * 0.7, t: 0.9 + i * 0.16 });
+        }
+        audio.sfx('wind_gust', 0.5);
+        break;
+      case 'checker': {
+        // the floor ticks: every other tile, then the rest
+        const cols = 7;
+        const rows = 4;
+        for (let j = 0; j < rows; j++) {
+          for (let i = 0; i < cols; i++) {
+            const x = ARENA.x + ((i + 0.5) / cols) * ARENA.w;
+            const y = ARENA.y + ((j + 0.5) / rows) * ARENA.h;
+            put({ x, y, t: (i + j) % 2 ? 1.1 : 2.2 });
+          }
+        }
+        audio.sfx('item_thud', 0.5);
+        break;
+      }
+      case 'clockhand': {
+        // its shadow sweeps round it like the hand of a clock, starting behind you
+        const a0 = Math.atan2(at.y - foe.y, at.x - foe.x) - 1.1;
+        for (let i = 0; i < def.n; i++) {
+          const a = a0 + i * 0.32;
+          put({ kind: 'line', x: foe.x, y: foe.y, x2: foe.x + Math.cos(a) * 260, y2: foe.y + Math.sin(a) * 260, t: 0.8 + i * 0.14 });
+        }
+        audio.sfx('chime', 0.5);
+        break;
+      }
+      case 'flood': {
+        // the half of the arena you are in floods: be on the other half
+        const left = at.x < ARENA.x + ARENA.w / 2;
+        const x0 = left ? ARENA.x : ARENA.x + ARENA.w / 2;
+        put({ kind: 'line', x: x0 + 6, y: ARENA.y + ARENA.h / 2, x2: x0 + ARENA.w / 2 - 6, y2: ARENA.y + ARENA.h / 2, r: ARENA.h / 2 - 4, t: 1.5, go: () => {
+          const tg = this.other(foe);
+          const inside = left ? tg.x < ARENA.x + ARENA.w / 2 : tg.x >= ARENA.x + ARENA.w / 2;
+          if (inside) tg.slow = Math.max(tg.slow, 2);
+        } });
+        audio.sfx('water_plip', 0.6);
+        break;
+      }
+      case 'trail': {
+        // fire where you have just been, spot by spot along your path
+        const tg = this.other(foe);
+        const path = (tg.hist ?? []).slice(-def.n);
+        path.forEach(([x, y], i) => put({ x, y, t: 0.7 + i * 0.12 }));
+        if (!path.length) put({ x: at.x, y: at.y, t: 0.8 });
+        audio.sfx('poison_hiss', 0.5);
+        break;
+      }
     }
   }
 
@@ -6218,6 +6479,7 @@ export class CreatureArena extends Phaser.Scene {
       } else {
         drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate || f.st.u_ice ? 0 : f.moving ? t * 1.8 : t);
       }
+      if ((f.st.hail ?? 0) > 0) for (let q = 0; q < (f.st.n_hail ?? 0); q++) g.fillStyle(0xe8fcff, 1).fillCircle(f.x + Math.cos(t * 3 + (q * Math.PI) / 3) * 14 * f.scale, f.y + Math.sin(t * 3 + (q * Math.PI) / 3) * 10 * f.scale, 1.6);
       if (f.st.u_ice) g.fillStyle(0xbfe8ff, 0.5).fillRect(f.x - 9 * f.scale, f.y - 11 * f.scale, 18 * f.scale, 18 * f.scale).lineStyle(1, 0xffffff, 0.9).strokeRect(f.x - 9 * f.scale, f.y - 11 * f.scale, 18 * f.scale, 18 * f.scale);
       if (f.st.u_bubble) g.lineStyle(1, 0x9ad0ff, 0.9).strokeCircle(f.x, f.y - 2, 13 * f.scale).fillStyle(0xbfe8ff, 0.2).fillCircle(f.x, f.y - 2, 13 * f.scale);
       if (f.st.u_lift) g.fillStyle(0x000000, 0.3).fillEllipse(f.x, f.y + 6, 12 * f.scale, 3);

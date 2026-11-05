@@ -237,7 +237,9 @@ export function attackCard(a: Attack, el: Element, scale = 1): string[] {
   const i = attackInfo(a, el, scale);
   // (user, 4 Nov: easier to understand -- no HOW TO USE, nothing said twice,
   // and WHAT IT DOES in full sentences, first)
-  const main = plainWords(a.sp ? i.special.replace(/\.?\s*$/, '.') : plainSentence(a, scale));
+  // (a boss's plain attack carries an effect of its own: said after it)
+  const extra = !a.sp && a.mod !== 'none' && MODS[a.mod].desc? ` ITS EXTRA EFFECT: ${MODS[a.mod].desc}.` : '';
+  const main = plainWords((a.sp ? i.special.replace(/\.?\s*$/, '.') : plainSentence(a, scale)) + extra);
   const out = [`WHAT IT DOES: ${main}`];
   // a line only says something new: one whose every number the sentence
   // above already gives (its reach, its damage, how long) is left out
