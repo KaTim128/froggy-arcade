@@ -86,7 +86,7 @@ export function traitsOf(c: Creature): Traits {
   return {
     strengths: [...new Set(s)].slice(0, 6),
     weaknesses: [...new Set(w)].slice(0, 5),
-    style: melee ? `MELEE: FIGHTS UP CLOSE (${tiles(n.reach)} TILES)` : `RANGED: SHOTS UP TO ${tiles(n.reach)} TILES`,
+    style: melee ? `MELEE: FIGHTS UP CLOSE (${tiles(n.reach)} TILES)` : `RANGED: SHOOTS UP TO ${tiles(n.reach)} TILES`,
     element: `${el.name}: ${el.effect}`,
   };
 }

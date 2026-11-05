@@ -37,6 +37,7 @@ import { backPlate } from '../ui/plate';
 import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { battleXp, levelOf, xpProgress } from '../game/creatureLevel';
 import { traitsOf } from '../game/creatureTraits';
+import { loreOf } from '../game/creatureLore';
 import { MINI_INFO, MINI_MIN_COST, MINI_PRICE, TEAM_SIZE, drawPool, paidTeamPool, payForTeamPool, roleOf, startMini, type MiniKind } from '../game/creatureMinis';
 import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
@@ -538,9 +539,9 @@ export class CreatureHub extends Phaser.Scene {
     // USE, no ELEMENT -- the card already says both)
     const rows: Array<[string, number]> =
       ult.steps.length === 1
-        ? [[`WHAT IT DOES: ${ult.steps[0]}`, PALETTE.gold]]
-        : [['WHAT IT DOES, IN ORDER:', PALETTE.gold], ...ult.steps.map((st, i): [string, number] => [`${i + 1}. ${st}`, PALETTE.cream])];
-    rows.push([`READY ${ULT_UNLOCK_S} SEC INTO A FIGHT, THEN AGAIN ${ULT_COOLDOWN_S} SEC AFTER EACH USE.`, 0x8a90b0]);
+        ? [[ult.steps[0], PALETTE.gold]]
+        : ult.steps.map((st, i): [string, number] => [`${i + 1}. ${st}`, i ? PALETTE.cream : PALETTE.gold]);
+    rows.push([`COOLDOWN DURATION: ${ULT_COOLDOWN_S} SEC. FIRST READY ${ULT_UNLOCK_S} SEC INTO A FIGHT.`, 0x8a90b0]);
     this.infoCard(c, `ULTIMATE - ${ult.name}`, rows, 0xffd45e);
   }
 
@@ -550,9 +551,9 @@ export class CreatureHub extends Phaser.Scene {
    */
   private showMove(c: Creature, a: Attack): void {
     const el = ELEMENTS[c.element];
-    const rows = attackCard(a, c.element).map((ln): [string, number] => [
+    const rows = attackCard(a, c.element).map((ln, i): [string, number] => [
       ln,
-      ln.startsWith('WHAT IT DOES') ? PALETTE.gold : ln.startsWith('ELEMENT') ? el.light : ln.startsWith('DAMAGE') || ln.startsWith('READY') ? 0xffb08a : PALETTE.fog,
+      i === 0 ? PALETTE.gold : ln.startsWith('ELEMENT') ? el.light : ln.startsWith('DAMAGE') || ln.startsWith('COOLDOWN') ? 0xffb08a : PALETTE.fog,
     ]);
     this.infoCard(c, a.name, rows, el.col, a);
   }
@@ -668,29 +669,16 @@ export class CreatureHub extends Phaser.Scene {
     const t = traitsOf(c);
     M.add(smallText(this, x + 6, y + 58, t.style, 0x9ad0ff));
     M.add(smallText(this, x + 6, y + 66, t.element.slice(0, 76), el.light));
-    // ---- its ULTIMATE (game/ultimates): up 30s into a fight, then every 25s
-    const ult = ultimateOf(c.id);
-    const ulines = ult ? wrapWords(`ULTIMATE - ${ult.name}: ${ult.desc}`.toUpperCase(), 75).slice(0, 3) : [];
-    ulines.forEach((ln, i) => M.add(smallText(this, x + 6, y + 74 + i * 7, ln, i ? 0xf0d890 : 0xffd45e)));
-    const top = y + 74 + ulines.length * 7 + 1;
+    // ---- its LORE (user, 5 Nov: no GOOD AT / WEAK AGAINST and no ultimate
+    // line here -- a few lines of where it comes from instead)
+    const top = y + 75;
     M.add(this.add.rectangle(x + 4, top, w - 8, 1, 0x2a3050).setOrigin(0, 0));
-    // ---- strengths | weaknesses, side by side, a bullet each
-    const colW = (w - 18) / 2;
-    const per = Math.floor((colW - 8) / 4);
-    const column = (cx: number, title: string, col: number, items: string[]): void => {
-      M.add(text(this, cx, top + 3, title, col));
-      let ly = top + 14;
-      for (const item of items) {
-        const lines = wrapWords(item.toUpperCase(), per);
-        if (ly + lines.length * 7 > y + h - 18) break;
-        M.add(this.add.rectangle(cx + 1, ly + 2, 2, 2, col).setOrigin(0, 0));
-        lines.forEach((ln, i) => M.add(smallText(this, cx + 6, ly + i * 7, ln, PALETTE.cream)));
-        ly += lines.length * 7 + 3;
-      }
-    };
-    column(x + 6, 'GOOD AT', PALETTE.mossLight, t.strengths);
-    M.add(this.add.rectangle(x + w / 2, top + 3, 1, y + h - 19 - top - 3, 0x2a3050).setOrigin(0, 0));
-    column(x + w / 2 + 5, 'WEAK AGAINST', 0xff9a9a, t.weaknesses);
+    M.add(text(this, x + 6, top + 4, 'LORE', PALETTE.gold));
+    const lore = wrapWords(loreOf(c.id), 75);
+    lore.forEach((ln, i) => {
+      const ly = top + 16 + i * 9;
+      if (ly + 7 <= y + h - 18) M.add(smallText(this, x + 6, ly, ln, PALETTE.cream));
+    });
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
     // ---- RELEASE (user, 4 Nov): only on one of your own, in the far corner
     // -- a long way from CLOSE, in a dark red, so it is never hit by mistake
@@ -1169,13 +1157,14 @@ export class CreatureHub extends Phaser.Scene {
       // in the small type under its card, two lines at most each
       let ly = 148;
       const lines = (label: string, s: string, col: number): void => {
-        for (const ln of wrapWords(`${label} ${s}`, 36).slice(0, 2)) {
+        for (const ln of wrapWords(label ? `${label} ${s}` : s, 36).slice(0, 2)) {
           L.add(smallText(this, 168, ly, ln, col));
           ly += 7;
         }
       };
-      lines('GOOD AT:', cr.strong, PALETTE.mossLight);
-      lines('WEAK:', cr.weak, 0xff9a9a);
+      // (user, 5 Nov: lore, not GOOD AT / WEAK -- its first sentence fits)
+      const first = loreOf(cr.id).split('. ')[0].replace(/\.$/, '') + '.';
+      for (const ln of wrapWords(first, 36).slice(0, 3)) lines('', ln, PALETTE.cream);
       L.add(button(this, 82, 170, 'CONTINUE', () => {
         this.picked = null;
         this.go('home');
