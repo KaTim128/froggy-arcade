@@ -72,6 +72,14 @@ export interface PatrolHost {
   doors?: Array<{ x: number; place: Place }>;
   /** This is an alley: nobody comes down it unless they saw you go in. */
   alley?: boolean;
+  /**
+   * (user, 5 Nov) The walls: an officer never walks past these -- an alley's
+   * side walls, so nobody goes through them.  Default: just off either end.
+   */
+  minX?: number;
+  maxX?: number;
+  /** Where one comes in after you at the left: an alley's mouth, behind the wall's end. */
+  entryX?: number;
 }
 
 /** How far an officer sees in front of them, by day and in the dark. */
@@ -85,7 +93,16 @@ const ANSWER_S = 5;
 
 // ---- between streets (not saved: a reload is a fresh street)
 let nextPatrolAt = 0;
-let pursuit: { until: number; edge: 'left' | 'right'; alley: boolean; from?: Place } | null = null;
+let pursuit: { until: number; edge: 'left' | 'right'; alley: boolean; from?: Place; atX?: number } | null = null;
+/**
+ * ---- THEY DO NOT FORGET (user, 5 Nov).  Unsure of you on one street, and
+ * you went somewhere: they are still unsure when you come back, and still
+ * looking.  How unsure, and until when.
+ */
+let suspicion: { aware: number; until: number } | null = null;
+const SUSPICION_MS = 120_000;
+/** Seen going in at a door while unsure: they come in to look (game/policeVisits). */
+const LOOK_IN_MS = 25_000;
 /** Talked your way out: that officer leaves you be for a while. */
 let clearedUntil = 0;
 /** The officers walking each street when you last left it (see Patrol's constructor). */
@@ -128,8 +145,19 @@ export function copSay(scene: Phaser.Scene, x: number, y: number, line: string):
 }
 
 /** A whole new look: whatever they were sure of, they are not any more. */
+/** Unsure of you somewhere (indoors, too): kept for wherever you go next. */
+export function noteDoubt(aware: number): void {
+  if (aware > 0.15) suspicion = { aware: Math.max(aware, suspicion && performance.now() < suspicion.until ? suspicion.aware : 0), until: performance.now() + SUSPICION_MS };
+}
+
+/** How unsure of you they still are, from before (0 if not at all). */
+export function doubtNow(): number {
+  return suspicion && performance.now() < suspicion.until ? suspicion.aware : 0;
+}
+
 export function resetSuspicion(): void {
   pursuit = null;
+  suspicion = null;
   clearedUntil = 0;
 }
 
@@ -177,6 +205,7 @@ function backToStealthStart(): { cash: number } | null {
  */
 export function caughtByPolice(scene: Phaser.Scene, why: 'seen' | 'sleep'): void {
   pursuit = null;
+  suspicion = null;
   const lost = backToStealthStart();
   audio.sfx('door_smash', 0.4);
   scene.cameras.main.shake(160, 0.006);
@@ -208,7 +237,7 @@ export interface AlleyMouth {
   y: number;
   dark: boolean;
   player: () => Player;
-  /** Seen stood at the mouth: they come in after you. */
+  /** Seen stood at the mouth: they come in after you (at `x`: where he turned in). */
   spotted: () => void;
 }
 
@@ -275,7 +304,35 @@ function walkPast(scene: Phaser.Scene, m: AlleyMouth): void {
       seen = true;
       mark.setVisible(true);
       audio.sfx('stinger', 0.45);
-      scene.time.delayedCall(700, () => scene.sys.isActive() && m.spotted());
+      // ---- AND HE TURNS IN (user, 5 Nov): the same officer -- he stops,
+      // turns to the alley and walks into its mouth, full size, and it is he
+      // who comes down it after you (not a second one sliding in from the side)
+      scene.events.off(Phaser.Scenes.Events.UPDATE, tick);
+      cop.face(1);
+      scene.tweens.add({
+        targets: cop.sprite,
+        x: m.w - 2,
+        y: m.y,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 650,
+        ease: 'Sine.easeIn',
+        onUpdate: () => {
+          cop.stride(1, 16);
+          const cx = cop.sprite.x;
+          const cy = cop.sprite.y;
+          mark.setPosition(cx, cy - 34);
+          red.setPosition(cx - 3, cy - 24);
+          blue.setPosition(cx + 3, cy - 24);
+          glowR.setPosition(cx, cy - 12);
+          glowB.setPosition(cx, cy - 12);
+        },
+        onComplete: () => {
+          done();
+          if (scene.sys.isActive()) m.spotted();
+        },
+      });
+      return;
     }
     mark.setPosition(x, top - 10 * k);
     if (u >= 1) done();
@@ -403,13 +460,26 @@ class Unit {
     return this.dir;
   }
 
+  /** How sure of you they are, 0..1. */
+  get wary(): number {
+    return this.aware;
+  }
+
+  /** Still unsure of you, from before (they have not forgotten). */
+  doubt(a: number): void {
+    this.aware = Math.max(this.aware, a);
+    if (a > 0.15) this.mark?.setText('?').setVisible(true).setTint(PALETTE.gold);
+  }
+
   /** After you, in at `edge`, a beat behind. */
-  static chaser(host: PatrolHost, squad: { busy: (u: Unit) => boolean }, edge: 'left' | 'right'): Unit {
+  static chaser(host: PatrolHost, squad: { busy: (u: Unit) => boolean }, edge: 'left' | 'right', beat?: number): Unit {
     const u = new Unit(host, squad);
     // (far enough back, and a beat late, that coming in off the fade is fair)
-    u.spawn(edge === 'left' ? -70 : host.worldW + 70, edge === 'left' ? 1 : -1);
+    u.spawn(edge === 'left' ? host.entryX ?? -70 : host.worldW + 70, edge === 'left' ? 1 : -1);
     u.state = 'chase';
-    u.startT = 1.4;
+    // (a beat behind you: one who followed you in off the fade is a second
+    // and more back; one who turned in off the pavement, there already)
+    u.startT = beat ?? (host.entryX !== undefined ? 1.6 : 1.4);
     return u;
   }
 
@@ -503,7 +573,9 @@ class Unit {
     const c = this.cop;
     if (!c) return;
     const p = this.host.player();
-    const bounds = new Phaser.Geom.Rectangle(-80, this.host.y, this.host.worldW + 160, 0);
+    const lo = this.host.minX ?? -80;
+    const hi = this.host.maxX ?? this.host.worldW + 80;
+    const bounds = new Phaser.Geom.Rectangle(lo, this.host.y, hi - lo, 0);
     this.eyeCool -= dt;
     this.doorCool -= dt;
     if (this.state === 'inside') {
@@ -582,7 +654,13 @@ class Unit {
       }
       const dx = p.x - c.x;
       c.move(Math.sign(dx), 0, delta * PACE.chase, bounds);
-      if (Math.abs(dx) <= REACH && p.sprite.visible) return this.arrest();
+      // (caught as they reach you -- and never stepped clean through you on
+      // a long frame: crossing over is a catch too)
+      const dx2 = p.x - c.x;
+      if (p.sprite.visible && (Math.abs(dx2) <= REACH || (dx !== 0 && Math.sign(dx2) !== Math.sign(dx)))) {
+        c.setPosition(p.x - Math.sign(dx) * 4, c.y);
+        return this.arrest();
+      }
       // a long way ahead of them and out of sight: they give it up
       this.lostT = Math.abs(dx) > 150 ? this.lostT + dt : 0;
       if (this.lostT > 3) this.giveUp();
@@ -848,9 +926,11 @@ export class Patrol {
       return;
     }
     if (chased) {
-      // out of a door after you (from a shop, the arcade, Lily's), or in off the end
+      // out of a door after you (from a shop, the arcade, Lily's), out of the
+      // alley you came out of, or in off the end
       const door = chased.from ? host.doors?.find((d) => d.place === chased.from) : undefined;
-      this.units.push(door ? Unit.fromDoor(host, squad, door.x) : Unit.chaser(host, squad, chased.edge));
+      const at = door?.x ?? chased.atX;
+      this.units.push(at !== undefined ? Unit.fromDoor(host, squad, at) : Unit.chaser(host, squad, chased.edge));
     }
     // ---- THEY WERE STILL THERE.  Back on a street you were on a moment
     // ago (down an alley and out, say): the officers walking it then are
@@ -881,6 +961,11 @@ export class Patrol {
       if (back.length) clearedUntil = Math.max(clearedUntil, now + 1200);
     }
     for (const b of back) this.units.push(Unit.at(host, squad, b.x, b.dir));
+    // ---- STILL UNSURE OF YOU: whoever is out here now remembers the doubt
+    if (suspicion && now < suspicion.until) {
+      const doubt = suspicion.aware;
+      host.scene.time.delayedCall(50, () => this.units.forEach((u) => u.doubt(doubt)));
+    }
     if (stealthPhase()) {
       const n = host.worldW > 400 ? 3 : 2;
       const first = Math.random() < 0.5 ? 1 : -1;
@@ -926,6 +1011,9 @@ export class Patrol {
 
   /** Leaving: where the officers out walking are, to be put back if you come straight back. */
   private remember(key: string): void {
+    // (how unsure of you they were as you went: kept for wherever you go)
+    const doubt = Math.max(0, ...this.units.map((u) => u.wary));
+    if (doubt > 0.15) suspicion = { aware: doubt, until: performance.now() + SUSPICION_MS };
     if (this.host.alley) return;
     const walkers = this.units.filter((u) => u.present && !u.chasing && !u.holding && u.x !== null).map((u) => ({ x: u.x as number, dir: u.heading }));
     if (walkers.length) memory.set(key, { at: performance.now(), walkers });
@@ -937,16 +1025,30 @@ export class Patrol {
    */
   comeIn(): void {
     if (this.chasing) return;
-    this.units.push(Unit.chaser(this.host, this.squad, 'left'));
+    this.units.push(Unit.chaser(this.host, this.squad, 'left', 0.3));
   }
 
   /**
-   * You went in somewhere they cannot follow: the arcade, Lily's.
-   * Lost them.
+   * ---- IN AT A DOOR (a shop, the arcade, Lily's), and they do NOT let you
+   * go that easily (user, 5 Nov): one on your heels comes in after you; one
+   * unsure of you who saw you go in comes in for a look.
    */
-  safe(): void {
-    if (this.chasing) earnBadge('low_profile');
-    pursuit = null;
+  inAt(place: Place): void {
+    if (this.chasing) {
+      pursuit = { until: performance.now() + 8000, edge: 'left', alley: false, from: place };
+      return;
+    }
+    if (this.units.some((u) => u.present && u.wary > 0.15 && u.witnessed())) copWentIn(place, LOOK_IN_MS);
+  }
+
+  /** (Older name: in at a door.) */
+  safe(place: Place = 'arcade'): void {
+    this.inAt(place);
+  }
+
+  /** Out of the alley with one after you: he comes out after you, at that alley. */
+  outOfAlley(streetX: number): void {
+    if (this.chasing) pursuit = { until: performance.now() + 8000, edge: 'left', alley: false, atX: streetX };
   }
 
   /**

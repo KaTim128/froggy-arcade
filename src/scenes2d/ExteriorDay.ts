@@ -469,7 +469,7 @@ export class ExteriorDay extends Phaser.Scene {
       }
       this.locked = true;
       audio.sfx('door_open');
-      this.patrol?.safe();
+      this.patrol?.inAt('arcade');
       fadeToScene(this, 'ArcadeHub', { fromDoor: 'street' });
       return;
     }
