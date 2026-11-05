@@ -27,6 +27,7 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
 import { button, centerText, confirmDialog, centerSmall, fadeToScene, smallText, text } from '../core/ui';
+import { inTestZone } from '../core/gameConfig';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
@@ -42,7 +43,7 @@ import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, CREATURES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, recruitChosen, canChooseRecruit, release, retreat, setActive, startLadder } from '../game/creatureClash';
+import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, recruitChosen, canChooseRecruit, release, releaseAll, retreat, setActive, startLadder } from '../game/creatureClash';
 
 type Screen = 'home' | 'recruit' | 'choose' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick';
 const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls', 'minis'];
@@ -699,6 +700,27 @@ export class CreatureHub extends Phaser.Scene {
     }
   }
 
+  /** The admin's RELEASE ALL: sure?  Every one, for good. */
+  private confirmReleaseAll(): void {
+    if (this.dialog) return;
+    const n = store.get().creatures.owned.length;
+    this.dialog = confirmDialog(this, {
+      lines: [`RELEASE ALL ${n} CREATURES?`, 'THE WHOLE TEAM GOES, FOR GOOD.'],
+      confirm: 'RELEASE ALL',
+      onConfirm: () => {
+        this.dialog = null;
+        this.say(releaseAll());
+        this.teamPage = 0;
+        this.screen = needsRecovery() ? 'recruit' : 'home';
+        this.draw();
+      },
+      onCancel: () => {
+        this.dialog?.destroy();
+        this.dialog = null;
+      },
+    });
+  }
+
   /** Are you sure?  Releasing is for good. */
   private confirmRelease(uid: number, cr: Creature): void {
     if (this.dialog) return;
@@ -753,7 +775,11 @@ export class CreatureHub extends Phaser.Scene {
     const tx = 104;
     L.add(this.add.rectangle(tx, y, 94, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
     L.add(text(this, tx + 4, y + 3, `TEAM ${c.owned.length}`, PALETTE.cream));
-    L.add(smallText(this, tx + 4, y + 13, c.owned.length > 1 ? 'TAP ONE: MAKE IT MAIN' : 'RECRUIT TO ADD MORE', 0x6a7090));
+    // (the admin's test zone: RELEASE ALL in place of the hint -- dark red,
+    // and it asks first)
+    if (inTestZone() && c.owned.length) {
+      L.add(button(this, tx + 47, y + 16, 'RELEASE ALL', () => this.confirmReleaseAll(), { width: 88, height: 9, fill: 0x3a1420, hoverFill: 0x6a2030, textColor: 0xff9a9a }));
+    } else L.add(smallText(this, tx + 4, y + 13, c.owned.length > 1 ? 'TAP ONE: MAKE IT MAIN' : 'RECRUIT TO ADD MORE', 0x6a7090));
     const page0 = Phaser.Math.Clamp(this.teamPage, 0, Math.max(0, Math.ceil(c.owned.length / TEAM_PAGE) - 1)) * TEAM_PAGE;
     c.owned.slice(page0, page0 + TEAM_PAGE).forEach((o, i) => {
       const cr = ownedCreature(o);
