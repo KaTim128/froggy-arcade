@@ -17,10 +17,13 @@ import { centerText } from '../core/ui';
 
 /** Radius of the painted face, in world pixels.  `def.y` is the foot of it. */
 /**
- * 12: a wheel about 1.6 m across on a waist-high post, so the whole thing
- * stands a head over the 26-pixel drifter.  At 20 it towered at nearly 4 m.
+ * 18 (user, 5 Nov: "make the wheel bigger"): a big show wheel, about
+ * 2.4 m across on a taller post -- the centrepiece of the room's top row.
+ * (It was 12; at 20 it towered at nearly 4 m.)
  */
-export const WHEEL_R = 12;
+export const WHEEL_R = 18;
+/** How tall the post is, foot to the bottom of the rim. */
+const POST = 14;
 
 export class PrizeWheel {
   readonly def: CabinetDef;
@@ -33,13 +36,13 @@ export class PrizeWheel {
     this.def = def;
     const { x, y } = def;
     const d = y / 1000;
-    const cy = y - WHEEL_R - 9;
+    const cy = y - WHEEL_R - POST + 2;
 
     // shadow on the carpet, and the post it stands on
     scene.add.ellipse(x, y + 1, WHEEL_R * 2, 5, PALETTE.black, 0.35).setDepth(d);
-    scene.add.rectangle(x, y, 4, 11, PALETTE.steel).setOrigin(0.5, 1).setDepth(d);
-    scene.add.rectangle(x - 1, y, 1, 11, 0xd0d4dc).setOrigin(0.5, 1).setDepth(d);
-    scene.add.ellipse(x, y, 14, 4, PALETTE.slate).setDepth(d);
+    scene.add.rectangle(x, y, 5, POST, PALETTE.steel).setOrigin(0.5, 1).setDepth(d);
+    scene.add.rectangle(x - 1, y, 1, POST, 0xd0d4dc).setOrigin(0.5, 1).setDepth(d);
+    scene.add.ellipse(x, y, 20, 5, PALETTE.slate).setDepth(d);
 
     // the face: a rim, and eight wedges of alternating colour
     scene.add.circle(x, cy, WHEEL_R + 2, PALETTE.brownLight).setDepth(d);
@@ -49,16 +52,23 @@ export class PrizeWheel {
     // coordinates and then positioned is offset by its own position.
     const wedge = scene.add.graphics().setDepth(d).setPosition(x, cy);
     const colours = [def.color, PALETTE.blood, PALETTE.tealLight, PALETTE.violet];
-    for (let i = 0; i < 8; i++) {
+    const N = 12;
+    for (let i = 0; i < N; i++) {
       wedge.fillStyle(colours[i % colours.length], 1);
-      wedge.slice(0, 0, WHEEL_R, Phaser.Math.DegToRad(i * 45 - 90), Phaser.Math.DegToRad((i + 1) * 45 - 90), false);
+      wedge.slice(0, 0, WHEEL_R, Phaser.Math.DegToRad((i * 360) / N - 90), Phaser.Math.DegToRad(((i + 1) * 360) / N - 90), false);
       wedge.fillPath();
     }
-    scene.add.circle(x, cy, 2.5, PALETTE.bone).setDepth(d + 0.0001);
-    scene.add.circle(x, cy, 1, PALETTE.ink).setDepth(d + 0.0001);
+    // the pegs round the rim that the pointer clicks over
+    wedge.fillStyle(PALETTE.bone, 1);
+    for (let i = 0; i < N; i++) {
+      const a = Phaser.Math.DegToRad((i * 360) / N - 90);
+      wedge.fillRect(Math.round(Math.cos(a) * (WHEEL_R - 1.5)) - 0.5, Math.round(Math.sin(a) * (WHEEL_R - 1.5)) - 0.5, 1, 1);
+    }
+    scene.add.circle(x, cy, 3.5, PALETTE.bone).setDepth(d + 0.0001);
+    scene.add.circle(x, cy, 1.5, PALETTE.ink).setDepth(d + 0.0001);
     // the pointer, over the top of it
     scene.add
-      .triangle(x, cy - WHEEL_R - 3, 0, 0, 4, 0, 2, 5, PALETTE.cream)
+      .triangle(x, cy - WHEEL_R - 4, 0, 0, 6, 0, 3, 7, PALETTE.cream)
       .setOrigin(0.5, 0)
       .setDepth(d + 0.0002);
 
@@ -67,9 +77,11 @@ export class PrizeWheel {
 
     // The sign above it, in this corner of the room: the full title is sixteen
     // characters and would run through the wall and the machine beside it.
-    scene.add.rectangle(x - 6, 42, 2, 10, PALETTE.steel).setDepth(d);
-    const sign = scene.add.rectangle(x - 6, 52, 62, 11, def.color).setDepth(d).setStrokeStyle(1, PALETTE.ink);
-    centerText(scene, x - 6, 52, 'THE WHEEL', PALETTE.ink).setDepth(d + 0.001);
+    // (5 Nov: on the back wall, level with the two tables' signs, now the
+    // wheel stands in the middle of the top row)
+    scene.add.rectangle(x, 30, 2, 10, PALETTE.steel).setDepth(d);
+    const sign = scene.add.rectangle(x, 40, 62, 11, def.color).setDepth(d).setStrokeStyle(1, PALETTE.ink);
+    centerText(scene, x, 40, 'THE WHEEL', PALETTE.ink).setDepth(d + 0.001);
     scene.tweens.add({ targets: sign, alpha: 0.7, duration: 900, yoyo: true, repeat: -1 });
 
     // the price, floating like a cabinet's badge

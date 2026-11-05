@@ -249,7 +249,7 @@ export function openPause(): void {
 }
 
 /** Games where nothing moves until the player acts: RESUME is straight back. */
-const NO_COUNT = new Set(['blackjack', 'wheel', 'roulette']);
+const NO_COUNT = new Set(['blackjack', 'wheel', 'roulette', 'roulettetable']);
 
 /** Is `sc` a game under way that should count 3, 2, 1 on RESUME? */
 function countsIn(sc: Phaser.Scene): boolean {

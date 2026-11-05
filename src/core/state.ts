@@ -34,7 +34,8 @@ export type GameId =
   | 'frogstermash'
   | 'bogball'
   | 'croaked'
-  | 'padbattles';
+  | 'padbattles'
+  | 'roulettetable';
 
 /**
  * How the thumb drives Froggy on a touch screen.  A stick is quicker once you
@@ -399,6 +400,7 @@ function defaultState(): GameState {
       bogball: 0,
       croaked: 0,
       padbattles: 0,
+      roulettetable: 0,
     },
     highScores: {},
     route: 'normal',

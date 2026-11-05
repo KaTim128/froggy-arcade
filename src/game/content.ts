@@ -23,6 +23,7 @@ export type Motif =
   | 'pond'
   | 'pins'
   | 'cards'
+  | 'roulette'
   | 'reels'
   | 'wheel'
   | 'chamber'
@@ -50,7 +51,7 @@ export interface CabinetDef {
    * cabinet except Froggy's blackjack table, which is furniture with a dealer
    * behind it — the bet is not a fixed coin slot, so it cannot be a machine.
    */
-  fixture?: 'cabinet' | 'table' | 'wheel';
+  fixture?: 'cabinet' | 'table' | 'wheel' | 'roulette';
   /**
    * Free to walk up to.  A cabinet takes its coin at the door — you pay, you
    * play, and the how-to-play card comes after the token is gone.  The table
@@ -204,7 +205,7 @@ export const CABINETS: CabinetDef[] = [
   // Three tokens a spin, every spin raised through the shell as it is pulled
   // -- the first one too, so walking up, reading the machine and walking off
   // again costs nothing.  The wins are paid the same way.  See slots.ts.
-  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 3, reward: 10, x: 96, y: 96, color: 0xff4fa3, room: 'casino', symbol: 'FS', motif: 'reels', freeToEnter: true },
+  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 3, reward: 10, x: 66, y: 162, color: 0xff4fa3, room: 'casino', symbol: 'FS', motif: 'reels', freeToEnter: true },
   // The table takes a minimum, not a price: `cost` is the ante Froggy will not
   // deal under, and `reward` is what that ante pays back at 2x.  Anything above
   // it is raised at the table through the shell (MinigameApi.raise).
@@ -214,8 +215,8 @@ export const CABINETS: CabinetDef[] = [
     tier: 'easy',
     cost: 1,
     reward: 2,
-    x: 160,
-    y: 118,
+    x: 246,
+    y: 96,
     color: 0x2f8d4f,
     room: 'casino',
     fixture: 'table',
@@ -226,7 +227,7 @@ export const CABINETS: CabinetDef[] = [
   // Twenty in, and what comes back out is whatever is on the machine when the
   // player cashes out — the cabinet settles its own payout through the shell,
   // so `reward` here is only the five a clean pull is worth.  See roulette.ts.
-  { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 15, reward: 5, x: 224, y: 96, color: 0x8a2b34, room: 'casino', symbol: '5', motif: 'chamber' },
+  { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 15, reward: 5, x: 122, y: 162, color: 0x8a2b34, room: 'casino', symbol: '5', motif: 'chamber' },
   // Not a machine either: a wheel on a post, in the corner of the casino.
   // Forty a spin, and what it pays is whatever the pointer is over when it
   // stops — `reward` is only what the room's badge would say, since the wheel
@@ -237,8 +238,8 @@ export const CABINETS: CabinetDef[] = [
     tier: 'hard',
     cost: 40,
     reward: 50,
-    x: 58,
-    y: 140,
+    x: 160,
+    y: 96,
     color: 0xffd45e,
     room: 'casino',
     fixture: 'wheel',
@@ -252,7 +253,7 @@ export const CABINETS: CabinetDef[] = [
   // Ten a ticket, twenty back, and you may buy as many tickets as you can
   // afford -- the only cabinet in the building where the stake is the player's
   // to set before a single thing happens.  See minigames/frograce.
-  { id: 'frograce', title: 'FROG RACE', tier: 'hard', cost: 10, reward: 20, x: 96, y: 162, color: 0x6fbb6a, room: 'casino', symbol: 'RC', motif: 'race' },
+  { id: 'frograce', title: 'FROG RACE', tier: 'hard', cost: 10, reward: 20, x: 178, y: 162, color: 0x6fbb6a, room: 'casino', symbol: 'RC', motif: 'race' },
   // The most expensive cabinet in the building, and the only one you build
   // something in before you play it.  Bottom right of the casino, opposite
   // the Frog Race, with the table and its chair between them.  See
@@ -263,7 +264,29 @@ export const CABINETS: CabinetDef[] = [
   // rather than crediting each round, so what actually reaches the ledger is
   // whatever the player walks away with: `win(n)` carries it, and `reward`
   // here is the per-win rate the card advertises.
-  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 25, reward: 25, x: 224, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
+  // ---- (user, 5 Nov) the casino's layout: the three tables across the top
+  // -- ROULETTE left, the wheel in the middle, FROGGY 21 right -- and the four
+  // machines in one row along the bottom.
+  //
+  // ROULETTE: a single-zero wheel and a betting layout.  Like Froggy's table
+  // it takes a minimum, not a price -- sitting down is free and the chips are
+  // raised through the shell at each spin.  See minigames/rouletteTable.
+  {
+    id: 'roulettetable',
+    title: 'ROULETTE',
+    tier: 'easy',
+    cost: 1,
+    reward: 2,
+    x: 72,
+    y: 96,
+    color: 0x8a2b34,
+    room: 'casino',
+    fixture: 'roulette',
+    freeToEnter: true,
+    symbol: 'RT',
+    motif: 'roulette',
+  },
+  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 25, reward: 25, x: 234, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */

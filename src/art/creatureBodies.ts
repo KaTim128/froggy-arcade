@@ -1291,61 +1291,147 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     return B.done();
   },
   oracle: (t) => {
-    // a robed seer floating over a stone sundial, a glowing gnomon behind it
+    // (5 Nov, redrawn) a masked seer in long robes, floating; a third eye on
+    // the mask, a sun disc of rays turning behind, an orb held in both hands
     const B = new Build();
     const bob = Math.sin(t * 2) * 0.8;
-    B.e(0, 7, 9, 2.6, 0x8a8470, 0, 0.8);
-    B.tri(0, 7, 1.5, 7, 0, 1.5, 0x5a5440, 0.3);
-    for (let i = 0; i < 12; i++) B.dl(Math.cos(i * 0.52) * 7, 7 + Math.sin(i * 0.52) * 2, Math.cos(i * 0.52) * 8.2, 7 + Math.sin(i * 0.52) * 2.3, 0.3, 'k');
-    B.tri(-5, 4 + bob, 5, 4 + bob, 0, -8 + bob, 'b', 1.4, 0.6);
-    B.c(0.6, -7 + bob, 3, 'l', 1.2);
-    B.de(1.6, -7 + bob, 1.6, 0.9, 0xfff4c0).dc(2, -7 + bob, 0.5, 'k');
+    const GOLD = 0xffd060;
+    // the robe, flowing to a point under it (it does not touch the floor)
+    B.tri(-5.4, -1 + bob, 5.4, -1 + bob, 0.4, 8 + bob + Math.sin(t * 3) * 0.6, 'b', 1.6, 0.8);
+    B.e(0, -2.2 + bob, 4.4, 2.6, 'b', 0, 1.2);
+    // the sleeves, both arms round the orb in front
+    for (const k of [-1, 1]) B.chain([[k * 3.6, -2 + bob], [k * 4.6 + 1, 1.4 + bob], [2.6 + k * 1.2, 2.6 + bob]], 1.4, 1, 'd', 1);
+    // the head: a round golden sun-mask, a third eye open on its brow
+    B.c(0.6, -7.2 + bob, 3, GOLD, 1);
+    B.e(0.6, -10 + bob, 2.4, 1, GOLD, 0, 0.6);
+    B.de(0.8, -6.8 + bob, 2.2, 2, 'l');
+    B.dl(-0.6, -6.8 + bob, 0.4, -6.8 + bob, 0.35, 'k').dl(1.4, -6.8 + bob, 2.4, -6.8 + bob, 0.35, 'k');
+    B.de(1, -9.2 + bob, 0.9, 0.6, 0xffffff).dc(1.1, -9.2 + bob, 0.35, 0xff8a3a);
+    B.dl(0.2, -5.2 + bob, 1.6, -5.2 + bob, 0.3, 'd');
+    // the bands and sigils down the robe
+    B.dl(-3.8, 1 + bob, 3.8, 1 + bob, 0.4, GOLD).dl(-2.4, 4.4 + bob, 2.8, 4.4 + bob, 0.4, GOLD);
+    B.dc(0.4, 6 + bob, 0.6, GOLD);
+    // the orb
+    B.c(2.6, 2.6 + bob, 1.7, 0xfff4c0, 0.3);
+    B.glow(2.6, 2.6 + bob, 0.8, 0xffffff);
+    // the sun disc: its own ring and rays, meant to float behind
     B.group = 1;
-    B.ring(0.4, -7 + bob, 4.8 + Math.sin(t * 3) * 0.3, 0.5, 0xffe060);
+    B.ring(0.6, -7.4 + bob, 6.2, 0.5, GOLD);
+    const sp = t * 0.8;
+    for (let i = 0; i < 8; i++) {
+      const a = sp + (i / 8) * Math.PI * 2;
+      const r0 = 6.8;
+      B.tri(0.6 + Math.cos(a - 0.12) * r0, -7.4 + bob + Math.sin(a - 0.12) * r0, 0.6 + Math.cos(a + 0.12) * r0, -7.4 + bob + Math.sin(a + 0.12) * r0, 0.6 + Math.cos(a) * 8.6, -7.4 + bob + Math.sin(a) * 8.6, GOLD, 0.2);
+    }
     return B.done();
   },
   leviathan: (t) => {
-    // a long whale of ice breaking up through the floor: back, fin, a frosted tail
+    // (5 Nov, redrawn) a sea serpent of ice breaking up through the floor:
+    // two humps of its back, a fluked tail, and a long neck rearing up to a
+    // horned head with its jaws open
     const B = new Build();
-    const roll = Math.sin(t * 1.8) * 0.8;
-    B.e(0, 3 + roll * 0.3, 12, 5.4, 'b', 0, 1.6);
-    B.tri(-10, 2, -16, -3 + roll, -15, 5, 'b', 1, 0.5);
-    B.tri(-1, -2, 3, -2, -2, -7.5 - roll * 0.4, 'd', 0.6);
-    B.cutBox(0, 9.6, 34, 6);
-    B.e(8, 4, 4, 2.4, 'l', 0, 0.8);
-    B.dl(4, 5.6, 11, 5.6, 0.4, 'k');
-    B.eye(9, 1.6, 0.9);
-    for (let i = 0; i < 4; i++) B.tri(-6 + i * 4, -1.6, -5 + i * 4, -1.6, -5.5 + i * 4, -4 - (i % 2), 0xe8fcff, 0.3);
-    B.glow(-14, -2 + roll, 0.6, 0xbfe8ff);
+    const roll = Math.sin(t * 1.8) * 0.7;
+    const ICY = 0xe8fcff;
+    // the tail fluke out of the floor at the back
+    B.cap(-13, 6.4, -14.6, 1.4 + roll, 1.2, 0.8, 'd', 0.6);
+    B.tri(-14.6, 1.6 + roll, -18, -1.4 + roll, -15.4, -2.6 + roll, 'd', 0.6).tri(-14.6, 1.6 + roll, -11.4, -2 + roll, -13, -3.4 + roll, 'd', 0.6);
+    // the humps of its back
+    B.e(-8, 6 + roll * 0.3, 4.2, 3.6, 'b', 0, 1.2);
+    B.e(-1.4, 5.4 - roll * 0.3, 4.6, 4.6, 'b', 0, 1.2);
+    // the neck, rearing, and the head
+    const sw = Math.sin(t * 1.4) * 0.6;
+    B.chain([[4, 6.6], [5.4, 1.6], [6 + sw * 0.5, -3], [6.8 + sw, -6.6]], 2.8, 2, 'b', 1.2);
+    const open = (Math.sin(t * 2.2) + 1) * 0.6;
+    B.e(8.8 + sw, -8 + roll * 0.2, 3.6, 2.2, 'b', -0.15, 1);
+    B.e(12 + sw, -7.6, 2.2, 1.1, 'b', -0.1, 0.6);
+    B.tri(7.6 + sw, -6.2, 13.6 + sw, -5.4 + open, 8.4 + sw, -4.4 + open * 0.5, 'd', 0.5);
+    // horns of ice swept back, and frills behind the jaw
+    B.tri(7 + sw, -9.6, 8.4 + sw, -10, 4 + sw, -13.2, ICY, 0.3);
+    B.tri(8.6 + sw, -10, 9.8 + sw, -10, 7.4 + sw, -12.4, ICY, 0.3);
+    B.tri(6.4 + sw, -7, 6.6 + sw, -5, 3.6 + sw, -6.6, 'l', 0.3);
+    // ice spines down the back and humps
+    for (const [x, y, h] of [[5, -0.8, 2.4], [4.6, 2.4, 2], [-1.4, 1, 2.6], [-3.6, 1.6, 2], [0.8, 1.4, 2], [-8, 2.6, 2.4]] as const) B.tri(x - 0.8, y + 0.6, x + 0.8, y + 0.6, x - 0.6, y - h, ICY, 0.3);
+    // the floor it broke through
+    B.cutBox(-2, 10, 40, 5);
+    // the belly, the jaw, the eye
+    B.dl(6.2, 4, 6.6 + sw * 0.5, -3, 0.9, 'l');
+    B.de(12.2 + sw, -6.9, 1.6, 0.3, 'k');
+    B.eye(9.6 + sw, -8.8 + roll * 0.2, 0.8, 0x1a3a6a);
+    B.dl(-3.4, 5, 0.6, 5, 0.3, 'l').dl(-9.6, 5.6, -6.4, 5.6, 0.3, 'l');
+    B.glow(10.4 + sw, -6.2, 0.4, 0xbfe8ff);
     return B.done();
   },
   serpentking: (t) => {
-    // a crowned snake of ash: coils on the ground, a raised hood, a crown of embers
+    // (5 Nov, redrawn) a crowned cobra on a throne of its own coils: three
+    // tiers of coil, a great flared hood with eye-marks, a crown of embers
     const B = new Build();
-    const sway = Math.sin(t * 2.4) * 1.2;
-    B.e(-4, 6, 8, 3, 'd', 0, 1);
-    B.e(2, 5, 6, 2.6, 'b', 0, 1);
-    B.chain([[3, 4], [4.5, 0], [5 + sway * 0.3, -4], [5.4 + sway * 0.5, -7]], 2.2, 1.6, 'b', 1);
-    B.e(5.6 + sway * 0.5, -8, 3.6, 2.6, 'b', 0, 1);
-    B.e(5.2 + sway * 0.5, -6.6, 4.4, 3.4, 'd', 0, 0.6);
-    for (let i = 0; i < 3; i++) B.tri(4 + i * 1.6 + sway * 0.5, -10, 5 + i * 1.6 + sway * 0.5, -10, 4.5 + i * 1.6 + sway * 0.5, -12.6 - (i === 1 ? 1 : 0), 0xffb040, 0.3);
-    B.eye(6.8 + sway * 0.5, -8.4, 0.8, 0xff3a1a);
-    B.dl(8 + sway * 0.5, -7.4, 10 + sway * 0.5, -7 + Math.sin(t * 9) * 0.6, 0.3, 0xff3a1a);
-    for (let i = 0; i < 4; i++) B.dl(-9 + i * 3, 5.2, -8 + i * 3, 6.8, 0.4, 0xff6a20);
+    const sway = Math.sin(t * 2.4) * 0.9;
+    const EMBER = 0xffb040;
+    const HOT = 0xff5a1a;
+    // the coils, wide at the floor and narrower up
+    B.e(-1, 5.4, 9, 2.6, 'd', 0, 1.2);
+    B.e(0, 2.8, 7.2, 2.3, 'b', 0, 1.2);
+    B.e(0.6, 0.4, 5.2, 2, 'd', 0, 1.2);
+    // the tail tip, curling out in front
+    B.chain([[6.4, 6], [9, 6.6], [10.6, 5.4 + Math.sin(t * 3) * 0.6]], 1.4, 0.4, 'b', 0.6);
+    // the neck rising, and the hood flared round it
+    B.chain([[2, -0.6], [3.4 + sway * 0.3, -4], [4 + sway * 0.6, -7.4]], 2.2, 1.8, 'b', 1);
+    B.e(3 + sway * 0.6, -6, 3.4, 4.2, 'd', 0, 0.8);
+    // the head up over the hood, snout forward
+    B.e(5.8 + sway * 0.7, -10.6, 2.4, 1.6, 'l', 0, 0.6);
+    B.e(8 + sway * 0.7, -10.4, 1.5, 1, 'l', 0, 0.4);
+    // the crown: five points of ember
+    for (let i = 0; i < 5; i++) {
+      const u = 4 + i * 0.95 + sway * 0.7;
+      B.tri(u - 0.5, -11.8, u + 0.5, -11.8, u + Math.sin(t * 8 + i) * 0.2, -14.2 - (i === 2 ? 1.2 : i % 2 ? 0 : 0.6), EMBER, 0.2);
+    }
+    // the hood's eye-marks, the belly scutes, the coil bands
+    B.de(3 + sway * 0.6, -6, 2.2, 3, 'b');
+    B.dc(1.6 + sway * 0.6, -5.4, 0.5, EMBER).dc(4.4 + sway * 0.6, -5.4, 0.5, EMBER);
+    for (let i = 0; i < 4; i++) B.dl(3.2 + sway * 0.4 - 0.9, -1.4 - i * 1.5, 3.2 + sway * 0.4 + 0.9, -1.6 - i * 1.5, 0.35, 'l');
+    for (let i = 0; i < 5; i++) B.dl(-7 + i * 3.4, 4.4, -6.2 + i * 3.4, 6.6, 0.45, HOT);
+    for (let i = 0; i < 4; i++) B.dl(-4.4 + i * 3, 1.8, -3.8 + i * 3, 3.8, 0.4, HOT);
+    B.dl(-2.6, 0, 3.4, 0, 0.3, HOT);
+    // the eye, and a flickering forked tongue
+    B.eye(6.4 + sway * 0.7, -11, 0.7, HOT);
+    const tf = Math.sin(t * 9) > 0 ? 1 : 0;
+    B.dl(9.2 + sway * 0.7, -10.2, 10.6 + sway * 0.7 + tf, -10, 0.25, HOT);
     return B.done();
   },
   lich: (t) => {
+    // (5 Nov, redrawn) a hooded lich floating over its own tattered robe: a
+    // peaked hood with a skull inside, a bony hand on a crooked staff
     const B = new Build();
-    const w = Math.sin(t * 4) * 2 * 0.6;
-    for (let i = 0; i < 5; i++) B.tri(-7 + i * 3.4, 6 + w, -5 + i * 3.4, 6 + w, -6 + i * 3.4 + Math.sin(t * 4 + i) * 1.2, 9.4 + w, 'd', 0.6);
-    B.tri(-8, 7 + w, 8, 7 + w, 0, -9 + w, 'd', 1.6, 0.6);
-    B.c(0.5, -7 + w, 3.4, 'd', 1.4);
-    B.chain([[2, -2 + w], [5, -3.6 + w], [6.6, -4.6 + w]], 1, 0.8, 'd', 1);
-    B.cap(6.6, -9.4 + w, 7.4, 7 + w, 0.55, 0.5, 0x5a4030, 0.3);
-    B.box(5.9, -11.6 + w, 3.4, 4, 0.6, 0x2a2a30, 0, 0.3);
-    B.de(0.8, -6.4 + w, 2.6, 2.4, 'k').glow(-0.2, -6.6 + w, 0.75, 0x8affc0).glow(1.9, -6.6 + w, 0.75, 0x8affc0);
-    B.de(5.9, -11.6 + w, 1, 1.4, Math.sin(t * 5) > 0 ? 0x8affc0 : 0x5ad890);
-    B.dl(-2.6, 1 + w, 1.6, 1 + w, 0.3, 'b').dl(-3.6, 4 + w, 3, 4 + w, 0.3, 'b');
+    const w = Math.sin(t * 4) * 0.7;
+    const BONE = 0xe8e0c8;
+    const WOOD = 0x4a3428;
+    // the staff behind it, a crook at the top
+    B.cap(6.6, 7.2 + w, 6.4, -9 + w, 0.55, 0.5, WOOD, 0.3);
+    B.cap(6.4, -9 + w, 5.2, -11.4 + w, 0.5, 0.45, WOOD, 0.3).cap(5.2, -11.4 + w, 6.4, -12.8 + w, 0.45, 0.4, WOOD, 0.3);
+    // the robe: wide at the hem, torn into points that drift
+    B.tri(-7.6, 6 + w, 7, 6 + w, -0.4, -6 + w, 'd', 1.6, 0.8);
+    B.e(-0.2, -3.4 + w, 4.6, 2.6, 'd', 0, 1.2);
+    for (let i = 0; i < 6; i++) {
+      const u = -6.6 + i * 2.6;
+      B.tri(u - 1.3, 5.6 + w, u + 1.3, 5.6 + w, u + Math.sin(t * 4 + i) * 0.9, 8.6 + (i % 2) * 0.8 + w, 'd', 0.5);
+    }
+    // the hood, peaked and falling back
+    B.c(0.6, -7.2 + w, 3.9, 'd', 1.3);
+    B.tri(-1.4, -9.6 + w, -3.4, -7 + w, -4.6, -12.2 + w, 'd', 0.8);
+    // the arm out to the staff, a skeletal hand round it
+    B.chain([[1.6, -2.4 + w], [4, -3.2 + w], [6, -4.2 + w]], 1.1, 0.8, 'd', 0.9);
+    B.c(6.4, -4.4 + w, 0.9, BONE, 0.3);
+    // inside the hood: dark, a skull, two cold lights
+    B.de(1.4, -6.8 + w, 2.6, 2.7, 'k');
+    B.de(1.8, -6.6 + w, 1.7, 1.9, BONE).dl(1, -5 + w, 2.6, -5 + w, 0.35, 'k');
+    B.glow(1.1, -7.2 + w, 0.55, 0x8affc0).glow(2.6, -7.2 + w, 0.55, 0x8affc0);
+    // runes stitched down the front, and a trim on the hem
+    B.dl(-5.8, 4.8 + w, 5.4, 4.8 + w, 0.45, 'b');
+    B.dl(-0.4, -0.6 + w, 0.9, 1.2 + w, 0.3, 0x5ad890).dl(0.9, 1.2 + w, -0.4, 3 + w, 0.3, 0x5ad890).dl(-0.4, 3 + w, -1.7, 1.2 + w, 0.3, 0x5ad890).dl(-1.7, 1.2 + w, -0.4, -0.6 + w, 0.3, 0x5ad890);
+    B.dc(-0.4, 1.2 + w, 0.4, 0x8affc0);
+    B.dl(-4.4, -2.4 + w, -2.2, -4 + w, 0.35, 'b');
+    // the orb in the crook
+    B.de(5.9, -11.6 + w, 0.9, 1.1, Math.sin(t * 5) > 0 ? 0x8affc0 : 0x5ad890);
     return B.done();
   },
   seraph: (t) => {
@@ -1368,25 +1454,39 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     return B.done();
   },
   hydra: (t) => {
+    // (5 Nov, redrawn) a squat swamp dragon on four thick legs, three heads
+    // on heavy necks, each with a jaw, horns and its own glare
     const B = new Build();
-    B.tri(-9, 2, -14, 5 + Math.sin(t * 3), -9, 4.5, 'd', 1);
+    const st = Math.sin(t * 3) * 0.5;
+    // the tail, swinging low behind
+    B.chain([[-7, 3], [-10.5, 4 + Math.sin(t * 2) * 0.6], [-13.5, 5.6 + Math.sin(t * 2 + 1) * 1]], 2.2, 0.6, 'd', 1);
+    // the legs
+    for (const [u, ph] of [[-5.6, 0], [-2.4, Math.PI], [2, Math.PI], [4.8, 0]] as const) B.cap(u, 3.4, u + Math.sin(t * 3 + ph) * 0.4, 7.4, 1.5, 1.2, u === -2.4 || u === 2 ? 'd' : 'b', 0.6);
+    B.e(-1, 2, 7.6, 4.4, 'b', 0, 1.6);
     for (const [k, ph] of [[-1, 0], [0, 2.1], [1, 4.2]] as const) {
-      const base = 1 + k * 3;
-      const lean = 0.5 + k * 1.1;
-      const rise = 2.1 - Math.abs(k) * 0.35;
-      const sway = Math.sin(t * 2 + ph) * 1.2;
-      const pts: [number, number][] = [];
-      for (let i = 0; i <= 5; i++) pts.push([base + i * lean + sway * (i / 5), 1 - i * rise]);
-      B.chain(pts, 1.8, 1.3, 'b', 1.2);
-      const [hx, hy] = pts[5];
-      B.e(hx + 1.4, hy - 0.6, 2.2, 1.5, 'b', 0, 0.8);
-      B.tri(hx + 2.6, hy - 1, hx + 4.6, hy - 0.2, hx + 2.6, hy + 0.6, 'd', 0.4);
-      B.tri(hx, hy - 1.6, hx + 0.8, hy - 1.8, hx - 0.6, hy - 3.6, 'l', 0.3);
-      B.glow(hx + 1.6, hy - 1.2, 0.5, 0xffe060);
+      const sway = Math.sin(t * 2 + ph) * 1.1;
+      const pts: [number, number][] = [
+        [1.4 + k * 2.4, -0.4],
+        [1.6 + k * 4.4 + sway * 0.3, -4 + Math.abs(k) * 1.2],
+        [2 + k * 6 + sway * 0.7, -7.6 + Math.abs(k) * 2.4],
+        [3 + k * 6.6 + sway, -10.6 + Math.abs(k) * 3.4],
+      ];
+      B.chain(pts, 1.9, 1.3, k === 0 ? 'b' : 'd', 0.8);
+      const [hx, hy] = pts[3];
+      // the head: skull, snout, a lower jaw that snaps
+      const snap = Math.max(0, Math.sin(t * 3 + ph)) * 0.8;
+      B.e(hx + 0.8, hy - 0.6, 2.2, 1.6, 'b', 0, 0.9);
+      B.e(hx + 3, hy - 0.2, 1.6, 0.95, 'b', 0.1, 0.6);
+      B.tri(hx + 0.6, hy + 0.6, hx + 3.8, hy + 0.8 + snap, hx + 0.8, hy + 1.6, 'd', 0.4);
+      B.tri(hx - 0.6, hy - 1.6, hx + 0.6, hy - 2, hx - 2.2, hy - 3.6, 'l', 0.3);
+      B.de(hx + 3.2, hy + 0.5, 1.2, 0.3, 'k');
+      B.glow(hx + 1.4, hy - 1.1, 0.5, 0xffe060);
+      B.dc(hx + 4, hy - 0.6, 0.25, 'k');
     }
-    B.e(-2, 3.4, 8, 4, 'b', 0, 1.6);
-    B.de(-2, 4.6, 6, 1.6, 'l');
-    for (let i = 0; i < 4; i++) B.dc(-6 + i * 3, 1.4, 0.6, 'd');
+    // the belly plates and the ridge of the back
+    B.de(-0.6, 4.4, 5.8, 1.6, 'l');
+    for (let i = 0; i < 4; i++) B.dl(-4.6 + i * 2.4, 3.4, -4.6 + i * 2.4, 5.4, 0.3, 'd');
+    for (let i = 0; i < 4; i++) B.tri(-6.4 + i * 2.6, -1.6 + Math.abs(i - 1.5) * 0.3, -5 + i * 2.6, -1.8 + Math.abs(i - 1.5) * 0.3, -6 + i * 2.6, -4 + st, 'l', 0.3);
     return B.done();
   },
   queen: (t) => {

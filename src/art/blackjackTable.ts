@@ -137,7 +137,7 @@ export class BlackjackTable {
     // hundredths -- so the player's body is always the thing in front and the
     // chair is always the thing around it.  A chair that covered the player
     // would be a chair in the way.
-    chairAt(scene, x, y + 17, d + 0.002, 0.5);
+    // (removed, user 5 Nov: "remove this chair" -- the near edge is open now)
 
     // ---- stools for whoever else is playing, pushed out past the chair's
     // arms so the near edge belongs to the one seat that matters
