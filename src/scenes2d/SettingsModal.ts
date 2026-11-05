@@ -422,7 +422,10 @@ export class SettingsModal extends Phaser.Scene {
    */
   private renderPlaceControls(): void {
     const mg = this.from === 'Minigame' ? (pausedScene() as MinigameScene | null) : null;
-    const rows: ControlRow[] = mg?.controlRows() ?? roomControls(this.from);
+    // (user, 5 Nov: in a game, CONTROLS is that game's own keys, as moved --
+    // never the rooms' walking list; a fight names each of its moves)
+    const fight = this.from === 'CreatureArena' && !isTouch() ? this.keyTemplate().map((k): ControlRow => [capLabel(codeFor(k.id)), k.label]) : null;
+    const rows: ControlRow[] = fight ?? mg?.controlRows() ?? roomControls(this.from);
     const max = 9;
     const shown = rows.slice(0, max);
     let y = 50;
