@@ -236,7 +236,8 @@ export const CABINETS: CabinetDef[] = [
     id: 'wheel',
     title: 'WHEEL OF FORTUNE',
     tier: 'hard',
-    cost: 40,
+    // (user, 5 Nov: twenty a spin, and a wheel that loses more -- see wheel.ts)
+    cost: 20,
     reward: 50,
     x: 160,
     y: 96,

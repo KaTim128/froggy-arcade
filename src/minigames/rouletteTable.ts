@@ -40,14 +40,18 @@ const BLACK = 0x15121a;
 const ZERO = 0x2f8d4f;
 const CHALK = 0xd8e8c8;
 
-// the wheel, on the left of the felt
-const WX = 56;
-const WY = 74;
-const WR = 34;
+// the wheel, on the left of the felt -- big enough (user, 5 Nov) that every
+// pocket can carry its own number inside it
+const WX = 63;
+const WY = 78;
+const WR = 53;
+/** The band the pockets' colours fill, and the radius their numbers sit at. */
+const BAND = 12;
+const NUM_R = WR - BAND / 2;
 // the layout, on the right
-const BX = 124;
+const BX = 136;
 const BY = 34;
-const CW = 15;
+const CW = 14;
 const CH = 11;
 
 interface SpotBox {
@@ -242,11 +246,11 @@ function spin(): void {
     ease: 'Cubic.easeOut',
     onUpdate: () => {
       const t = wheel!.rotation;
-      ball?.setPosition(WX + Math.cos(-t * 1.3 - Math.PI / 2) * (WR - 4), WY + Math.sin(-t * 1.3 - Math.PI / 2) * (WR - 4));
+      ball?.setPosition(WX + Math.cos(-t * 1.3 - Math.PI / 2) * (WR - BAND - 3), WY + Math.sin(-t * 1.3 - Math.PI / 2) * (WR - BAND - 3));
     },
     onComplete: () => {
       spinning = false;
-      ball?.setPosition(WX, WY - WR + 5);
+      ball?.setPosition(WX, WY - WR + BAND + 3);
       history.push(n);
       shownBalance += pay;
       const c = colourOf(n);
@@ -269,33 +273,53 @@ function leave(): void {
   apiRef.cashOut();
 }
 
+let nums: Phaser.GameObjects.BitmapText[] = [];
+function placeNumbers(): void {
+  if (!wheel) return;
+  const r = wheel.rotation;
+  nums.forEach((t, i) => {
+    const a = -Math.PI / 2 + i * STEP + r;
+    t.setPosition(Math.round(WX + Math.cos(a) * NUM_R), Math.round(WY + Math.sin(a) * NUM_R));
+  });
+}
+
 function paintTable(scene: Phaser.Scene): void {
   scene.add.rectangle(0, 18, GAME_W, 162, 0x2a0e16).setOrigin(0, 0);
   // the walnut rail round the baize, as on Froggy's table
   scene.add.rectangle(4, 18, GAME_W - 8, 120, RAIL).setOrigin(0, 0).setStrokeStyle(1, 0x3a2616);
   scene.add.rectangle(8, 21, GAME_W - 16, 114, FELT).setOrigin(0, 0);
   // the wheel's bowl
-  scene.add.circle(WX, WY, WR + 9, 0x3a2616);
-  scene.add.circle(WX, WY, WR + 7, BRASS);
-  scene.add.circle(WX, WY, WR + 5, 0x5e3c22);
-  scene.add.circle(WX, WY, WR + 2, 0x2a1a10);
+  scene.add.circle(WX, WY, WR + 4, 0x3a2616);
+  scene.add.circle(WX, WY, WR + 3, BRASS);
+  scene.add.circle(WX, WY, WR + 1, 0x2a1a10);
   wheel = scene.add.graphics().setPosition(WX, WY).setDepth(4);
   WHEEL_ORDER.forEach((n, i) => {
+    const a0 = -Math.PI / 2 + (i - 0.5) * STEP;
     wheel!.fillStyle(n === 0 ? ZERO : RED_NUMBERS.has(n) ? RED : BLACK, 1);
-    wheel!.slice(0, 0, WR, -Math.PI / 2 + (i - 0.5) * STEP, -Math.PI / 2 + (i + 0.5) * STEP, false).fillPath();
-    wheel!.lineStyle(1, BRASS, 0.8).lineBetween(Math.cos(-Math.PI / 2 + (i - 0.5) * STEP) * (WR - 9), Math.sin(-Math.PI / 2 + (i - 0.5) * STEP) * (WR - 9), Math.cos(-Math.PI / 2 + (i - 0.5) * STEP) * WR, Math.sin(-Math.PI / 2 + (i - 0.5) * STEP) * WR);
+    wheel!.slice(0, 0, WR, a0, a0 + STEP, false).fillPath();
+    wheel!.lineStyle(1, BRASS, 0.8).lineBetween(Math.cos(a0) * (WR - BAND), Math.sin(a0) * (WR - BAND), Math.cos(a0) * WR, Math.sin(a0) * WR);
   });
-  wheel.fillStyle(0x7a5232, 1).fillCircle(0, 0, WR - 9);
-  wheel.fillStyle(0x5e3c22, 1).fillCircle(0, 0, WR - 13);
+  wheel.fillStyle(0x7a5232, 1).fillCircle(0, 0, WR - BAND);
+  wheel.lineStyle(1, BRASS, 0.9).strokeCircle(0, 0, WR - BAND);
+  wheel.fillStyle(0x5e3c22, 1).fillCircle(0, 0, WR - BAND - 6);
   for (let k = 0; k < 4; k++) {
-    const a = (k / 4) * Math.PI * 2;
-    wheel.lineStyle(2, BRASS, 1).lineBetween(0, 0, Math.cos(a) * (WR - 12), Math.sin(a) * (WR - 12));
+    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+    wheel.lineStyle(2, BRASS, 1).lineBetween(Math.cos(a) * 12, Math.sin(a) * 12, Math.cos(a) * (WR - BAND - 4), Math.sin(a) * (WR - BAND - 4));
   }
-  wheel.fillStyle(BRASS, 1).fillCircle(0, 0, 4);
+  wheel.fillStyle(0x3a2616, 1).fillCircle(0, 0, 11);
+  wheel.lineStyle(1, BRASS, 1).strokeCircle(0, 0, 11);
+  // ---- THE NUMBERS, each in its own pocket.  Upright (turned pixel type
+  // cannot be read), set on the middle of the pocket's band, and moved round
+  // with the wheel every frame.
+  nums = WHEEL_ORDER.map((n) => smallText(scene, 0, 0, `${n}`, PALETTE.cream).setOrigin(0.5, 0.5).setDepth(5));
+  placeNumbers();
+  scene.events.on(Phaser.Scenes.Events.UPDATE, placeNumbers);
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.events.off(Phaser.Scenes.Events.UPDATE, placeNumbers));
   // the pointer over the top, and the ball
-  scene.add.triangle(WX, WY - WR - 6, 0, 0, 6, 0, 3, 6, PALETTE.cream).setOrigin(0.5, 0).setDepth(7);
-  ball = scene.add.circle(WX, WY - WR + 5, 2, 0xffffff).setDepth(8).setStrokeStyle(1, 0x9a9aa8);
-  resultText = centerText(scene, WX, WY + WR + 12, '', PALETTE.cream, 16).setDepth(8);
+  scene.add.triangle(WX, WY - WR - 5, 0, 0, 6, 0, 3, 6, PALETTE.cream).setOrigin(0.5, 0).setDepth(7);
+  ball = scene.add.circle(WX, WY - WR + BAND + 3, 2, 0xffffff).setDepth(8).setStrokeStyle(1, 0x9a9aa8);
+  // the number that came up, in the hub
+  resultText = centerText(scene, WX, WY - 4, '', PALETTE.cream, 8).setDepth(8);
 
   // the layout
   const g = scene.add.graphics().setDepth(5);
@@ -320,6 +344,11 @@ export const rouletteTable: MinigameModule = {
   payoutNote: 'NUMBER 36X - DOZEN 3X - OUTSIDE 2X',
   tutorial: {
     pitch: 'PUT YOUR CHIPS DOWN AND SPIN.',
+    steps: [
+      { say: 'CLICK A SPOT ON THE FELT TO PUT A CHIP ON IT. F CHANGES THE CHIP.', phone: 'TAP A SPOT ON THE FELT TO PUT A CHIP ON IT. CHIP CHANGES THE CHIP.', demo: 'rt.chips' },
+      { say: 'ENTER SPINS: EVERY BET ON THE FELT IS PAID FOR AT ONCE.', phone: 'SPIN SPINS: EVERY BET ON THE FELT IS PAID FOR AT ONCE.', demo: 'rt.spin' },
+      { say: 'A NUMBER PAYS 36X, A DOZEN 3X, THE REST 2X. ON THE ZERO THEY ALL LOSE.', demo: 'rt.pays' },
+    ],
     objective: [
       'CHIPS ON THE FELT, THEN SPIN.',
       'A NUMBER PAYS 35 TO 1, A DOZEN 2 TO 1.',

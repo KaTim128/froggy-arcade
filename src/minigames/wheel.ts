@@ -37,10 +37,17 @@
  * paid the moment the wheel stops, and LEAVE settles up.  Nothing leaves
  * except through the ledger (MG-3).
  *
+ * ---- (5 Nov) TWENTY A SPIN, AND IT LOSES MORE.  The table this comment
+ * opened with is the old one; FACES below holds the current odds.  A spin
+ * costs twenty (the admin's `wheel.cost`) and returns about 14.5 on average,
+ * respins and bonus spins included -- the house keeps about 27% of every
+ * spin.  About 7 spins in 10 pay less than the price, about 1 in 12 pays 40
+ * or more, and 100 or more comes up about once in 70.  (The paragraphs
+ * below give the older numbers, kept for the history.)
+ *
  * THE PRICE IS THE LEVER (user, 3 Nov: "a long term house advantage").  These
- * faces average about 33.43 tokens a spin and a spin now costs FORTY (the
- * admin's `wheel.cost`), so the house keeps about 6.6 of every paid spin --
- * about 16% -- however long anyone plays.
+ * faces averaged about 33.43 tokens a spin at FORTY a spin, so the house kept
+ * about 6.6 of every paid spin -- about 16% -- however long anyone played.
  *
  * ---- RESPIN AND BONUS ARE ON THE WHEEL (user, 4 Nov: "in the wheel, not
  * a button").  Two faces on the rim:
@@ -88,7 +95,7 @@ const ID = 'wheel' as const;
 /** What a spin costs: the cabinet's own price, which the admin can move. */
 export function spinCost(): number {
   const v = cfgNum('wheel.cost');
-  return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 40;
+  return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 20;
 }
 /** The two faces that are not money: `pays` marks them. */
 export const RESPIN = -1;
@@ -155,29 +162,53 @@ function writeBook(b: WheelBook): void {
  * percent across three faces and 40-70 twelve across four, so the band that
  * pays more comes up less.
  */
+/**
+ * (user, 5 Nov: "20 tokens each spin ... the win rate should be lower, so
+ * players only get lucky once in a while but they should lose more")
+ *
+ *   NOTHING               26.6%   (two faces)
+ *   1 2 3 5 7 10            38%   (six faces)    -- under the price
+ *   15 20 25                18%   (6% each)      -- about the price back
+ *   40 50 60 70              8%   (2% each)      -- a real win, 1 spin in 12
+ *   80 90 100              2.4%
+ *   200                    0.4%
+ *   500 / 1000 / 5000   0.08% / 0.02% / 0.002%
+ *   RE respin 3%, +2 bonus 2.5%
+ *
+ * About seven spins in ten pay less than the twenty they cost.
+ */
+const S_SMALL = 38 / 6;
+const S_EVEN = 6;
+const S_MID = 2;
+const S_HIGH = 0.8;
+const S_RESPIN = 3;
+const S_BONUS = 2.5;
+const S_BLANK = (100 - 38 - 18 - 8 - 2.4 - 0.4 - 0.08 - 0.02 - 0.002 - S_RESPIN - S_BONUS) / 2;
 export const FACES: Array<{ pays: number; share: number }> = [
-  { pays: 1, share: 54.39 / 7 },
-  { pays: 40, share: 3 },
-  { pays: 80, share: 10 / 3 },
-  { pays: RESPIN, share: 4 },
-  { pays: 2, share: 54.39 / 7 },
-  { pays: 50, share: 3 },
-  { pays: 90, share: 10 / 3 },
-  { pays: 3, share: 54.39 / 7 },
-  { pays: 60, share: 3 },
-  { pays: 100, share: 10 / 3 },
-  { pays: 5000, share: 0.01 },
-  { pays: 5, share: 54.39 / 7 },
-  { pays: BONUS, share: 4 },
-  { pays: 70, share: 3 },
-  { pays: 0, share: 5 },
-  { pays: 7, share: 54.39 / 7 },
-  { pays: 200, share: 5 },
-  { pays: 1000, share: 0.1 },
-  { pays: 10, share: 54.39 / 7 },
-  { pays: 500, share: 0.5 },
-  { pays: 0, share: 5 },
-  { pays: 15, share: 54.39 / 7 },
+  { pays: 1, share: S_SMALL },
+  { pays: 40, share: S_MID },
+  { pays: 15, share: S_EVEN },
+  { pays: 80, share: S_HIGH },
+  { pays: 2, share: S_SMALL },
+  { pays: RESPIN, share: S_RESPIN },
+  { pays: 0, share: S_BLANK },
+  { pays: 20, share: S_EVEN },
+  { pays: 50, share: S_MID },
+  { pays: 3, share: S_SMALL },
+  { pays: 5000, share: 0.002 },
+  { pays: 25, share: S_EVEN },
+  { pays: 5, share: S_SMALL },
+  { pays: BONUS, share: S_BONUS },
+  { pays: 60, share: S_MID },
+  { pays: 0, share: S_BLANK },
+  { pays: 7, share: S_SMALL },
+  { pays: 200, share: 0.4 },
+  { pays: 10, share: S_SMALL },
+  { pays: 90, share: S_HIGH },
+  { pays: 1000, share: 0.02 },
+  { pays: 70, share: S_MID },
+  { pays: 500, share: 0.08 },
+  { pays: 100, share: S_HIGH },
 ];
 
 const CX = 96;
@@ -328,10 +359,10 @@ function stopIn(i: number): number {
 /** The small change (under 25) and the 40-70 band, by face. */
 const SMALL = FACES.map((f, i) => (f.pays > 0 && f.pays < 25 ? i : -1)).filter((i) => i >= 0);
 const MID = FACES.map((f, i) => (f.pays >= 40 && f.pays <= 70 ? i : -1)).filter((i) => i >= 0);
-/** The bonus odds: 85% a prize under 25, 15% one of 40-70, each spin on its own. */
-export const BONUS_BIG = 0.15;
+/** The bonus odds: 90% a prize under 25, 10% one of 40-70, each spin on its own. */
+export const BONUS_BIG = 0.1;
 
-/** A BONUS spin's face: 85% the small change, 15% the 40-70 band, a face of it at random. */
+/** A BONUS spin's face: 90% the small change, 10% the 40-70 band, a face of it at random. */
 function drawBonus(): { face: number; angle: number } {
   const band = Math.random() < BONUS_BIG ? MID : SMALL;
   const i = band[Math.floor(Math.random() * band.length)];
@@ -396,7 +427,7 @@ export const wheelOfFortune: MinigameModule = {
       'ONE SPIN, ONE PRIZE, WHATEVER IT STOPS ON.',
       'RE ON THE WHEEL: IT SPINS AGAIN, FREE.',
       '+2 ON THE WHEEL: TWO BONUS SPINS.',
-      'BONUS SPINS: 85% UNDER 25, 15% 40-70.',
+      'BONUS SPINS: 90% UNDER 25, 10% 40-70.',
       'A SPIN CUT OFF BY A RELOAD IS PAID NEXT TIME.',
     ],
     controls: [
@@ -473,7 +504,8 @@ export const wheelOfFortune: MinigameModule = {
       ['200', pctOf([200]), PALETTE.cream],
       ['80-100', pctOf([80, 90, 100]), PALETTE.cream],
       ['40-70', pctOf([40, 50, 60, 70]), PALETTE.cream],
-      ['1-15', pctOf([1, 2, 3, 5, 7, 10, 15]), PALETTE.cream],
+      ['15-25', pctOf([15, 20, 25]), PALETTE.cream],
+      ['1-10', pctOf([1, 2, 3, 5, 7, 10]), PALETTE.cream],
       ['NOTHING', pctOf([0]), PALETTE.ash],
       ['RE  SPIN AGAIN', pctOf([RESPIN]), 0x6ad8e8],
       ['+2  BONUS SPINS', pctOf([BONUS]), 0xc89aff],

@@ -559,6 +559,16 @@ export class MinigameScene extends Phaser.Scene {
     return this.mod ? deviceControls(this.mod.tutorial.controls, this.mod.touch) : [];
   }
 
+  /** The cabinet's controls as its card lists them, for the pause menu's key list. */
+  tutorialRows(): ControlRow[] {
+    return this.mod?.tutorial.controls ?? [];
+  }
+
+  /** Whose own keys are live while this cabinet is up (core/keymap). */
+  keyScope(): string {
+    return this.gameId;
+  }
+
   /** Forfeit, and go somewhere other than back to the room afterwards. */
   quitTo(key: string): void {
     this.exitTo = key;

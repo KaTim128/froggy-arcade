@@ -37,7 +37,7 @@ import { backPlate } from '../ui/plate';
 import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { battleXp, levelOf, xpProgress } from '../game/creatureLevel';
 import { traitsOf } from '../game/creatureTraits';
-import { MINI_INFO, MINI_MIN_COST, MINI_PRICE, TEAM_SIZE, drawPool, roleOf, startMini, type MiniKind } from '../game/creatureMinis';
+import { MINI_INFO, MINI_MIN_COST, MINI_PRICE, TEAM_SIZE, drawPool, paidTeamPool, payForTeamPool, roleOf, startMini, type MiniKind } from '../game/creatureMinis';
 import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
@@ -887,7 +887,7 @@ export class CreatureHub extends Phaser.Scene {
     const kinds: Array<[MiniKind, number, string, (g: Phaser.GameObjects.Graphics, x: number, y: number, col: number) => void]> = [
       ['melee', 0xff5a6a, 'PICK 1 OF 3 - UP CLOSE', (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col)],
       ['ranged', 0x6ad8f0, 'PICK 1 OF 3 - AT RANGE', (g, x, y, col) => drawAttackIcon(g, 'bolt', x, y, col)],
-      ['team', PALETTE.gold, 'PICK 5 OF 12 - ONE AT A TIME', (g, x, y, col) => {
+      ['team', PALETTE.gold, 'PAY, SEE 10, PICK 5', (g, x, y, col) => {
         g.fillStyle(col, 1).fillCircle(x - 5, y + 2, 3).fillCircle(x, y - 2, 3).fillCircle(x + 5, y + 2, 3);
       }],
     ];
@@ -896,10 +896,12 @@ export class CreatureHub extends Phaser.Scene {
       const pr = MINI_PRICE[k];
       this.tile(16, y, GAME_W - 32, 28, MINI_INFO[k].title, `${sub}  -  ${pr.cost} IN, ${pr.win} TO WIN`, col, icon, () => {
         this.miniKind = k;
-        this.miniPool = drawPool(k);
+        // (5v5: the pool is only drawn once it is paid for -- and a pool
+        // already paid for comes back as it was)
+        this.miniPool = k === 'team' ? paidTeamPool() ?? [] : drawPool(k);
         this.miniPicks = [];
         this.go('minipick');
-      }, ledger.balance() < pr.cost);
+      }, ledger.balance() < pr.cost && !(k === 'team' && paidTeamPool()));
     });
     if (ledger.balance() < MINI_MIN_COST) L.add(centerSmall(this, GAME_W / 2, 152, `YOU NEED ${MINI_MIN_COST} TOKENS TO PLAY.`, 0xff9a9a));
   }
@@ -918,8 +920,34 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, 8, 20, MINI_INFO[kind].title, PALETTE.gold));
     // (two short lines, never one that wraps into the cards)
     L.add(smallText(this, 8, 30, MINI_INFO[kind].rules.join(' '), PALETTE.fog));
-    L.add(smallText(this, 8, 37, `${pr.cost} TOKENS IN, ${pr.win} FOR A WIN.`, PALETTE.gold));
     const team = kind === 'team';
+    // ---- 5V5: PAY FIRST, THEN SEE THE TEN (user, 5 Nov).  Before paying
+    // nothing is shown and nothing is spent: LEAVE walks away for free.
+    if (team && !paidTeamPool()) {
+      L.add(smallText(this, 8, 37, `${pr.cost} TOKENS IN, ${pr.win} FOR A WIN.`, PALETTE.gold));
+      L.add(this.add.rectangle(GAME_W / 2, 92, 230, 74, 0x181c36).setStrokeStyle(1, PALETTE.gold));
+      L.add(centerText(this, GAME_W / 2, 66, `PAY ${pr.cost} TOKENS TO SEE THE POOL`, PALETTE.cream));
+      L.add(centerSmall(this, GAME_W / 2, 80, `TEN CREATURES, DRAWN AT RANDOM. PICK ${TEAM_SIZE}.`, PALETTE.fog));
+      L.add(centerSmall(this, GAME_W / 2, 88, 'PAID ONCE: LEAVING THE PICK AND COMING BACK', PALETTE.fog));
+      L.add(centerSmall(this, GAME_W / 2, 95, 'SHOWS THE SAME TEN, FOR NOTHING MORE.', PALETTE.fog));
+      L.add(centerSmall(this, GAME_W / 2, 106, 'DO NOT LIKE THE IDEA? LEAVE COSTS NOTHING.', PALETTE.ash));
+      const can = ledger.balance() >= pr.cost;
+      L.add(button(this, GAME_W / 2 - 52, GAME_H - 30, can ? `PAY ${pr.cost}` : `NEED ${pr.cost}`, () => {
+        const r = payForTeamPool();
+        if (!r.ok) {
+          this.say(r);
+          this.draw();
+          return;
+        }
+        audio.sfx('cha_ching', 0.5);
+        this.miniPool = paidTeamPool() ?? [];
+        this.miniPicks = [];
+        this.draw();
+      }, { width: 90, height: 15, disabled: !can }));
+      L.add(button(this, GAME_W / 2 + 52, GAME_H - 30, 'LEAVE', () => this.go('minis'), { width: 90, height: 15, fill: 0x1c2142 }));
+      return;
+    }
+    L.add(smallText(this, 8, 37, team ? `PAID. ${pr.win} FOR A WIN.` : `${pr.cost} TOKENS IN, ${pr.win} FOR A WIN.`, PALETTE.gold));
     // (5v5: twelve on offer, four across in three rows -- six across left a
     // card too narrow for the longest name to sit inside its outline)
     const cols = team ? 4 : 3;
@@ -968,7 +996,7 @@ export class CreatureHub extends Phaser.Scene {
       });
     });
     const ready = this.miniPicks.length === want;
-    const label = ready ? `FIGHT - ${pr.cost} TOKENS` : team ? `PICK ${want - this.miniPicks.length} MORE` : 'PICK ONE';
+    const label = ready ? (team ? 'FIGHT' : `FIGHT - ${pr.cost} TOKENS`) : team ? `PICK ${want - this.miniPicks.length} MORE` : 'PICK ONE';
     L.add(button(this, GAME_W / 2, GAME_H - 9, label, () => {
       if (!ready) return;
       const r = startMini(kind, this.miniPicks);

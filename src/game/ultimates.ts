@@ -30,7 +30,8 @@ import { plainWords } from './plainWords';
 import { BOSSES, CREATURES, ELEMENTS } from './creatures';
 import { AURA_POWER, HASTE_SPEED, LINGER_DMG, LINGER_S } from './attackInfo';
 
-export const ULT_UNLOCK_S = 30;
+/** The first ultimate of every fight, in every mode (user, 5 Nov: 25, was 30). */
+export const ULT_UNLOCK_S = 25;
 export const ULT_COOLDOWN_S = 25;
 
 export type UltFx =
@@ -438,7 +439,8 @@ const SPEC: Record<string, [string, UltFx[]]> = {
   b_oracle: ['JUDGEMENT CROSS', [judgement(40), silence(3), slowfield(2.5, 90)]],
   b_leviathan: ['ICEBERG CRASH', [iceberg(34), slowfield(3, 100), regen(4, 4)]],
   b_serpentking: ['INFERNO COIL', [constrict(4, 10), weaken(3), rage(4)]],
-  b_sphinx: ['RIDDLE WALL', [windwall(4), silence(3), blind(2.5)]],
+  // (user, 5 Nov: buffed -- a stun of its own, and a third more of everything: BUFF below)
+  b_sphinx: ['RIDDLE WALL', [windwall(4), silence(3), blind(2.5), stun(1, 80)]],
 };
 
 /** What an enemy deals in a second when it is free to (the plain attacks average 16; not every one lands). */
@@ -902,8 +904,14 @@ export function ultWorth(fx: UltFx[], hp: number): number {
 const BUDGET = 56;
 const BOSS_BUDGET = 84;
 const FIXED: ReadonlySet<K> = new Set<K>(['reset', 'cleanse', 'timewarp']);
-function balance(fx: UltFx[], boss: boolean, hp: number): UltFx[] {
-  const want = boss ? BOSS_BUDGET : BUDGET;
+/**
+ * Ultimates given more than the budget, on purpose.  (user, 5 Nov: the
+ * sphinx's RIDDLE WALL "more impactful and worthwhile" -- it gains a
+ * crushing hit of its own and a third again of everything else.)
+ */
+const BUFF: Record<string, number> = { b_sphinx: 1.35 };
+function balance(fx: UltFx[], boss: boolean, hp: number, buff = 1): UltFx[] {
+  const want = (boss ? BOSS_BUDGET : BUDGET) * buff;
   // the fixed parts stay as designed; the rest is scaled, a few rounds so
   // what one effect's limit refuses, the others take
   let out = fx;
@@ -945,7 +953,7 @@ function build(): Map<string, Ultimate> {
       leads.set(k, 1);
       owner.set(k, id);
     }
-    const fx = balance(parts, boss, hp);
+    const fx = balance(parts, boss, hp, BUFF[id] ?? 1);
     const desc = plainWords(fx.map(words).join('. ') + '.');
     const steps = fx.map((f) => plainWords(fullWords(f)));
     out.set(id, { name, desc, steps, fx, range: RANGE[fx[0].k] ?? 150 });

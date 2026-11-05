@@ -353,7 +353,7 @@ export const BOSSES: BossSpec[] = [
   },
   {
     id: 'b_sphinx', name: 'The Mirror Sphinx', element: 'glow', body: 'sphinx', role: 'CHARGER', moves: 'PROWLS ON FOUR PAWS',
-    strong: 'A MIRROR GUARD, THEN A POUNCE ACROSS THE ARENA', weak: 'THE POUNCE IS TELEGRAPHED', hp: 400, speed: 58, cry: 'glass_crack',
+    strong: 'ITS RIDDLE MOVES YOU ONTO ITS POUNCE LINE', weak: 'THE POUNCE IS TELEGRAPHED', hp: 400, speed: 58, cry: 'glass_crack',
     attacks: [A('GLINT DART', 'bolt', 10, 0.7, 230, 'bounce'), SP('pounce_line'), SP('mirror_riddle')],
     boss: { pattern: 'charge', trick: 'POUNCES ACROSS', blurb: 'A WINGED LION IN A MASK OF GLASS. WATCH THE LINE IT DRAWS.', every: 4.5, n: 1, r: 9, dmg: 22 },
   },

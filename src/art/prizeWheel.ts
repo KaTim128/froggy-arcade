@@ -89,7 +89,8 @@ export class PrizeWheel {
     this.badgeText = centerText(scene, 0, 0, `${def.cost}`, PALETTE.gold);
     // On the wall side of the wheel: the machine on its right is close enough
     // that a badge over there reads as that machine's price.
-    const badge = scene.add.container(x - WHEEL_R - 10, cy, [this.badgeBox, this.badgeText]).setDepth(500);
+    // (5 Nov: on its right, as the user marked it)
+    const badge = scene.add.container(x + WHEEL_R + 12, cy - WHEEL_R + 6, [this.badgeBox, this.badgeText]).setDepth(500);
     scene.tweens.add({ targets: badge, y: cy - 2, duration: 1200, yoyo: true, repeat: -1 });
 
     this.bounds = new Phaser.Geom.Rectangle(x - WHEEL_R - 4, cy - WHEEL_R - 6, WHEEL_R * 2 + 8, WHEEL_R * 2 + 18);
