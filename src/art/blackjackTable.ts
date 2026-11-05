@@ -137,7 +137,7 @@ export class BlackjackTable {
     // hundredths -- so the player's body is always the thing in front and the
     // chair is always the thing around it.  A chair that covered the player
     // would be a chair in the way.
-    chairAt(scene, x, y + 17, d + 0.002, 0.5);
+    // (removed, user 5 Nov: "remove this chair" -- the near edge is open now)
 
     // ---- stools for whoever else is playing, pushed out past the chair's
     // arms so the near edge belongs to the one seat that matters
@@ -165,8 +165,9 @@ export class BlackjackTable {
     // side of the felt, for the same reason the sign is up on the wall.
     this.badgeBox = scene.add.rectangle(0, 0, 20, 11, PALETTE.black, 0.75).setStrokeStyle(1, PALETTE.gold);
     this.badgeText = centerText(scene, 0, 0, `${def.cost}+`, PALETTE.gold);
-    const badge = scene.add.container(x - 38, y - 16, [this.badgeBox, this.badgeText]).setDepth(500);
-    scene.tweens.add({ targets: badge, y: y - 18, duration: 1200, yoyo: true, repeat: -1 });
+    // (5 Nov: on the right of the dealer, as the user marked it)
+    const badge = scene.add.container(x + 22, y - 32, [this.badgeBox, this.badgeText]).setDepth(500);
+    scene.tweens.add({ targets: badge, y: y - 34, duration: 1200, yoyo: true, repeat: -1 });
 
     this.bounds = new Phaser.Geom.Rectangle(x - TABLE_W / 2, y - TABLE_H - 6, TABLE_W, TABLE_H + 18);
   }

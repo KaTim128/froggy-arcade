@@ -30,6 +30,7 @@ import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_FOOT } from '../art/cabinet';
 import { BlackjackTable, TABLE_H, TABLE_W } from '../art/blackjackTable';
 import { PrizeWheel } from '../art/prizeWheel';
+import { RouletteTable, RTABLE_H, RTABLE_W } from '../art/rouletteTable';
 import { TokenHud } from '../ui/hud';
 import { CABINETS, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
@@ -58,7 +59,7 @@ const TABLE_BACK = TABLE_H + 4;
 const BACK_DOOR = { x: GAME_W - 20, y: 118 };
 
 /** Anything you can walk up to and play.  The table is not a cabinet. */
-type Fixture = Cabinet | BlackjackTable | PrizeWheel;
+type Fixture = Cabinet | BlackjackTable | PrizeWheel | RouletteTable;
 
 type Target = { kind: 'cabinet'; cab: Fixture } | { kind: 'back' } | null;
 
@@ -119,6 +120,7 @@ export class ArcadeCasino extends Phaser.Scene {
 
     this.cabinets = cabinetsIn('casino').map((def) => {
       if (def.fixture === 'wheel') return new PrizeWheel(this, def);
+      if (def.fixture === 'roulette') return new RouletteTable(this, def);
       if (def.fixture !== 'table') return new Cabinet(this, def);
       const t = new BlackjackTable(this, def);
       this.table = t;
@@ -135,13 +137,19 @@ export class ArcadeCasino extends Phaser.Scene {
               solid: { x: x - TABLE_W / 2 + 3, y: y - TABLE_BACK, w: TABLE_W - 6, h: TABLE_BACK + TABLE_STAND },
               at: (px: number, py: number) => Math.abs(px - x) < TABLE_W / 2 + 4 && py >= y + TABLE_STAND - 1 && py <= y + TABLE_STAND + 16,
             }
-          : cab instanceof PrizeWheel
-            ? machineSpot(x, y, 10, 5)
-            : machineSpot(x, y, CAB_W, CAB_FOOT);
+          : cab instanceof RouletteTable
+            ? {
+                stand: { x, y: y + TABLE_STAND + 2 },
+                solid: { x: x - RTABLE_W / 2 + 2, y: y - RTABLE_H - 4, w: RTABLE_W - 4, h: RTABLE_H + 4 + TABLE_STAND },
+                at: (px: number, py: number) => Math.abs(px - x) < RTABLE_W / 2 + 4 && py >= y + TABLE_STAND - 1 && py <= y + TABLE_STAND + 16,
+              }
+            : cab instanceof PrizeWheel
+              ? machineSpot(x, y, 10, 5)
+              : machineSpot(x, y, CAB_W, CAB_FOOT);
       this.spots.set(cab, spot);
-      if (!(cab instanceof BlackjackTable)) this.solids.push(spot.solid!);
+      if (!(cab instanceof BlackjackTable) && !(cab instanceof RouletteTable)) this.solids.push(spot.solid!);
     }
-    const tableBox = [...this.spots.entries()].filter(([c]) => c instanceof BlackjackTable).map(([, s]) => s.solid!);
+    const tableBox = [...this.spots.entries()].filter(([c]) => c instanceof BlackjackTable || c instanceof RouletteTable).map(([, s]) => s.solid!);
     this.walker = new Walker(() => this.bounds, () => [...this.solids, ...tableBox]);
     this.tableSolids = tableBox;
     for (const cab of this.cabinets) {
@@ -321,7 +329,7 @@ export class ArcadeCasino extends Phaser.Scene {
     // The table is deeper than a cabinet and it is solid now, so twelve
     // pixels below its front edge is INSIDE it: you would come back from a
     // hand stood in the middle of the felt.
-    const drop = def.fixture === 'table' ? TABLE_STAND + 2 : 12;
+    const drop = def.fixture === 'table' || def.fixture === 'roulette' ? TABLE_STAND + 2 : 12;
     return {
       x: Phaser.Math.Clamp(def.x, ROOM.left + 12, ROOM.right - 12),
       y: Phaser.Math.Clamp(def.y + drop, ROOM.top + 12, ROOM.bottom - 8),
@@ -472,7 +480,9 @@ export class ArcadeCasino extends Phaser.Scene {
       this.say(
         cab.def.fixture === 'table'
           ? `NO MONEY, NO CARDS — THE MINIMUM IS ${cost}`
-          : `NO MONEY, NO SPIN — IT IS ${cost} A GO`,
+          : cab.def.fixture === 'roulette'
+            ? `NO MONEY, NO CHIPS — THE MINIMUM IS ${cost}`
+            : `NO MONEY, NO SPIN — IT IS ${cost} A GO`,
       );
       return;
     }
@@ -529,6 +539,8 @@ export class ArcadeCasino extends Phaser.Scene {
     if (this.walker.active) this.walker.drive(this.player, delta);
     else this.player.move(dx, dy, delta, this.bounds);
     collide(this.player, before, this.solids);
+    // the roulette table is solid like Froggy's (but low: no cover from the police)
+    collide(this.player, before, this.tableSolids.filter((b) => this.cabinets.some((c) => c instanceof RouletteTable && this.spots.get(c)?.solid === b)));
     this.keepOffTheTable(before);
 
     const bal = ledger.balance();
@@ -613,7 +625,9 @@ export class ArcadeCasino extends Phaser.Scene {
             ? this.dealerHasAQuestion()
               ? '[E] TALK TO THE DEALER'
               : `[E] ${t.cab.def.title} - ${cost} MIN BET`
-            : `[E] ${t.cab.def.title} - ${cost} A SPIN`;
+            : t.cab.def.fixture === 'roulette'
+              ? `[E] ${t.cab.def.title} - ${cost} MIN BET`
+              : `[E] ${t.cab.def.title} - ${cost} A SPIN`;
       } else {
         msg = `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
       }

@@ -48,10 +48,10 @@ import { abilityIconURL, drawAbilityIcon } from '../art/abilityIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
 import { backPlate } from '../ui/plate';
 import { touchControls, type KeyName } from '../ui/touchControls';
-import { capLabel, codeFor, gameKeys, setKeyScope } from '../core/keymap';
+import { capLabel, codeFor, gameKeys, relabelKeys, setKeyScope } from '../core/keymap';
 
 /** The Clash's own keys: J K L fire abilities 1 2 3 (log B6), movable in CONTROLS. */
-const CLASH_KEYS = ['KeyJ', 'KeyK', 'KeyL'];
+const CLASH_KEYS = ['KeyJ', 'KeyK', 'KeyL', 'KeyI'];
 // (named once, up front: the keycaps on the strip are drawn before the bell)
 gameKeys('creatureclash', CLASH_KEYS);
 import { isTouch } from '../core/device';
@@ -322,6 +322,10 @@ interface Hazard {
   go?: () => void;
   /** Whose it is (a boss's, unless a move of a creature's put it down). */
   owner?: Fighter;
+  /** It drifts after its target at this speed (px/s) until it goes off. */
+  seek?: number;
+  /** The sphinx's riddle: the one true answer (an eye), or a false one (a mirror). */
+  riddle?: 'true' | 'false';
 }
 
 /**
@@ -723,6 +727,11 @@ export class CreatureArena extends Phaser.Scene {
     // (3v3: whoever won the last bout walks in with the health it had)
     if (mini?.myHp !== undefined) this.me.hp = Math.max(1, Math.min(this.me.max, mini.myHp));
     if (mini?.foeHp !== undefined) this.foe.hp = Math.max(1, Math.min(this.foe.max, mini.foeHp));
+    // (user, 5 Nov) ...and its cooldowns and ultimate exactly where they were
+    if (mini?.myCds) this.me.cds = [...mini.myCds];
+    if (mini?.foeCds) this.foe.cds = [...mini.foeCds];
+    if (mini?.myUlt !== undefined) this.me.ultT = mini.myUlt;
+    if (mini?.foeUlt !== undefined) this.foe.ultT = mini.foeUlt;
 
     this.paintGround();
     this.g = this.add.graphics().setDepth(10);
@@ -784,8 +793,8 @@ export class CreatureArena extends Phaser.Scene {
     this.input.keyboard!.on('keydown-THREE', () => this.keyFire(2));
     // SPACE: the chosen ability, auto-aimed
     this.input.keyboard!.on('keydown-SPACE', () => this.quickFire(this.sel));
-    // Q: the ULTIMATE, once it is up
-    this.input.keyboard!.on('keydown-Q', () => this.useUlt(this.me));
+    // I: the ULTIMATE, once it is up (user, 5 Nov: I, not Q -- over J K L)
+    this.input.keyboard!.on('keydown-I', () => this.useUlt(this.me));
     this.input.addPointer(2);
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.down(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.moveP(p));
@@ -906,7 +915,7 @@ export class CreatureArena extends Phaser.Scene {
     this.showInfo(this.sel);
     if (this.training) {
       // (under the move's description when that is up at the top, on a phone held sideways)
-      const t = centerText(this, ARENA.x + ARENA.w / 2, this.touch ? ARENA.y + 50 : ARENA.y + 10, 'TRAINING MODE DOES NOT AWARD TOKENS.', PALETTE.fog).setDepth(2401);
+      const t = centerText(this, ARENA.x + ARENA.w / 2, this.touch ? ARENA.y + 50 : ARENA.y + 24, 'TRAINING MODE DOES NOT AWARD TOKENS.', PALETTE.fog).setDepth(2401);
       backPlate(this, t);
       this.time.delayedCall(3500, () => this.tweens.add({ targets: t, alpha: 0, duration: 500, onComplete: () => t.destroy() }));
     }
@@ -1714,6 +1723,7 @@ export class CreatureArena extends Phaser.Scene {
     // ...and that way out is LEAVE in the pause menu (see pauseExit); on a
     // desktop the slot holds the gear that opens it
     // (Esc on a keyboard, the gear on a phone)
+    if (this.training) this.paintTrainButtons();
     this.layAtkBtns();
     // the seconds left on each move while it reloads (placed every frame:
     // the buttons move when the phone is turned)
@@ -1776,6 +1786,8 @@ export class CreatureArena extends Phaser.Scene {
 
   private down(p: Phaser.Input.Pointer): void {
     if (this.over || this.dialog) return;
+    // (a tap on a training button is the button's, not the arena's)
+    if (this.trainBtnZone?.contains(p.x, p.y)) return;
     const b = this.hitBtn(p);
     if (b >= 0) {
       // C7: on a phone a tap on an ability uses it, at the other one
@@ -1851,7 +1863,7 @@ export class CreatureArena extends Phaser.Scene {
           // the ability's own pixel icon, as the arena draws it -- not an emoji
           const icon = abilityIconURL(a, ELEMENTS[this.me.c.element].light);
           return { label: `${inf.emoji}\n${word}`, icon, key: keys[i], primary: i === 0 };
-        }).concat(this.me.ult ? [{ label: '★\nULT', icon: undefined as unknown as string, key: 'Q' as KeyName, primary: false }] : []),
+        }).concat(this.me.ult ? [{ label: '★\nULT', icon: undefined as unknown as string, key: 'I' as KeyName, primary: false }] : []),
       },
       'CreatureArena',
     );
@@ -1932,6 +1944,49 @@ export class CreatureArena extends Phaser.Scene {
       },
     });
     this.dialog.setDepth(3000);
+  }
+
+  /** Training: does the dummy fight back? (ALLOW ATTACK) */
+  private trainAttack = false;
+  /** Where the training buttons are, so a tap on one is not also a tap on the arena. */
+  private trainBtnZone: Phaser.Geom.Rectangle | null = null;
+
+  /**
+   * ---- THE TRAINING BUTTONS (user, 5 Nov).  ALLOW ATTACK turns the dummy's
+   * fighting back on and off -- on, it fights as a real opponent does, so
+   * healing, shields and damage taken can be tried -- and FULL HEAL puts your
+   * creature straight back to full.  They sit on the arena's top edge, in the
+   * middle, small enough to leave the fight in view.
+   */
+  private paintTrainButtons(): void {
+    const y = ARENA.y + 7;
+    const w = 66;
+    const atk = button(this, GAME_W / 2 - 35, y, 'ATTACK: OFF', () => {
+      this.trainAttack = !this.trainAttack;
+      lbl.setText(this.trainAttack ? 'ATTACK: ON' : 'ATTACK: OFF');
+      box.setFillStyle(this.trainAttack ? 0x5a1a22 : PALETTE.plum);
+      this.ai.think = 0;
+      audio.sfx('ui_blip', 0.5);
+    }, { width: w, height: 11 }).setDepth(70);
+    const box = atk.list[0] as Phaser.GameObjects.Rectangle;
+    const lbl = atk.list[1] as Phaser.GameObjects.BitmapText;
+    button(this, GAME_W / 2 + 35, y, 'FULL HEAL', () => {
+      this.fullHeal(this.me);
+      this.fx.push({ kind: 'ring', x: this.me.x, y: this.me.y, r: 14, t: 0, life: 0.4, col: 0x8ae88a });
+      audio.sfx('chime', 0.5);
+    }, { width: w, height: 11, fill: 0x1f4a2a }).setDepth(70);
+    this.trainBtnZone = new Phaser.Geom.Rectangle(GAME_W / 2 - 35 - w / 2 - 2, y - 8, w * 2 + 12, 16);
+  }
+
+  /** Back to full health, with nothing left on it that hurts or holds it. */
+  private fullHeal(f: Fighter): void {
+    f.hp = f.max;
+    f.burn = 0;
+    f.slow = 0;
+    f.stun = 0;
+    f.blind = 0;
+    f.root = 0;
+    for (const k of ['poison', 'bleed', 'weak', 'shred', 'silence', 'chill', 'mired', 'u_fear', 'u_poly'] as const) if (f.st[k]) f.st[k] = 0;
   }
 
   private askQuit(): void {
@@ -2647,6 +2702,61 @@ export class CreatureArena extends Phaser.Scene {
         } });
         f.root = Math.max(f.root, 1);
         return true;
+      // ---- (5 Nov) the five new bosses' own moves
+      case 'skyfall': {
+        // up out of reach; the shadow follows them; down on the shadow
+        f.invuln = Math.max(f.invuln, 1.25);
+        f.st.invis = Math.max(f.st.invis ?? 0, 1.2);
+        const mark: Hazard = { kind: 'mark', x: o.x, y: o.y, r: 18, t: 1.2, t0: 1.2, dmg: a.dmg, owner: f, seek: 46, go: () => {
+          if (this.over || f.hp <= 0) return;
+          f.x = cx(mark.x);
+          f.y = cy(mark.y);
+          f.st.invis = 0;
+          this.cameras.main.shake(140, 0.006);
+        } };
+        this.hazards.push(mark);
+        audio.sfx('wind_gust', 0.6);
+        return true;
+      }
+      case 'piston_punch': {
+        // a line out at them, then the fist down it
+        const len = a.reach;
+        this.hazards.push({ kind: 'line', x: f.x, y: f.y, x2: cx(f.x + ux * len), y2: cy(f.y + uy * len), r: 7, t: 0.5, t0: 0.5, dmg: a.dmg, owner: f, go: () => {
+          if (this.segDist(o.x, o.y, f.x, f.y, f.x + ux * len, f.y + uy * len) < 11) {
+            o.kx += ux * 340;
+            o.ky += uy * 340;
+          }
+          audio.sfx('item_thud', 0.6);
+        } });
+        return true;
+      }
+      case 'foresight': {
+        // where they will be in a second
+        const v = o === this.me ? this.meV : { x: 0, y: 0 };
+        this.hazards.push({ kind: 'mark', x: cx(o.x + v.x), y: cy(o.y + v.y), r: 16, t: 1.0, t0: 1.0, dmg: a.dmg, owner: f });
+        audio.sfx('chime', 0.5);
+        return true;
+      }
+      case 'hail_ring':
+        f.st.hail = a.reach;
+        f.st.n_hail = 6;
+        audio.sfx('glass_crack', 0.4);
+        return true;
+      case 'tail_sweep': {
+        // a half circle in front of it, thrown back
+        const fa = Math.atan2(o.y - f.y, o.x - f.x);
+        for (let k = 0; k <= 6; k++) {
+          const sa = fa - Math.PI / 2 + (k / 6) * Math.PI;
+          this.fx.push({ kind: 'spark', x: f.x + Math.cos(sa) * a.reach * 0.8, y: f.y + Math.sin(sa) * a.reach * 0.8, r: 4, t: 0, life: 0.3, col });
+        }
+        if (Math.hypot(o.x - f.x, o.y - f.y) < a.reach + 6 * o.scale) {
+          this.hit(f, o, dmg, a);
+          o.kx += ux * 300;
+          o.ky += uy * 300;
+        }
+        audio.sfx('throw_whoosh', 0.6);
+        return true;
+      }
       case 'storm_eye':
         f.st.eye = 4;
         audio.sfx('wind_gust', 0.6);
@@ -2655,14 +2765,37 @@ export class CreatureArena extends Phaser.Scene {
         this.caveIn = { owner: f, t: 6, tick: 0 };
         audio.sfx('crumble', 0.7);
         return true;
-      case 'mirror_riddle':
-        for (let k = 0; k < 2; k++) {
-          const sx = cx(ARENA.x + 40 + Math.random() * (ARENA.w - 80));
-          const sy = cy(ARENA.y + 20 + Math.random() * (ARENA.h - 40));
-          this.minions.push({ owner: f, kind: 'copy', x: sx, y: sy, ang: 0, life: 6, hp: 1, cd: 0 });
+      case 'mirror_riddle': {
+        // ---- THE RIDDLE (user, 5 Nov: in place of the mirror copies).  Three
+        // glyphs ring the other one; only one is the truth -- the eye.  Be
+        // standing in it when the riddle closes, or answer for it: the hit,
+        // every move set back, and a moment frozen.  It moves them where the
+        // sphinx wants them -- usually straight down its pounce line.
+        const base = Math.random() * Math.PI * 2;
+        const truth = Math.floor(Math.random() * 3);
+        const T = 2.2;
+        const R = 11;
+        for (let k = 0; k < 3; k++) {
+          const px = cx(o.x + Math.cos(base + (k * Math.PI * 2) / 3) * 28);
+          const py = cy(o.y + Math.sin(base + (k * Math.PI * 2) / 3) * 22);
+          const right = k === truth;
+          this.hazards.push({ kind: 'mark', x: px, y: py, r: R, t: T, t0: T, dmg: 0, owner: f, riddle: right ? 'true' : 'false', go: right ? () => {
+            if (this.over || f.hp <= 0 || o.hp <= 0) return;
+            if (Math.hypot(o.x - px, o.y - py) <= R + 3) {
+              const n = centerText(this, o.x, o.y - 18, 'SOLVED', 0xfff4a0).setDepth(60);
+              this.tweens.add({ targets: n, y: n.y - 8, alpha: 0, duration: 700, onComplete: () => n.destroy() });
+              return;
+            }
+            this.hit(f, o, dmg, a);
+            for (let i = 0; i < 3; i++) o.cds[i] += SILENCE_S;
+            o.stun = Math.max(o.stun, 0.6);
+            this.fx.push({ kind: 'ring', x: o.x, y: o.y, r: 14, t: 0, life: 0.4, col: 0xfff4a0 });
+            audio.sfx('glass_crack', 0.6);
+          } : undefined });
         }
-        audio.sfx('glass_crack', 0.5);
+        audio.sfx('chime', 0.6);
         return true;
+      }
       case 'ink_blackout':
         o.blind = Math.max(o.blind, 3);
         o.st.ink = 3;
@@ -4463,6 +4596,114 @@ export class CreatureArena extends Phaser.Scene {
         every(1000, Math.round(e.t), () => (this.heal(f, BANISH_HEAL), this.floatNum(f, BANISH_HEAL, 0x8ae88a, '+')));
         audio.sfx('chime', 0.5);
         break;
+      // ---- (5 Nov) the five new bosses' ultimates
+      case 'hurricane': {
+        // the whole arena whirls: round and round, and the debris hits
+        const mx = ARENA.x + ARENA.w / 2;
+        const my = ARENA.y + ARENA.h / 2;
+        let cd = 0;
+        every(50, Math.round(e.t / 0.05), () => {
+          const dx2 = o.x - mx;
+          const dy2 = o.y - my;
+          const dd = Math.hypot(dx2, dy2) || 1;
+          if (!o.st.anchor) {
+            o.kx += (-dy2 / dd) * 70;
+            o.ky += (dx2 / dd) * 70;
+          }
+          for (let k = 0; k < 2; k++) {
+            const a = Math.random() * Math.PI * 2;
+            const r = 20 + Math.random() * 70;
+            this.fx.push({ kind: 'spark', x: mx + Math.cos(a) * r * 1.4, y: my + Math.sin(a) * r * 0.7, r: 2, t: 0, life: 0.25, col: 0xf0fff4 });
+          }
+          cd -= 0.05;
+          if (cd <= 0) {
+            cd = 0.5;
+            this.hit(f, o, Math.max(1, Math.round(e.dps / 2)), null);
+          }
+        });
+        this.cameras.main.shake(300, 0.004);
+        audio.sfx('wind_gust', 0.8);
+        break;
+      }
+      case 'pendulum': {
+        // a blade hung from the top wall, swinging the width of the arena
+        const px = ARENA.x + ARENA.w / 2;
+        const py = ARENA.y + 2;
+        const len = ARENA.h * 0.92;
+        let time = 0;
+        let cd = 0;
+        every(40, Math.round(e.t / 0.04), () => {
+          time += 0.04;
+          cd -= 0.04;
+          const a = Math.PI / 2 + Math.sin(time * 2.2) * 1.15;
+          const x2 = px + Math.cos(a) * len;
+          const y2 = py + Math.sin(a) * len;
+          this.fx.push({ kind: 'beam', x: px, y: py, x2, y2, r: 1, t: 0, life: 0.05, col: 0x8a8a9a }, { kind: 'boom', x: x2, y: y2, r: 7, t: 0, life: 0.05, col: light });
+          if (cd <= 0 && Math.hypot(o.x - x2, o.y - y2) < 9 + 5 * o.scale) {
+            cd = 0.6;
+            this.hit(f, o, e.dmg, null);
+          }
+        });
+        audio.sfx('throw_whoosh', 0.6);
+        break;
+      }
+      case 'judgement': {
+        // a cross of light through them, the width and height of the arena
+        const [jx, jy] = [o.x, o.y];
+        this.fx.push({ kind: 'beam', x: ARENA.x, y: jy, x2: ARENA.x + ARENA.w, y2: jy, r: 0.8, t: 0, life: 1, col: 0xfff4c0 }, { kind: 'beam', x: jx, y: ARENA.y, x2: jx, y2: ARENA.y + ARENA.h, r: 0.8, t: 0, life: 1, col: 0xfff4c0 });
+        later(1000, () => {
+          this.fx.push({ kind: 'beam', x: ARENA.x, y: jy, x2: ARENA.x + ARENA.w, y2: jy, r: 6, t: 0, life: 0.4, col: 0xffffff }, { kind: 'beam', x: jx, y: ARENA.y, x2: jx, y2: ARENA.y + ARENA.h, r: 6, t: 0, life: 0.4, col: 0xffffff });
+          this.cameras.main.flash(150, 255, 250, 210, false);
+          if (Math.abs(o.y - jy) < 8 + 5 * o.scale || Math.abs(o.x - jx) < 8 + 5 * o.scale) this.hit(f, o, e.dmg, null);
+          audio.sfx('arcane_blast', 0.8);
+        });
+        break;
+      }
+      case 'iceberg': {
+        const [ix, iy] = inArena(o.x, o.y);
+        this.fx.push({ kind: 'warn', x: ix, y: iy, r: 22, t: 0, life: 0.7, col: 0xbfe8ff });
+        later(700, () => {
+          this.fx.push({ kind: 'boom', x: ix, y: iy, r: 22, t: 0, life: 0.45, col: 0xe8fcff });
+          this.cameras.main.shake(200, 0.008);
+          const dd = Math.hypot(o.x - ix, o.y - iy);
+          if (dd < 22 + 5 * o.scale) {
+            this.hit(f, o, e.dmg, null);
+            o.kx += ((o.x - ix) / (dd || 1)) * 320;
+            o.ky += ((o.y - iy) / (dd || 1)) * 320;
+          }
+          // and it stays, as cover
+          const parts: Prop[] = [[-7, 0], [7, 0], [0, -6]].map(([u, v]) => ({ x: Phaser.Math.Clamp(ix + u, ARENA.x + 6, ARENA.x + ARENA.w - 6), y: Phaser.Math.Clamp(iy + v, ARENA.y + 6, ARENA.y + ARENA.h - 6), r: 7, hp: 30, maxHp: 30 }));
+          const clear = parts.filter((q) => Math.hypot(q.x - o.x, q.y - o.y) > q.r + BODY_R * o.scale + 2 && Math.hypot(q.x - f.x, q.y - f.y) > q.r + BODY_R * f.scale + 2);
+          if (clear.length) {
+            this.barriers.push({ kind: wallLook('glacier_slab', 'frost'), parts: clear, seed: 1, life: 6, max: 6, owner: null });
+            this.props.push(...clear);
+            this.repaintCover();
+          }
+          audio.sfx('glass_crack', 0.7);
+        });
+        break;
+      }
+      case 'constrict': {
+        // a ring of fire round where they stand, tightening
+        const [ccx, ccy] = [o.x, o.y];
+        const n = Math.round(e.t / 0.1);
+        let cd = 0;
+        every(100, n, (k) => {
+          const r = 42 - (30 * k) / n;
+          for (let q = 0; q < 10; q++) {
+            const a = (q / 10) * Math.PI * 2 + k * 0.25;
+            this.fx.push({ kind: 'spark', x: ccx + Math.cos(a) * r, y: ccy + Math.sin(a) * r * 0.8, r: 3, t: 0, life: 0.12, col: q % 2 ? 0xff6a20 : 0xffb040 });
+          }
+          cd -= 0.1;
+          const dd = Math.hypot((o.x - ccx), (o.y - ccy) / 0.8);
+          if (cd <= 0 && Math.abs(dd - r) < 7 + 4 * o.scale) {
+            cd = 0.5;
+            this.hit(f, o, Math.max(1, Math.round(e.dps / 2)), null);
+          }
+        });
+        audio.sfx('poison_hiss', 0.6);
+        break;
+      }
       case 'snowball':
         this.minions.push({ owner: f, kind: 'snowball', x: f.x + ux * 10, y: f.y + uy * 10, ang: 0, life: 3, hp: 0, cd: 0, dmg: e.dmg, vx: ux * 130, vy: uy * 130, size: 1 });
         audio.sfx('throw_whoosh', 0.5);
@@ -4509,7 +4750,7 @@ export class CreatureArena extends Phaser.Scene {
       u.fillStyle(0x10101c, 0.85).fillRect(ARENA.x + ARENA.w - 2 - tw, ARENA.y + 1, tw, 9);
       u.lineStyle(1, rdy ? 0xff6a6a : 0x4a4a68, 1).strokeRect(ARENA.x + ARENA.w - 2 - tw, ARENA.y + 1, tw, 9);
     }
-    this.ultText.setVisible(show).setText(ready ? 'ULT  [Q]' : locked ? `LOCKED ${Math.ceil(f.ultT)}` : `ULT ${Math.ceil(f.ultT)}S`).setTint(ready ? 0xffd45e : locked ? 0x8a8ab0 : 0xc8a8ff);
+    this.ultText.setVisible(show).setText(ready ? `ULT  [${relabelKeys('I')}]` : locked ? `LOCKED ${Math.ceil(f.ultT)}` : `ULT ${Math.ceil(f.ultT)}S`).setTint(ready ? 0xffd45e : locked ? 0x8a8ab0 : 0xc8a8ff);
     const fo = this.foe;
     const foeShow = !!fo.ult && !this.over && !this.training;
     this.foeUltText.setVisible(foeShow).setText(fo.ultT <= 0 && this.started ? 'FOE ULT READY' : `FOE ULT ${Math.ceil(fo.ultT)}S`).setTint(fo.ultT <= 0 && this.started ? 0xff8a8a : 0xb0b0d0);
@@ -4601,6 +4842,12 @@ export class CreatureArena extends Phaser.Scene {
       to.st.gulp = 0;
       this.heal(to, Math.round(to.max * 0.22));
       this.floatNum(to, 0, 0x8ae88a, 'GULP ');
+      return;
+    }
+    // a ring of hail: each stone takes one shot
+    if ((to.st.hail ?? 0) > 0 && (to.st.n_hail ?? 0) > 0 && shotLike) {
+      to.st.n_hail -= 1;
+      this.fx.push({ kind: 'spark', x: to.x, y: to.y - 4, r: 6, t: 0, life: 0.2, col: 0xe8fcff });
       return;
     }
     // a sponge puff (ultimate) soaks it up, to fire back when it ends
@@ -5260,7 +5507,26 @@ export class CreatureArena extends Phaser.Scene {
     }
     if (f.stun <= 0 && f.root <= 0) this.step(f, this.ai.mx * 26, this.ai.my * 20, dt);
     f.face = this.me.x >= f.x ? -1 : 1;
-    this.me.hp = Math.min(this.me.max, this.me.hp + this.me.max * 0.12 * dt);
+    this.trainRespawns();
+  }
+
+  /**
+   * ---- TRAINING: NOBODY STAYS DOWN (user, 5 Nov).  The dummy gets back up,
+   * and so does your creature -- full health, back on its spot, nothing on
+   * it -- so testing goes on without starting over.  (Health no longer
+   * creeps back on its own: FULL HEAL does that, so a heal can be watched.)
+   */
+  private trainRespawns(): void {
+    const f = this.foe;
+    const me = this.me;
+    if (me.hp <= 0) {
+      this.fullHeal(me);
+      me.x = ARENA.x + 40;
+      me.y = ARENA.y + ARENA.h / 2;
+      this.fx.push({ kind: 'ring', x: me.x, y: me.y, r: 16, t: 0, life: 0.4, col: 0x8ae88a });
+      const n = centerText(this, GAME_W / 2, ARENA.y + 24, `${me.c.name.toUpperCase()} IS BACK UP`, 0x8ae88a).setDepth(60);
+      this.tweens.add({ targets: n, alpha: 0, delay: 700, duration: 500, onComplete: () => n.destroy() });
+    }
     if (f.hp <= 0) {
       f.hp = f.max;
       f.x = ARENA.x + ARENA.w - 50;
@@ -5337,8 +5603,12 @@ export class CreatureArena extends Phaser.Scene {
     // (smoothed, for an opponent that leads its shots)
     this.meV.x += ((me.x - px0) / dt - this.meV.x) * Math.min(1, dt * 6);
     this.meV.y += ((me.y - py0) / dt - this.meV.y) * Math.min(1, dt * 6);
-    if (this.training) this.trainDummy(dt);
-    else this.think(dt);
+    // (training: the dummy only fights back while ALLOW ATTACK is on)
+    if (this.training && !this.trainAttack) this.trainDummy(dt);
+    else {
+      this.think(dt);
+      if (this.training) this.trainRespawns();
+    }
     if (this.sim) {
       // (the other side's velocity, for this brain to lead its shots with)
       const fb = this.meBrain;
@@ -5649,6 +5919,13 @@ export class CreatureArena extends Phaser.Scene {
     // heat lance, a dive bomb, the maw's jaws)
     for (const h of this.hazards) {
       h.t -= dt;
+      if (h.seek && h.t > 0) {
+        const tg = this.other(h.owner ?? this.foe);
+        const dd = Math.hypot(tg.x - h.x, tg.y - h.y) || 1;
+        const st = Math.min(dd, h.seek * dt);
+        h.x += ((tg.x - h.x) / dd) * st;
+        h.y += ((tg.y - h.y) / dd) * st;
+      }
       if (h.t > 0) continue;
       const own = h.owner ?? this.foe;
       const tgt = this.other(own);
@@ -5794,6 +6071,17 @@ export class CreatureArena extends Phaser.Scene {
           kind: 'line', x: foe.x, y: foe.y, x2: foe.x + Math.cos(a) * len, y2: foe.y + Math.sin(a) * len, t: 1.0, dmg: 0,
           go: () => {
             if (this.over || foe.hp <= 0) return;
+            // (user, 5 Nov) the pounce smashes every wall anyone put up on its
+            // line -- the unbreakable ones too, whoever's they are
+            const x2 = foe.x + Math.cos(a) * len;
+            const y2 = foe.y + Math.sin(a) * len;
+            for (const bar of this.barriers) {
+              if (bar.max === undefined || bar.life <= 0) continue;
+              if (!bar.parts.some((q) => this.segDist(q.x, q.y, foe.x, foe.y, x2, y2) < q.r + 8)) continue;
+              bar.life = 0;
+              for (const q of bar.parts) this.fx.push({ kind: 'boom', x: q.x, y: q.y, r: q.r + 4, t: 0, life: 0.3, col: 0xfff4c0 });
+              audio.sfx('crumble', 0.6);
+            }
             foe.dash = { vx: Math.cos(a) * 330, vy: Math.sin(a) * 330, t: len / 330, dmg: def.dmg, hit: false, a: foe.c.attacks[0] };
             audio.sfx('throw_whoosh', 0.6);
           },
@@ -5817,6 +6105,89 @@ export class CreatureArena extends Phaser.Scene {
         for (let i = 0; i < 3; i++) put({ kind: 'ring', x: foe.x, y: foe.y, r: 30 + i * 32, t: 1.0 + i * 0.45 });
         audio.sfx('item_thud', 0.6);
         break;
+      // ---- (5 Nov) the lich's and the maw's own, and the five new bosses'
+      case 'souls':
+        // souls let loose round the arena, drifting after you round the cover
+        for (let i = 0; i < def.n; i++) {
+          const a = (i / def.n) * Math.PI * 2 + Math.random();
+          put({ x: ARENA.x + ARENA.w / 2 + Math.cos(a) * ARENA.w * 0.4, y: ARENA.y + ARENA.h / 2 + Math.sin(a) * ARENA.h * 0.4, t: 2.6 + i * 0.3, seek: 34 });
+        }
+        audio.sfx('voice_whisper', 0.5);
+        break;
+      case 'inhale': {
+        // it breathes in: you are dragged toward its jaws, and they snap shut
+        const tg = this.other(foe);
+        const dd = Math.hypot(tg.x - foe.x, tg.y - foe.y) || 1;
+        put({ x: foe.x + ((tg.x - foe.x) / dd) * 16, y: foe.y + ((tg.y - foe.y) / dd) * 12, t: 1.3, r: def.r });
+        let k = 0;
+        this.time.addEvent({
+          delay: 50,
+          repeat: 23,
+          callback: () => {
+            if (this.over || foe.hp <= 0 || tg.st.anchor) return;
+            const d2 = Math.hypot(tg.x - foe.x, tg.y - foe.y) || 1;
+            tg.kx += ((foe.x - tg.x) / d2) * 34;
+            tg.ky += ((foe.y - tg.y) / d2) * 34;
+            if (k++ % 3 === 0) this.fx.push({ kind: 'spark', x: tg.x + (Math.random() - 0.5) * 12, y: tg.y + (Math.random() - 0.5) * 10, r: 2, t: 0, life: 0.3, col: col.light });
+          },
+        });
+        audio.sfx('wind_gust', 0.6);
+        break;
+      }
+      case 'spiral':
+        // strikes winding out from the middle of the arena, one after another
+        for (let i = 0; i < def.n; i++) {
+          const a = i * 0.95 + Math.random() * 0.2;
+          const rr = 8 + i * 11;
+          put({ x: ARENA.x + ARENA.w / 2 + Math.cos(a) * rr, y: ARENA.y + ARENA.h / 2 + Math.sin(a) * rr * 0.7, t: 0.9 + i * 0.16 });
+        }
+        audio.sfx('wind_gust', 0.5);
+        break;
+      case 'checker': {
+        // the floor ticks: every other tile, then the rest
+        const cols = 7;
+        const rows = 4;
+        for (let j = 0; j < rows; j++) {
+          for (let i = 0; i < cols; i++) {
+            const x = ARENA.x + ((i + 0.5) / cols) * ARENA.w;
+            const y = ARENA.y + ((j + 0.5) / rows) * ARENA.h;
+            put({ x, y, t: (i + j) % 2 ? 1.1 : 2.2 });
+          }
+        }
+        audio.sfx('item_thud', 0.5);
+        break;
+      }
+      case 'clockhand': {
+        // its shadow sweeps round it like the hand of a clock, starting behind you
+        const a0 = Math.atan2(at.y - foe.y, at.x - foe.x) - 1.1;
+        for (let i = 0; i < def.n; i++) {
+          const a = a0 + i * 0.32;
+          put({ kind: 'line', x: foe.x, y: foe.y, x2: foe.x + Math.cos(a) * 260, y2: foe.y + Math.sin(a) * 260, t: 0.8 + i * 0.14 });
+        }
+        audio.sfx('chime', 0.5);
+        break;
+      }
+      case 'flood': {
+        // the half of the arena you are in floods: be on the other half
+        const left = at.x < ARENA.x + ARENA.w / 2;
+        const x0 = left ? ARENA.x : ARENA.x + ARENA.w / 2;
+        put({ kind: 'line', x: x0 + 6, y: ARENA.y + ARENA.h / 2, x2: x0 + ARENA.w / 2 - 6, y2: ARENA.y + ARENA.h / 2, r: ARENA.h / 2 - 4, t: 1.5, go: () => {
+          const tg = this.other(foe);
+          const inside = left ? tg.x < ARENA.x + ARENA.w / 2 : tg.x >= ARENA.x + ARENA.w / 2;
+          if (inside) tg.slow = Math.max(tg.slow, 2);
+        } });
+        audio.sfx('water_plip', 0.6);
+        break;
+      }
+      case 'trail': {
+        // fire where you have just been, spot by spot along your path
+        const tg = this.other(foe);
+        const path = (tg.hist ?? []).slice(-def.n);
+        path.forEach(([x, y], i) => put({ x, y, t: 0.7 + i * 0.12 }));
+        if (!path.length) put({ x: at.x, y: at.y, t: 0.8 });
+        audio.sfx('poison_hiss', 0.5);
+        break;
+      }
     }
   }
 
@@ -5925,7 +6296,8 @@ export class CreatureArena extends Phaser.Scene {
     const run = currentMini();
     const kind = run?.kind ?? 'melee';
     const loser = (won ? this.foe : this.me).c.name.toUpperCase();
-    const r = boutOver(won, Math.max(1, Math.round(won ? this.me.hp : this.foe.hp)));
+    const sv = won ? this.me : this.foe;
+    const r = boutOver(won, Math.max(1, Math.round(sv.hp)), [sv.cds[0], sv.cds[1], sv.cds[2]], sv.ultT);
     audio.sfx(r.over ? (r.won ? 'cha_ching' : 'death_stinger') : 'bell_ding', 0.6);
     this.time.delayedCall(700, () => {
       const box = this.add.container(0, 0).setDepth(2000);
@@ -5968,51 +6340,6 @@ export class CreatureArena extends Phaser.Scene {
    * a line for a shot, a beam or a charge, a cone for a fan, a ring for an
    * area or a blink, the throw ring for a trap, a halo for a guard.
    */
-  private drawReach(g: Phaser.GameObjects.Graphics): void {
-    const me = this.me;
-    const a = me.c.attacks[this.sel];
-    const inf = attackInfo(a, me.c.element);
-    const col = ELEMENTS[me.c.element].light;
-    let ax = this.foe.x - me.x;
-    let ay = this.foe.y - me.y;
-    if (!this.touch && !this.band) {
-      const p = this.input.activePointer;
-      ax = p.x - me.x;
-      ay = p.y - me.y;
-    }
-    const m = Math.hypot(ax, ay) || 1;
-    const ux = ax / m;
-    const uy = ay / m;
-    const r = inf.reachPx;
-    g.lineStyle(1, col, 0.28);
-    if (a.kind === 'bolt' || a.kind === 'beam' || a.kind === 'dash') {
-      for (let d = 6; d < r; d += 6) g.fillStyle(col, 0.3).fillRect(me.x + ux * d, me.y + uy * d, 1, 1);
-      g.strokeCircle(me.x + ux * r, me.y + uy * r, 2);
-    } else if (a.kind === 'spread') {
-      const ang = Math.atan2(uy, ux);
-      for (const k of [-0.26, 0, 0.26]) {
-        for (let d = 6; d < r; d += 8) g.fillStyle(col, 0.25).fillRect(me.x + Math.cos(ang + k) * d, me.y + Math.sin(ang + k) * d, 1, 1);
-      }
-    } else if (a.kind === 'nova' || a.kind === 'blink' || a.kind === 'mine') {
-      g.strokeCircle(me.x, me.y, r);
-    } else if (a.kind === 'shield' || a.kind === 'aura' || a.kind === 'mend') {
-      g.strokeCircle(me.x, me.y, 11);
-      if (a.kind !== 'shield') g.strokeCircle(me.x, me.y, 14);
-    } else if (a.kind === 'arc') {
-      // where it would land, and the burst it would make there
-      const d = Math.min(r, m);
-      g.strokeCircle(me.x + ux * d, me.y + uy * d, 16);
-      for (let k = 0.15; k < 1; k += 0.15) g.fillStyle(col, 0.3).fillRect(me.x + ux * d * k, me.y + uy * d * k - Math.sin(k * Math.PI) * 10, 1, 1);
-    } else if (a.kind === 'snare') {
-      for (let d = 6; d < r; d += 7) g.fillStyle(col, 0.3).fillRect(me.x + ux * d, me.y + uy * d, 1, 1);
-      g.strokeCircle(me.x + ux * r, me.y + uy * r, 4);
-    } else if (a.kind === 'wall') {
-      // the three pieces, across the way you are pointing
-      const d = Math.max(16, Math.min(a.reach, m));
-      for (const k of [-1, 0, 1]) g.strokeCircle(me.x + ux * d + -uy * k * 9, me.y + uy * d + ux * k * 9, 6);
-    }
-  }
-
   private render(t: number): void {
     const g = this.g;
     g.clear();
@@ -6163,6 +6490,20 @@ export class CreatureArena extends Phaser.Scene {
         const sy = h.y - fall * 120;
         g.lineStyle(3, 0xffb040, 0.5).lineBetween(sx + 10, sy - 18, sx, sy);
         g.fillStyle(0xfff0a0, 1).fillCircle(sx, sy, 3 + k * 2);
+      } else if (h.riddle) {
+        // the riddle's glyphs: the true one an eye in gold, the false ones mirrors
+        const truth = h.riddle === 'true';
+        const c = truth ? 0xffd060 : 0xbfe8ff;
+        g.lineStyle(1, c, 0.9).strokeCircle(h.x, h.y, h.r);
+        g.lineStyle(1, c, 0.35).strokeCircle(h.x, h.y, h.r - 3);
+        g.fillStyle(c, 0.12 + k * 0.2).fillCircle(h.x, h.y, h.r * k);
+        if (truth) {
+          g.fillStyle(0xfff4c0, 1).fillEllipse(h.x, h.y, 9, 5);
+          g.fillStyle(0x2a1a10, 1).fillCircle(h.x, h.y, 1.6);
+        } else {
+          g.fillStyle(0xe8fcff, 0.8).fillTriangle(h.x - 3, h.y + 3, h.x + 3, h.y + 3, h.x, h.y - 4);
+          g.lineStyle(1, 0x6a8aa8, 0.9).lineBetween(h.x - 1, h.y - 1, h.x + 1, h.y + 2);
+        }
       } else {
         g.lineStyle(1, h.holds ? 0x8ae86a : 0xff3a3a, 0.9).strokeCircle(h.x, h.y, h.r);
         g.fillStyle(h.holds ? 0x8ae86a : 0xff3a3a, 0.15 + k * 0.3).fillCircle(h.x, h.y, h.r * k);
@@ -6218,6 +6559,7 @@ export class CreatureArena extends Phaser.Scene {
       } else {
         drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate || f.st.u_ice ? 0 : f.moving ? t * 1.8 : t);
       }
+      if ((f.st.hail ?? 0) > 0) for (let q = 0; q < (f.st.n_hail ?? 0); q++) g.fillStyle(0xe8fcff, 1).fillCircle(f.x + Math.cos(t * 3 + (q * Math.PI) / 3) * 14 * f.scale, f.y + Math.sin(t * 3 + (q * Math.PI) / 3) * 10 * f.scale, 1.6);
       if (f.st.u_ice) g.fillStyle(0xbfe8ff, 0.5).fillRect(f.x - 9 * f.scale, f.y - 11 * f.scale, 18 * f.scale, 18 * f.scale).lineStyle(1, 0xffffff, 0.9).strokeRect(f.x - 9 * f.scale, f.y - 11 * f.scale, 18 * f.scale, 18 * f.scale);
       if (f.st.u_bubble) g.lineStyle(1, 0x9ad0ff, 0.9).strokeCircle(f.x, f.y - 2, 13 * f.scale).fillStyle(0xbfe8ff, 0.2).fillCircle(f.x, f.y - 2, 13 * f.scale);
       if (f.st.u_lift) g.fillStyle(0x000000, 0.3).fillEllipse(f.x, f.y + 6, 12 * f.scale, 3);
@@ -6507,7 +6849,7 @@ export class CreatureArena extends Phaser.Scene {
         touchControls.setCooldown(keys[i], left > 0 ? Phaser.Math.Clamp(left / a.cd, 0, 1) : null, secs);
       });
       // the ULT button counts down too
-      if (this.me.ult) touchControls.setCooldown('Q', this.me.ultT > 0 ? Phaser.Math.Clamp(this.me.ultT / ULT_COOLDOWN_S, 0, 1) : null, `${Math.ceil(this.me.ultT)}`);
+      if (this.me.ult) touchControls.setCooldown('I', this.me.ultT > 0 ? Phaser.Math.Clamp(this.me.ultT / ULT_COOLDOWN_S, 0, 1) : null, `${Math.ceil(this.me.ultT)}`);
     }
     this.drawUlt(u);
     // the chosen attack's line, fading
@@ -6522,7 +6864,7 @@ export class CreatureArena extends Phaser.Scene {
       const k = Phaser.Math.Clamp((age - INFO_HOLD) * INFO_SPEED, 0, this.infoRun);
       this.info.setX(INFO_X - Math.round(k));
     }
-    if (this.started && !this.over) this.drawReach(g);
+    // (user, 5 Nov: no dotted aim line and no targeting ring, desktop or phone)
     this.drawWallClocks(u);
     if (this.touch) {
       const s = this.moveStick;
@@ -6531,9 +6873,6 @@ export class CreatureArena extends Phaser.Scene {
       u.fillStyle(0x000000, 0.35).fillCircle(bx, by, 20);
       u.lineStyle(1, 0xffffff, 0.4).strokeCircle(bx, by, 20);
       u.fillStyle(0xffffff, 0.6).fillCircle(bx + s.dx, by + s.dy, 8);
-    } else if (!this.over) {
-      const p = this.input.activePointer;
-      u.lineStyle(1, 0xffe060, 0.7).strokeCircle(p.x, p.y, 3);
     }
   }
 }

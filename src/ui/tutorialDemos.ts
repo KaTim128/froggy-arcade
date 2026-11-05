@@ -1962,15 +1962,15 @@ export const DEMOS: Record<string, Demo> = {
     prizeWheel(g, 46, 46, 34, a);
     key(g, lbl, 104, 40, 'SPC', k < 0.08, 17);
     lbl(104, 54, 'SPIN', GOLD);
-    lbl(104, 64, '25 A GO', CREAM);
+    lbl(104, 64, '20 A GO', CREAM);
   },
   'wheel.odds': (g, t, lbl) => {
     grad(g, 0x2a1a3a, 0x140c1e);
     // the thinnest faces are the rarest
     const thin = ph(t, 4) < 0.5;
     prizeWheel(g, 46, 46, 34, -Math.PI / 2 - 0.3, thin ? 3 : 0);
-    lbl(104, 30, thin ? '5000' : '1-15', GOLD);
-    lbl(104, 40, thin ? '0.01%' : '62.4%', thin ? RED : GREEN);
+    lbl(104, 30, thin ? '5000' : '1-10', GOLD);
+    lbl(104, 40, thin ? '0.002%' : '38%', thin ? RED : GREEN);
     lbl(104, 56, thin ? 'THIN:' : 'WIDE:', CREAM);
     lbl(104, 64, thin ? 'RARE' : 'OFTEN', CREAM);
   },
@@ -1981,6 +1981,61 @@ export const DEMOS: Record<string, Demo> = {
     for (let i = 0; i < 3; i++) coin(g, 104, lerp(30, 60, seg(k, i * 0.15, 0.5 + i * 0.15)), t + i);
     lbl(104, 72, '+15', GOLD);
     lbl(DEMO_W / 2, 86, 'WHERE IT STOPS IS YOURS', CREAM);
+  },
+
+  // ---------- ROULETTE (the table, top left of the casino)
+  'rt.chips': (g, t, lbl) => {
+    grad(g, 0x1d5c2d, 0x123b1e);
+    // a corner of the layout, and a chip going down on a spot
+    const reds = new Set([1, 3, 5, 7, 9, 12]);
+    for (let c = 0; c < 4; c++) {
+      for (let r = 0; r < 3; r++) {
+        const n = c * 3 + (3 - r);
+        g.fillStyle(reds.has(n) ? 0xb3202c : 0x15121a, 1).fillRect(14 + c * 20, 18 + r * 14, 19, 13);
+        lbl(24 + c * 20, 25 + r * 14, String(n), CREAM);
+      }
+    }
+    const k = ph(t, 3);
+    const y = lerp(4, 39, seg(k, 0.1, 0.5));
+    g.fillStyle(GOLD, 1).fillCircle(64, y, 5);
+    g.fillStyle(0xffe9a0, 1).fillCircle(64, y, 3);
+    lbl(DEMO_W / 2, 70, 'CLICK A SPOT, OR ARROWS + SPACE', CREAM);
+    lbl(DEMO_W / 2, 82, 'F CHANGES THE CHIP: 1 5 10 25', GOLD);
+  },
+  'rt.spin': (g, t, lbl) => {
+    grad(g, 0x1d5c2d, 0x123b1e);
+    const k = ph(t, 4);
+    const rot = k < 0.8 ? 14 * (1 - (1 - k / 0.8) ** 3) : 14;
+    const cx = 46;
+    const cy = 44;
+    g.fillStyle(0xb08a3c, 1).fillCircle(cx, cy, 33);
+    for (let i = 0; i < 18; i++) {
+      const a0 = rot + (i / 18) * Math.PI * 2;
+      g.fillStyle(i === 0 ? 0x2f8d4f : i % 2 ? 0xb3202c : 0x15121a, 1);
+      g.slice(cx, cy, 31, a0, a0 + Math.PI / 9, false).fillPath();
+    }
+    g.fillStyle(0x7a5232, 1).fillCircle(cx, cy, 20);
+    g.fillStyle(0xffffff, 1).fillCircle(cx + Math.cos(-rot * 1.3) * 18, cy + Math.sin(-rot * 1.3) * 18, 2);
+    key(g, lbl, 104, 38, 'ENT', k < 0.08, 17);
+    lbl(104, 52, 'SPIN', GOLD);
+    lbl(104, 62, 'ALL BETS', CREAM);
+    lbl(104, 70, 'AT ONCE', CREAM);
+  },
+  'rt.pays': (g, t, lbl) => {
+    grad(g, 0x1d5c2d, 0x123b1e);
+    const rows: Array<[string, string, number]> = [
+      ['A NUMBER', '36X', GOLD],
+      ['A DOZEN', '3X', CREAM],
+      ['RED OR BLACK', '2X', CREAM],
+      ['ODD OR EVEN', '2X', CREAM],
+      ['1-18 OR 19-36', '2X', CREAM],
+    ];
+    const lit = Math.floor(ph(t, 5) * rows.length);
+    rows.forEach(([what, pays, col], i) => {
+      lbl(DEMO_W / 2 - 22, 14 + i * 12, what, i === lit ? GOLD : col);
+      lbl(DEMO_W / 2 + 40, 14 + i * 12, pays, i === lit ? GOLD : GREEN);
+    });
+    lbl(DEMO_W / 2, 82, 'ON 0 EVERY OUTSIDE BET LOSES', RED);
   },
 
   // ---------- FROG RACE

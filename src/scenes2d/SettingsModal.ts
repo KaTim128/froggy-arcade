@@ -21,7 +21,8 @@ import { BRIGHT_MAX, BRIGHT_MIN, LOOK_SENS_MAX, LOOK_SENS_MIN, generalDefaults, 
 import { QUALITY_NAMES, graphicsChanged, maxQuality, quality } from '../core/graphics';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import { BINDINGS } from '../core/input';
-import { KEY_ACTIONS, bind, bindable, capLabel, codeFor, resetKeys, setListening } from '../core/keymap';
+import { KEY_ACTIONS, bind, bindable, capLabel, codeFor, gameKeys, resetKeys, setListening } from '../core/keymap';
+import { keyPlan } from '../ui/tutorialCard';
 import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { isTouch } from '../core/device';
@@ -289,12 +290,60 @@ export class SettingsModal extends Phaser.Scene {
    * another action had swaps the two.  Esc cancels; RESET KEYS puts them
    * all back.  The arrows always move as well, and Esc always pauses.
    */
+  /**
+   * ---- EACH GAME ITS OWN LIST (user, 5 Nov: "every individual game defaults
+   * to its own specific control profile").  Paused in a cabinet, the keys to
+   * change are that cabinet's own controls, row by row as its card lists
+   * them; paused in a Creature Clash fight, the fight's own: move, the three
+   * abilities on J K L and the ultimate on I.  Anywhere else -- walking the
+   * rooms -- it is the rooms' list.
+   */
+  private keyTemplate(): Array<{ label: string; id: string; code: string }> {
+    const shared = (id: string, label: string) => ({ label, id, code: KEY_ACTIONS.find((a) => a.id === id)!.code });
+    const own = (game: string, code: string, label: string) => ({ label, id: gameKeys(game, [code])[0].id, code });
+    if (this.from === 'CreatureArena') {
+      // (each ability by the name it has on the strip: WING SLAP on J ...)
+      const moves = (pausedScene() as unknown as { me?: { c?: { attacks?: Array<{ name: string }> } } } | null)?.me?.c?.attacks ?? [];
+      const mv = (i: number) => moves[i]?.name?.toUpperCase() ?? `ABILITY ${i + 1}`;
+      return [
+        shared('up', 'MOVE UP'),
+        shared('left', 'MOVE LEFT'),
+        shared('down', 'MOVE DOWN'),
+        shared('right', 'MOVE RIGHT'),
+        own('creatureclash', 'KeyJ', mv(0)),
+        own('creatureclash', 'KeyK', mv(1)),
+        own('creatureclash', 'KeyL', mv(2)),
+        own('creatureclash', 'KeyI', 'ULTIMATE'),
+        shared('jump', 'CHOSEN ABILITY'),
+      ];
+    }
+    const mg = this.from === 'Minigame' ? (pausedScene() as MinigameScene | null) : null;
+    const scope = mg?.keyScope();
+    if (mg && scope) {
+      const rows = mg.tutorialRows();
+      const plan = keyPlan(rows, scope);
+      const out: Array<{ label: string; id: string; code: string }> = [];
+      plan.lines.forEach((l, i) => {
+        l.actions.forEach((id, k) => {
+          if (out.some((o) => o.id === id)) return;
+          const base = KEY_ACTIONS.find((a) => a.id === id)?.code ?? id.slice(id.indexOf(':') + 1);
+          const does = rows[i][1];
+          out.push({ label: l.actions.length > 1 ? `${does} ${k + 1}` : does, id, code: base });
+        });
+      });
+      if (out.length) return out.slice(0, 9);
+    }
+    return KEY_ACTIONS.map((a) => ({ label: a.label, id: a.id, code: a.code }));
+  }
+
   private renderKeys(): void {
     let y = 46;
     this.body.add(text(this, 32, y - 4, 'CLICK A KEY, THEN PRESS THE NEW ONE', PALETTE.fog));
     y += 5;
-    for (const a of KEY_ACTIONS) {
-      this.body.add(text(this, 32, y, a.label, PALETTE.cream));
+    for (const a of this.keyTemplate()) {
+      const room = Math.floor((214 - 36 - 32) / FONT_ADVANCE);
+      const lbl = a.label.length > room ? a.label.slice(0, room - 1) + '.' : a.label;
+      this.body.add(text(this, 32, y, lbl, PALETTE.cream));
       const waiting = this.listenFor === a.id;
       const label = waiting ? 'PRESS A KEY' : capLabel(codeFor(a.id));
       const moved = codeFor(a.id) !== a.code;

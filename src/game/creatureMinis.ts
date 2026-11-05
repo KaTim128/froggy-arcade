@@ -33,14 +33,15 @@ export const MINI_PRICE: Record<MiniKind, { cost: number; win: number }> = {
 export const MINI_MIN_COST = Math.min(...Object.values(MINI_PRICE).map((p) => p.cost));
 /** The team mode: how many a side, and how many to choose from. */
 export const TEAM_SIZE = 5;
-export const TEAM_POOL = 12;
+/** (user, 5 Nov: ten on offer, seen only once the five tokens are paid) */
+export const TEAM_POOL = 10;
 /** Every creature in a mini game fights at this level, so a pick is about the creature. */
 export const MINI_LEVEL = 8;
 
 export const MINI_INFO: Record<MiniKind, { title: string; rules: string[] }> = {
   melee: { title: 'MELEE VS MELEE', rules: ['PICK 1 OF 3 MELEE FIGHTERS.', 'YOUR FOE IS MELEE TOO.'] },
   ranged: { title: 'RANGED VS RANGED', rules: ['PICK 1 OF 3 SHOOTERS.', 'YOUR FOE SHOOTS TOO.'] },
-  team: { title: '5V5 BATTLE', rules: ['PICK 5 OF 12. ONE AT A TIME:', 'WHEN ONE FAINTS, THE NEXT GOES IN.'] },
+  team: { title: '5V5 BATTLE', rules: ['PICK 5 OF 10. ONE AT A TIME:', 'WHEN ONE FAINTS, THE NEXT GOES IN.'] },
 };
 
 /** A creature's combat role, read off its kit. */
@@ -86,7 +87,7 @@ export function drawPool(kind: MiniKind, rng: () => number = Math.random): strin
   if (kind !== 'team') return pool.slice(0, 3).map((c) => c.id);
   const by: Record<Role, Creature[]> = { melee: [], ranged: [], support: [] };
   for (const c of pool) by[roleOf(c)].push(c);
-  const out = [...by.melee.slice(0, 5), ...by.ranged.slice(0, 5), ...by.support.slice(0, 2)];
+  const out = [...by.melee.slice(0, 4), ...by.ranged.slice(0, 4), ...by.support.slice(0, 2)];
   for (const c of pool) if (out.length < TEAM_POOL && !out.includes(c)) out.push(c);
   return out.slice(0, TEAM_POOL).map((c) => c.id);
 }
@@ -122,6 +123,14 @@ export interface MiniRun {
   /** The health the one still standing walks into the next bout with. */
   myHp?: number;
   foeHp?: number;
+  /**
+   * (user, 5 Nov) ...and its cooldowns, exactly as they stood: three
+   * abilities' seconds left and the ultimate's.  Never reset between bouts.
+   */
+  myCds?: [number, number, number];
+  foeCds?: [number, number, number];
+  myUlt?: number;
+  foeUlt?: number;
   /** Bouts fought so far. */
   bout: number;
   done: boolean;
@@ -130,31 +139,61 @@ export interface MiniRun {
 let run: MiniRun | null = null;
 export const currentMini = (): MiniRun | null => run;
 
-/** Confirm a pick: five tokens, and the run is on. */
+/**
+ * ---- 5V5: PAY, THEN SEE (user, 5 Nov).  The five tokens buy the look at
+ * ten creatures drawn at random; before paying you may walk away for
+ * nothing.  Paid once: the pool stays yours, unchanged, until a battle is
+ * started from it -- leaving the pick and coming back never charges again.
+ */
+let paidPool: string[] | null = null;
+export const paidTeamPool = (): string[] | null => paidPool;
+export function payForTeamPool(): { ok: boolean; msg: string } {
+  if (paidPool) return { ok: true, msg: '' };
+  const cost = MINI_PRICE.team.cost;
+  if (!ledger.debit(cost, 'creature')) return { ok: false, msg: `5V5 COSTS ${cost} TOKENS.` };
+  paidPool = drawPool('team');
+  return { ok: true, msg: '' };
+}
+
+/** Confirm a pick: the run is on (a duel's two tokens go now; 5v5 paid at the pool). */
 export function startMini(kind: MiniKind, picks: string[]): { ok: boolean; msg: string; run?: MiniRun } {
   const want = kind === 'team' ? TEAM_SIZE : 1;
   if (picks.length !== want || picks.some((p) => !creatureById(p))) return { ok: false, msg: kind === 'team' ? `PICK ${TEAM_SIZE}.` : 'PICK ONE.' };
-  const cost = MINI_PRICE[kind].cost;
-  if (!ledger.debit(cost, 'creature')) return { ok: false, msg: `THIS MINI GAME COSTS ${cost} TOKENS.` };
+  if (kind === 'team') {
+    if (!paidPool || picks.some((p) => !paidPool!.includes(p))) return { ok: false, msg: 'PAY TO SEE THE POOL FIRST.' };
+    paidPool = null;
+  } else {
+    const cost = MINI_PRICE[kind].cost;
+    if (!ledger.debit(cost, 'creature')) return { ok: false, msg: `THIS MINI GAME COSTS ${cost} TOKENS.` };
+  }
   run = { kind, me: picks.slice(), foe: drawFoes(kind, picks), bout: 0, done: false };
   return { ok: true, msg: 'FIGHT!', run };
 }
 
 /**
- * A bout is over.  The loser's creature leaves; the winner keeps its health.
+ * A bout is over.  The loser's creature leaves; the winner keeps its health
+ * and its cooldowns, as they stood.
  * The run ends when one side has nobody left, and the ten is paid then, once.
  */
-export function boutOver(won: boolean, survivorHp: number): { over: boolean; won: boolean; paid: number } {
+export function boutOver(won: boolean, survivorHp: number, cds?: [number, number, number], ult?: number): { over: boolean; won: boolean; paid: number } {
   if (!run || run.done) return { over: true, won: false, paid: 0 };
   run.bout++;
   if (won) {
     run.foe.shift();
     run.myHp = survivorHp;
+    run.myCds = cds;
+    run.myUlt = ult;
     run.foeHp = undefined;
+    run.foeCds = undefined;
+    run.foeUlt = undefined;
   } else {
     run.me.shift();
     run.foeHp = survivorHp;
+    run.foeCds = cds;
+    run.foeUlt = ult;
     run.myHp = undefined;
+    run.myCds = undefined;
+    run.myUlt = undefined;
   }
   if (run.me.length && run.foe.length) return { over: false, won, paid: 0 };
   run.done = true;
