@@ -162,7 +162,8 @@ export const CABINETS: CabinetDef[] = [
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
   { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 222, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
   // Ten in, twenty out: a hunt takes a while and asks you to think.
-  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 10, reward: 20, x: 268, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
+  // (user, 5 Nov: 5 in, 10 for a win)
+  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 5, reward: 10, x: 268, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
 
   // ---- the back room: five to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 10, reward: 20, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
@@ -189,7 +190,8 @@ export const CABINETS: CabinetDef[] = [
   { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 10, reward: 20, x: 112, y: 162, color: 0x6fbb6a, room: 'annex', symbol: 'FC', motif: 'road' },
   { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 10, reward: 20, x: 176, y: 162, color: 0x46a0e0, room: 'annex', symbol: 'CC', motif: 'car' },
   // Ten on a five, like every other five-token cabinet on the floor.
-  { id: 'frogvslizard', title: 'FENCE WARS', tier: 'hard', cost: 7, reward: 15, x: 240, y: 162, color: 0xa8c23f, room: 'annex', symbol: 'FL', motif: 'throw' },
+  // (user, 5 Nov: 10 in, 20 for a win -- 10 up)
+  { id: 'frogvslizard', title: 'FENCE WARS', tier: 'hard', cost: 10, reward: 20, x: 240, y: 162, color: 0xa8c23f, room: 'annex', symbol: 'FL', motif: 'throw' },
 
   // ---- the game corner (the fourth room), on the back wall beside the oddity
   // crane -- with a little more room on its left than a cabinet usually gets,

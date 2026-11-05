@@ -323,24 +323,40 @@ export class SettingsModal extends Phaser.Scene {
       const rows = mg.tutorialRows();
       const plan = keyPlan(rows, scope);
       const out: Array<{ label: string; id: string; code: string }> = [];
+      // (a row with more than one key says which is which: WALK LEFT, WALK
+      // RIGHT -- or, for keys that are not a direction, the key it is on)
+      const DIR: Record<string, string> = { up: 'UP', left: 'LEFT', down: 'DOWN', right: 'RIGHT' };
       plan.lines.forEach((l, i) => {
-        l.actions.forEach((id, k) => {
+        l.actions.forEach((id) => {
           if (out.some((o) => o.id === id)) return;
           const base = KEY_ACTIONS.find((a) => a.id === id)?.code ?? id.slice(id.indexOf(':') + 1);
           const does = rows[i][1];
-          out.push({ label: l.actions.length > 1 ? `${does} ${k + 1}` : does, id, code: base });
+          const which = DIR[id] ?? `(${capLabel(base)})`;
+          out.push({ label: l.actions.length > 1 ? `${does} ${which}` : does, id, code: base });
         });
       });
-      if (out.length) return out.slice(0, 9);
+      // (nothing to rebind: a game played with the mouse says so)
+      return out.slice(0, 9);
     }
     return KEY_ACTIONS.map((a) => ({ label: a.label, id: a.id, code: a.code }));
   }
 
   private renderKeys(): void {
     let y = 46;
+    const list = this.keyTemplate();
+    if (!list.length) {
+      // a cabinet played with the mouse (or with keys nobody can move)
+      this.body.add(centerText(this, GAME_W / 2, y + 4, 'THIS GAME HAS NO KEYS TO CHANGE', PALETTE.cream));
+      const mg = pausedScene() as MinigameScene | null;
+      (mg?.tutorialRows() ?? []).slice(0, 6).forEach(([keys, does], i) => {
+        this.body.add(text(this, 32, y + 18 + i * 10, keys, PALETTE.gold));
+        this.body.add(text(this, 120, y + 18 + i * 10, does.length > 28 ? does.slice(0, 27) + '.' : does, PALETTE.cream));
+      });
+      return;
+    }
     this.body.add(text(this, 32, y - 4, 'CLICK A KEY, THEN PRESS THE NEW ONE', PALETTE.fog));
     y += 5;
-    for (const a of this.keyTemplate()) {
+    for (const a of list) {
       const room = Math.floor((214 - 36 - 32) / FONT_ADVANCE);
       const lbl = a.label.length > room ? a.label.slice(0, room - 1) + '.' : a.label;
       this.body.add(text(this, 32, y, lbl, PALETTE.cream));
