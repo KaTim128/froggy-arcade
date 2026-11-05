@@ -910,8 +910,10 @@ const FIXED: ReadonlySet<K> = new Set<K>(['reset', 'cleanse', 'timewarp']);
  * crushing hit of its own and a third again of everything else.)
  */
 // (user, 5 Nov: the Deep Wyrm's WORLD NIGHTMARE "too strong ... give the
-// player space to run away": under budget, and its shadow outrunnable)
-const BUFF: Record<string, number> = { b_sphinx: 1.35, b_wyrm: 0.55 };
+// player space to run away": under budget, and its shadow outrunnable;
+// the oracle, lich and maw measured at 100+ damage in 6s against a dodging
+// fighter, near a whole creature -- brought under budget too)
+const BUFF: Record<string, number> = { b_sphinx: 1.35, b_wyrm: 0.55, b_oracle: 0.42, b_lich: 0.65, b_maw: 0.65 };
 function balance(fx: UltFx[], boss: boolean, hp: number, buff = 1): UltFx[] {
   const want = (boss ? BOSS_BUDGET : BUDGET) * buff;
   // the fixed parts stay as designed; the rest is scaled, a few rounds so
