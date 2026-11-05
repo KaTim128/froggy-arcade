@@ -23,7 +23,8 @@ import { FONT_ADVANCE } from '../render/pixelFont';
 import { BINDINGS } from '../core/input';
 import { KEY_ACTIONS, bind, bindable, capLabel, codeFor, gameKeys, resetKeys, setListening } from '../core/keymap';
 import { keyPlan } from '../ui/tutorialCard';
-import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
+import { button, centerText, confirmDialog, forfeitLines, smallText, text } from '../core/ui';
+import { SMALL_ADVANCE } from '../render/smallFont';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { isTouch } from '../core/device';
 import { jumpToScene, leaveToMenu, pausedScene, resumePause, resumeToLeave } from '../core/pause';
@@ -323,44 +324,68 @@ export class SettingsModal extends Phaser.Scene {
       const rows = mg.tutorialRows();
       const plan = keyPlan(rows, scope);
       const out: Array<{ label: string; id: string; code: string }> = [];
+      // (a row with more than one key says which is which: WALK LEFT, WALK
+      // RIGHT -- or, for keys that are not a direction, the key it is on)
+      const DIR: Record<string, string> = { up: 'UP', left: 'LEFT', down: 'DOWN', right: 'RIGHT' };
       plan.lines.forEach((l, i) => {
-        l.actions.forEach((id, k) => {
+        l.actions.forEach((id) => {
           if (out.some((o) => o.id === id)) return;
           const base = KEY_ACTIONS.find((a) => a.id === id)?.code ?? id.slice(id.indexOf(':') + 1);
           const does = rows[i][1];
-          out.push({ label: l.actions.length > 1 ? `${does} ${k + 1}` : does, id, code: base });
+          const which = DIR[id] ?? `(${capLabel(base)})`;
+          out.push({ label: l.actions.length > 1 ? `${does} ${which}` : does, id, code: base });
         });
       });
-      if (out.length) return out.slice(0, 9);
+      // (nothing to rebind: a game played with the mouse says so)
+      return out.slice(0, 9);
     }
     return KEY_ACTIONS.map((a) => ({ label: a.label, id: a.id, code: a.code }));
   }
 
   private renderKeys(): void {
     let y = 46;
-    this.body.add(text(this, 32, y - 4, 'CLICK A KEY, THEN PRESS THE NEW ONE', PALETTE.fog));
-    y += 5;
-    for (const a of this.keyTemplate()) {
-      const room = Math.floor((214 - 36 - 32) / FONT_ADVANCE);
-      const lbl = a.label.length > room ? a.label.slice(0, room - 1) + '.' : a.label;
-      this.body.add(text(this, 32, y, lbl, PALETTE.cream));
-      const waiting = this.listenFor === a.id;
-      const label = waiting ? 'PRESS A KEY' : capLabel(codeFor(a.id));
-      const moved = codeFor(a.id) !== a.code;
-      const b = button(this, 214, y + 3, label, () => this.listen(a.id), {
-        width: 72,
-        height: 9,
-        fill: waiting ? 0x5a3a12 : moved ? 0x1f4a5a : undefined,
+    const list = this.keyTemplate();
+    if (!list.length) {
+      // a cabinet played with the mouse (or with keys nobody can move)
+      this.body.add(centerText(this, GAME_W / 2, y + 4, 'THIS GAME HAS NO KEYS TO CHANGE', PALETTE.cream));
+      const mg = pausedScene() as MinigameScene | null;
+      (mg?.tutorialRows() ?? []).slice(0, 6).forEach(([keys, does], i) => {
+        this.body.add(text(this, 32, y + 18 + i * 10, keys, PALETTE.gold));
+        this.body.add(text(this, 120, y + 18 + i * 10, does.length > 28 ? does.slice(0, 27) + '.' : does, PALETTE.cream));
       });
-      this.body.add(b);
-      // (ten to a row: nine of them and RESET KEYS clear the RESUME row)
-      y += 10;
+      return;
     }
-    this.body.add(text(this, 32, y + 1, 'ARROWS MOVE TOO', PALETTE.ash));
-    this.body.add(button(this, 214, y + 3, 'RESET KEYS', () => {
+    // ---- (user, 5 Nov) clear of the tabs, in the small type, and every key
+    // button its own with a gap above and below it -- never one stack
+    this.body.add(smallText(this, 32, y - 2, 'CLICK A KEY, THEN PRESS THE NEW ONE', PALETTE.fog));
+    y += 7;
+    const ROW = 10;
+    const CAP_W = 64;
+    const CAP_H = 8;
+    /** A keycap: 8 tall in the small type, so each sits apart from the next. */
+    const cap = (cy: number, label: string, fill: number, hover: number, run: () => void): void => {
+      const r = this.add.rectangle(214 - CAP_W / 2, cy, CAP_W, CAP_H, fill).setOrigin(0, 0).setStrokeStyle(1, PALETTE.neon).setInteractive({ useHandCursor: true });
+      r.on('pointerover', () => r.setFillStyle(hover)).on('pointerout', () => r.setFillStyle(fill)).on('pointerdown', () => {
+        audio.sfx('ui_blip', 0.4);
+        run();
+      });
+      this.body.add(r);
+      this.body.add(smallText(this, 214, cy + 1.5, label, PALETTE.cream).setOrigin(0.5, 0));
+    };
+    for (const a of list) {
+      const room = Math.floor((214 - CAP_W / 2 - 6 - 32) / SMALL_ADVANCE);
+      const lbl = a.label.length > room ? a.label.slice(0, room - 1) + '.' : a.label;
+      this.body.add(smallText(this, 32, y + 1.5, lbl, PALETTE.cream));
+      const waiting = this.listenFor === a.id;
+      const moved = codeFor(a.id) !== a.code;
+      cap(y, waiting ? 'PRESS A KEY' : capLabel(codeFor(a.id)), waiting ? 0x5a3a12 : moved ? 0x1f4a5a : PALETTE.plum, PALETTE.neonDim, () => this.listen(a.id));
+      y += ROW;
+    }
+    this.body.add(smallText(this, 32, y + 1.5, 'ARROWS MOVE TOO', PALETTE.ash));
+    cap(y, 'RESET KEYS', 0x5a1a22, 0x8a2b34, () => {
       resetKeys();
       this.renderBody();
-    }, { width: 72, height: 9, fill: 0x5a1a22, hoverFill: 0x8a2b34 }));
+    });
   }
 
   private listen(id: string): void {
@@ -397,7 +422,10 @@ export class SettingsModal extends Phaser.Scene {
    */
   private renderPlaceControls(): void {
     const mg = this.from === 'Minigame' ? (pausedScene() as MinigameScene | null) : null;
-    const rows: ControlRow[] = mg?.controlRows() ?? roomControls(this.from);
+    // (user, 5 Nov: in a game, CONTROLS is that game's own keys, as moved --
+    // never the rooms' walking list; a fight names each of its moves)
+    const fight = this.from === 'CreatureArena' && !isTouch() ? this.keyTemplate().map((k): ControlRow => [capLabel(codeFor(k.id)), k.label]) : null;
+    const rows: ControlRow[] = fight ?? mg?.controlRows() ?? roomControls(this.from);
     const max = 9;
     const shown = rows.slice(0, max);
     let y = 50;

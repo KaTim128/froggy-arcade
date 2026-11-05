@@ -1769,8 +1769,10 @@ function lizardTurn(): void {
       // (confused, he cannot read the wind: he throws as if the air were still)
       const plan = solveThrow('lizard', windHidden ? 0 : wind);
       // His arm is not a solver: the throw goes out near the plan, not on it.
-      const angle = plan.angle + wobble() * 0.06;
-      const pow = Phaser.Math.Clamp(plan.power + wobble() * 0.055, 0.05, 1);
+      // (user, 5 Nov: "a little bit more difficult" -- a steadier arm than
+      // it was, 0.06 and 0.055, so more of his throws land)
+      const angle = plan.angle + wobble() * 0.045;
+      const pow = Phaser.Math.Clamp(plan.power + wobble() * 0.04, 0.05, 1);
       throwItem('lizard', angle, pow, item);
     });
   });

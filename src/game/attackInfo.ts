@@ -240,7 +240,7 @@ export function attackCard(a: Attack, el: Element, scale = 1): string[] {
   // (a boss's plain attack carries an effect of its own: said after it)
   const extra = !a.sp && a.mod !== 'none' && MODS[a.mod].desc? ` ITS EXTRA EFFECT: ${MODS[a.mod].desc}.` : '';
   const main = plainWords((a.sp ? i.special.replace(/\.?\s*$/, '.') : plainSentence(a, scale)) + extra);
-  const out = [`WHAT IT DOES: ${main}`];
+  const out = [main];
   // a line only says something new: one whose every number the sentence
   // above already gives (its reach, its damage, how long) is left out
   const nums = (t: string): string[] => plainWords(t).match(/\d+(?:\.\d+)?/g) ?? [];
@@ -251,7 +251,7 @@ export function attackCard(a: Attack, el: Element, scale = 1): string[] {
   };
   add(`REACH: ${i.range}`);
   const dmgSaid = new RegExp(`\\b(DEALS|TAKES) ${a.dmg}\\b|\\b${a.dmg} DAMAGE`).test(main);
-  out.push(a.dmg > 0 && !dmgSaid ? `DAMAGE: ${a.dmg} A HIT. READY AGAIN EVERY ${a.cd}S.` : `READY AGAIN EVERY ${a.cd}S.`);
+  out.push(a.dmg > 0 && !dmgSaid ? `DAMAGE: ${a.dmg} A HIT. COOLDOWN DURATION: ${a.cd}S.` : `COOLDOWN DURATION: ${a.cd}S.`);
   const dur = durationOf(a);
   if (dur) add(`LASTS: ${dur}`);
   if (i.effect) out.push(`ELEMENT BONUS: ${i.effect}.`);

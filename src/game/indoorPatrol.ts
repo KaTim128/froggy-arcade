@@ -31,7 +31,7 @@ import { LOOKS, PLAYER_SPEED, Player } from '../art/player';
 import { PALETTE } from '../render/palette';
 import { openTalkPanel } from '../ui/talkPanel';
 import { collide, findPath, type Box } from './roomWalk';
-import { chaseOutOf, copSay, patrolsOut, takeIn, takeIndoorChase } from './patrol';
+import { chaseOutOf, copSay, doubtNow, noteDoubt, patrolsOut, takeIn, takeIndoorChase } from './patrol';
 import { copCameOut, copInside, copWentIn, nextVisitIn, planVisit, type Place } from './policeVisits';
 
 /** Something in the room that might hide you: its footprint on the floor, and whether it is tall. */
@@ -222,6 +222,8 @@ export class IndoorCop {
 
   /** You went out of a door with them after you: they come out after you. */
   leftRoom(): void {
+    // (unsure of you in here: still unsure of you out there -- user, 5 Nov)
+    noteDoubt(this.aware);
     if (this.state === 'chase' || this.state === 'search') chaseOutOf(this.host.place);
     else if (this.present) {
       // still on their round: in here a while yet, for whoever comes in next
@@ -247,6 +249,8 @@ export class IndoorCop {
     this.auraR = s.add.ellipse(x, y - 12, 34, 40, 0xff2a3a, 0.2).setBlendMode(Phaser.BlendModes.ADD).setDepth(p.sprite.depth - 0.001);
     this.auraB = s.add.ellipse(x, y - 12, 34, 40, 0x2a5aff, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(p.sprite.depth - 0.001);
     copWentIn(this.host.place, 4000);
+    // (and unsure of you from outside, they still are)
+    this.aware = Math.max(this.aware, doubtNow());
     this.lastXY = { x, y };
     s.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shutdown());
   }

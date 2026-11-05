@@ -3368,8 +3368,12 @@ export class CreatureArena extends Phaser.Scene {
           }
           break;
         case 'shade':
-          // their own shadow, hunting them
-          chase(this.speedOf(o) * 0.85 + 12);
+          // their own shadow, hunting them -- (user, 5 Nov: the Deep Wyrm's
+          // was unescapable) it rises for a second first, then follows
+          // slower than they can run, so running away works
+          mi.t = (mi.t ?? 0) + dt;
+          if (mi.t < 1) break;
+          chase(this.speedOf(o) * 0.7);
           mi.ang = o.x >= mi.x ? 1 : -1;
           if (touching && !mi.cd) {
             mi.cd = 0.6;
@@ -4566,8 +4570,9 @@ export class CreatureArena extends Phaser.Scene {
         this.floatNum(o, 0, 0xffe060, 'DIZZY ');
         break;
       case 'nightmare': {
-        const [sx, sy] = inArena(o.x - ux * 30, o.y - uy * 30);
-        this.minions.push({ owner: f, kind: 'shade', x: sx, y: sy, ang: 1, life: e.t, hp: 0, cd: 0.4, dmg: e.dmg });
+        // (it tears loose a fair way behind them, not on their heels)
+        const [sx, sy] = inArena(o.x - ux * 56, o.y - uy * 56);
+        this.minions.push({ owner: f, kind: 'shade', x: sx, y: sy, ang: 1, life: e.t + 1, hp: 0, cd: 0.4, dmg: e.dmg, t: 0 });
         this.cameras.main.flash(150, 40, 10, 60, false);
         audio.sfx('stinger', 0.6);
         break;

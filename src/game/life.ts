@@ -24,6 +24,7 @@ import { resetSuspicion } from './patrol';
 import { ATTIRE_SLOTS, COSMETICS, DEFAULT_WORN, FURNITURE, STARTER_COSMETICS, cosmeticById, furnitureById } from './catalog';
 import type { LifeState } from './lifeState';
 import { CABINETS } from './content';
+import { KEY_ITEM, heldItems, itemDef } from './inventory';
 export { LIFE_VERSION, defaultLife, sanitizeLife, type LifeState, type Placement } from './lifeState';
 
 /** Seconds of play in one game day. */
@@ -58,7 +59,8 @@ export function twelveHour(hour: number, minute = 0): string {
 }
 
 /** Begging: one cash per this many real milliseconds of sitting there. */
-export const BEG_MS = 7 * 60 * 1000;
+/** (user, 5 Nov: five minutes a dollar, was seven) */
+export const BEG_MS = 5 * 60 * 1000;
 /** What a sold thing fetches: this fraction of what it cost.  Never more. */
 export const RESALE = 0.4;
 
@@ -482,14 +484,35 @@ export const THEFT_CHANCE = 0.25;
  * (rounded down, so the last coin of each is always left you).  Returns
  * what was taken, or null.  `roll` is for the harness.
  */
-export function streetTheft(roll = Math.random()): { cash: number; tokens: number } | null {
+export function streetTheft(roll = Math.random(), pick = Math.random): { cash: number; tokens: number; items: string[] } | null {
   if (roll >= THEFT_CHANCE) return null;
   const cash = Math.floor(store.get().cash * 0.5);
   const tokens = Math.floor(ledger.balance() * 0.5);
   if (cash > 0) store.spendCash(cash);
   if (tokens > 0) ledger.debit(tokens, 'theft');
+  // ---- (user, 5 Nov) AND HALF OF WHAT IS IN YOUR POCKETS, rounded up --
+  // a prize, a plushie, the camera -- but never the key: it is not worth
+  // anything to them, and the story needs it.
+  const s = store.get();
+  const takeable = heldItems(s).filter((id) => id !== KEY_ITEM.id);
+  const gone: string[] = [];
+  for (let n = Math.ceil(takeable.length / 2); n > 0 && takeable.length; n--) gone.push(...takeable.splice(Math.floor(pick() * takeable.length), 1));
+  if (gone.length) {
+    const items = s.items.slice();
+    const prizes = s.prizesOwned.slice();
+    for (const id of gone) {
+      const i = items.indexOf(id);
+      if (i >= 0) items.splice(i, 1);
+      else {
+        const j = prizes.indexOf(id);
+        if (j >= 0) prizes.splice(j, 1);
+      }
+    }
+    store.patch({ items, prizesOwned: prizes });
+  }
   record('robbed');
-  return { cash, tokens };
+  store.flush();
+  return { cash, tokens, items: gone.map((id) => itemDef(id)?.name ?? id) };
 }
 
 /** The man on the pavement: what getting him off the street takes. */

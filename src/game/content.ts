@@ -162,7 +162,8 @@ export const CABINETS: CabinetDef[] = [
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
   { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 222, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
   // Ten in, twenty out: a hunt takes a while and asks you to think.
-  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 10, reward: 20, x: 268, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
+  // (user, 5 Nov: 5 in, 10 for a win)
+  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 5, reward: 10, x: 268, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
 
   // ---- the back room: five to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 10, reward: 20, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
@@ -189,7 +190,8 @@ export const CABINETS: CabinetDef[] = [
   { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 10, reward: 20, x: 112, y: 162, color: 0x6fbb6a, room: 'annex', symbol: 'FC', motif: 'road' },
   { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 10, reward: 20, x: 176, y: 162, color: 0x46a0e0, room: 'annex', symbol: 'CC', motif: 'car' },
   // Ten on a five, like every other five-token cabinet on the floor.
-  { id: 'frogvslizard', title: 'FENCE WARS', tier: 'hard', cost: 7, reward: 15, x: 240, y: 162, color: 0xa8c23f, room: 'annex', symbol: 'FL', motif: 'throw' },
+  // (user, 5 Nov: 10 in, 20 for a win -- 10 up)
+  { id: 'frogvslizard', title: 'FENCE WARS', tier: 'hard', cost: 10, reward: 20, x: 240, y: 162, color: 0xa8c23f, room: 'annex', symbol: 'FL', motif: 'throw' },
 
   // ---- the game corner (the fourth room), on the back wall beside the oddity
   // crane -- with a little more room on its left than a cabinet usually gets,
@@ -198,8 +200,9 @@ export const CABINETS: CabinetDef[] = [
   { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 160, y: 74, color: 0x5a8a3a, room: 'lounge', symbol: 'BB', motif: 'bog' },
   // CROAKED, beside it in the second marked spot: a cabinet of its own colours, pond-teal and gold
   // PAD BATTLES (log #98): the first of room 4's bottom spots (LOUNGE_FREE_SPOTS[0]), lily pink
-  { id: 'padbattles', title: 'PAD BATTLES', tier: 'hard', cost: 5, reward: 10, x: 66, y: 152, color: 0xd85a9a, room: 'lounge', symbol: 'PB', motif: 'pads' },
-  { id: 'croaked', title: 'CROAKED', tier: 'medium', cost: 5, reward: 10, x: 202, y: 74, color: 0x1f8a8a, room: 'lounge', symbol: 'CR', motif: 'maze' },
+  { id: 'padbattles', title: 'PAD BATTLES', tier: 'hard', cost: 5, reward: 10, x: 202, y: 74, color: 0xd85a9a, room: 'lounge', symbol: 'PB', motif: 'pads' },
+  // (user, 5 Nov: CROAKED and PAD BATTLES swapped places; Croaked 10 in, 20 to win, no timer)
+  { id: 'croaked', title: 'CROAKED', tier: 'medium', cost: 10, reward: 20, x: 66, y: 152, color: 0x1f8a8a, room: 'lounge', symbol: 'CR', motif: 'maze' },
 
   // ---- and the room at the back, where none of it is a game
   // Three tokens a spin, every spin raised through the shell as it is pulled

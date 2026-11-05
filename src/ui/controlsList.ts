@@ -145,20 +145,56 @@ export function deviceObjective(lines: string[], layout: TouchLayout): string[] 
   });
 }
 
-/** The keys each kind of place reads, written the way a card writes them. */
+/**
+ * The keys each kind of place reads, written the way a card writes them.
+ * (user, 5 Nov: "terrible" -- one key to a line, said plainly: W MOVE UP,
+ * S MOVE DOWN ...; a phone folds the four back into its stick, see below)
+ */
 const ROOM_ROWS: ControlRow[] = [
-  ['W A S D', 'WALK'],
-  ['SHIFT', 'RUN'],
-  ['E', 'USE WHAT YOU ARE AT'],
+  ['W', 'MOVE UP'],
+  ['S', 'MOVE DOWN'],
+  ['A', 'MOVE LEFT'],
+  ['D', 'MOVE RIGHT'],
+  ['SHIFT', 'RUN WHILE HELD'],
+  ['E', 'USE, TALK OR GO IN'],
   ['CLICK', 'WALK TO A MACHINE OR DOOR'],
-  ['ESC', 'PAUSE'],
+  ['ESC', 'OPEN THE PAUSE MENU'],
 ];
 const STREET_ROWS: ControlRow[] = [
-  ['A / D', 'WALK'],
-  ['E', 'TALK / GO IN'],
-  ['ESC', 'PAUSE'],
+  ['A', 'WALK LEFT'],
+  ['D', 'WALK RIGHT'],
+  ['E', 'TALK, OR GO IN A DOOR'],
+  ['ESC', 'OPEN THE PAUSE MENU'],
+];
+/** A creature fight's keys, before any are moved (the pause menu fills in each move's name). */
+export const CLASH_ROWS: ControlRow[] = [
+  ['W', 'MOVE UP'],
+  ['S', 'MOVE DOWN'],
+  ['A', 'MOVE LEFT'],
+  ['D', 'MOVE RIGHT'],
+  ['J', 'FIRST MOVE'],
+  ['K', 'SECOND MOVE'],
+  ['L', 'THIRD MOVE'],
+  ['I', 'ULTIMATE, WHEN READY'],
+  ['SPACE', 'FIRE THE PICKED MOVE'],
 ];
 const PLACE_ROWS: Record<string, ControlRow[]> = {
+  StreetEast: STREET_ROWS,
+  StreetWest: STREET_ROWS,
+  SideAlley: STREET_ROWS,
+  CreatureArena: CLASH_ROWS,
+  CreatureHub: [
+    ['CLICK', 'PICK A BUTTON OR CARD'],
+    ['ESC', 'OPEN THE PAUSE MENU'],
+  ],
+  CraneGame: [
+    ['A', 'MOVE THE CLAW LEFT'],
+    ['D', 'MOVE THE CLAW RIGHT'],
+    ['SPACE', 'SIDE VIEW, DROP, THEN GRAB'],
+    ['E', 'SAME AS SPACE'],
+    ['V', 'SWAP FRONT AND SIDE VIEW'],
+    ['ESC', 'OPEN THE PAUSE MENU'],
+  ],
   ExteriorDay: STREET_ROWS,
   ExteriorNight: STREET_ROWS,
   BackAlley: STREET_ROWS,
@@ -206,5 +242,14 @@ export function roomControls(sceneKey: string): ControlRow[] {
   let rows = PLACE_ROWS[sceneKey] ?? ROOM_ROWS;
   // in mouse-look mode the head follows the mouse, no button held
   if (!isTouch() && store.get().settings.mouseLook) rows = rows.map(([k, d]) => (k === 'DRAG' ? ['MOUSE', d] : [k, d]));
+  // (a phone has one stick for the four: W, A, S and D are one row there)
+  if (isTouch()) {
+    const one = (k: string) => ['W', 'A', 'S', 'D'].includes(k);
+    const at = rows.findIndex(([k]) => one(k));
+    if (at >= 0) {
+      const lr = rows.filter(([k]) => one(k)).every(([k]) => k === 'A' || k === 'D');
+      rows = [...rows.slice(0, at).filter(([k]) => !one(k)), [lr ? 'A / D' : 'W A S D', lr ? 'WALK' : 'MOVE'], ...rows.slice(at).filter(([k]) => !one(k))];
+    }
+  }
   return deviceControls(rows, touchLayoutFor(sceneKey));
 }

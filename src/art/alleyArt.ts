@@ -18,7 +18,7 @@
  * windows come on warm, and the lamps throw their pools on the ground.
  */
 
-import { daylight, nightify } from '../render/palette';
+import { PALETTE, daylight, nightify } from '../render/palette';
 
 export type AlleyLight = 'day' | 'evening' | 'night';
 
@@ -258,8 +258,11 @@ export function paintSideAlley(g: Ctx, variant: number, light: AlleyLight): void
   // ---- the side walls, in shadow, and the shadow they throw in
   const [lw, rw] = L.sides;
   // (the right-hand wall: the alley's blind end, in shadow)
-  rect(W - rw, 0, rw, H, c(0x1c1418));
-  for (let y = 0; y < H; y += 6) rect(W - rw + ((y / 6) % 2 ? 2 : 6), y + 1, rw - 8, 4, c(0x2a1e22));
+  // (user, 5 Nov) brick, like the back wall -- the same brick, in shadow
+  brickWall(rect, c, W - rw, rw, B, R);
+  g.fillStyle = light === 'night' ? 'rgba(4,4,12,0.62)' : 'rgba(10,6,10,0.5)';
+  g.fillRect(W - rw, 0, rw, H);
+  rect(W - rw, 0, 1, H, c(0x120c0e));
   // ---- THE MOUTH, on the left (user list: "remove the left wall"): not a
   // wall but the opening on to the street -- the shopfronts across the road,
   // the road, the pavement -- in the street's own light, with the end of the
@@ -329,37 +332,84 @@ function paintMouth(
 ): void {
   const ow = lw - 4;
   const night = light === 'night';
-  // the shopfront across the road
-  const fronts = [0x9a8470, 0x7a8a96, 0xa89a7a];
-  rect(0, 8, ow, ground - 30, c(fronts[variant % fronts.length]));
-  for (let y = 12; y < ground - 24; y += 5) rect(0, y, ow, 1, c(0x6a5a4a));
-  // its window, and a strip of its sign
-  rect(3, ground - 54, ow - 8, 3, c(0xc84a3a));
-  rect(4, ground - 48, ow - 10, 22, night ? '#f0c878' : c(0x8ab4c8));
-  rect(4, ground - 48, ow - 10, 1, c(0xdcdcdc));
-  for (let x = 4 + 7; x < ow - 6; x += 8) rect(x, ground - 48, 1, 22, c(0x4a4a50));
+  // ---- (user, 5 Nov) above the pavement, open SKY -- no shopfront, no
+  // window, no sign -- the same sky as the strip over the alley, a little
+  // paler down toward the street
+  void variant;
+  const skyH = ground - 30;
+  const sk = g.createLinearGradient(0, 0, 0, skyH);
   if (night) {
-    const glow = g.createRadialGradient(ow / 2, ground - 36, 2, ow / 2, ground - 36, 30);
-    glow.addColorStop(0, 'rgba(255,214,140,0.35)');
-    glow.addColorStop(1, 'rgba(255,214,140,0)');
-    g.fillStyle = glow;
-    g.fillRect(0, ground - 70, ow, 60);
+    sk.addColorStop(0, '#0a1030');
+    sk.addColorStop(1, '#1a2450');
+  } else if (light === 'day') {
+    sk.addColorStop(0, '#8fd4e8');
+    sk.addColorStop(1, '#c4ecf4');
+  } else {
+    sk.addColorStop(0, '#c8684a');
+    sk.addColorStop(1, '#e8a050');
   }
-  // the far pavement and kerb
-  rect(0, ground - 30, ow, 8, c(0xa8a8a8));
-  rect(0, ground - 22, ow, 1, c(0x6a6a6e));
-  // the road
-  rect(0, ground - 21, ow, 17, c(0x3a3a42));
-  for (let x = 2; x < ow; x += 9) rect(x, ground - 13, 5, 1, c(0xd8d0a0));
-  // the near pavement, out to the alley's floor
-  rect(0, ground - 4, ow, 1, c(0x6a6a6e));
-  rect(0, ground - 3, ow, 180 - ground + 3, c(0x9a9aa0));
-  for (let y = ground + 4; y < 180; y += 8) rect(0, y, ow, 1, c(0x84848a));
+  g.fillStyle = sk;
+  g.fillRect(0, 0, ow, skyH);
+  // ---- THE STREET'S OWN PAVEMENT (user, 5 Nov): no road out there -- the
+  // same slabs the street is paved with (art/shopfront paintStreet), running
+  // straight across the opening, the way the patrols walk past along it.
+  const top = ground - 30;
+  rect(0, top, ow, 180 - top, c(PALETTE.steel));
+  rect(0, top, ow, 2, c(PALETTE.ash));
+  rect(0, top + 2, ow, 2, c(0x3a3a46));
+  for (let y = top + 4, k = 0; y < 180; k++) {
+    const h = 7 + (k % 3);
+    rect(0, y + h - 1, ow, 1, c(PALETTE.slate));
+    for (let x = [0, 10, 4][k % 3]; x < ow; x += 22) rect(x, y, 1, h, c(PALETTE.slate));
+    y += h;
+  }
   // the street's light: brighter out there than in here
   g.fillStyle = night ? 'rgba(255,220,160,0.06)' : 'rgba(255,255,240,0.10)';
   g.fillRect(0, 0, ow, 180);
-  // the cut end of the alley's wall, at the edge of the opening
-  rect(ow, 0, 4, 180, c(0x2a1e22));
-  for (let y = 0; y < 180; y += 6) rect(ow + 1, y + ((y / 6) % 2 ? 1 : 3), 2, 2, c(0x3a2a2e));
-  rect(ow + 3, 0, 1, 180, c(0x120c0e));
+  // (the cut end of the alley's wall is its own layer, in FRONT of whoever
+  // walks past it: paintMouthEdge)
+}
+
+/**
+ * ---- THE END OF THE ALLEY'S WALL, in front (user, 5 Nov: "this vertical
+ * rectangle should be in front of the police and player as it represents
+ * the other building").  Drawn on its own canvas, the width of the opening,
+ * so the scene can stand it over the walkers: anyone going in or out passes
+ * behind it.  Brick-faced, like the alley's walls.
+ */
+export function paintMouthEdge(g: Ctx, variant: number, light: AlleyLight): void {
+  const L = ALLEYS[variant] ?? ALLEYS[0];
+  const c = (n: number): string => hex(light === 'night' ? nightify(n, 0.38) : light === 'day' ? daylight(n, 0.25) : n);
+  const rect = (x: number, y: number, w: number, h: number, col: string) => {
+    g.fillStyle = col;
+    g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+  };
+  const x0 = L.sides[0] - 8;
+  rect(x0, 0, 8, H, c(0x2a1e22));
+  for (let row = 0; row * 6 < H; row++) {
+    const off = row % 2 ? 3 : 0;
+    for (let x = x0 - off; x < x0 + 8; x += 6) {
+      const bx = Math.max(x0, x + 1);
+      const bw = Math.min(x0 + 8, x + 6) - bx;
+      if (bw > 0) rect(bx, row * 6 + 1, bw, 4, c(row % 3 ? 0x3e2c30 : 0x463236));
+    }
+  }
+  rect(x0 + 7, 0, 1, H, c(0x120c0e));
+  rect(x0, 0, 1, H, c(0x4a383c));
+}
+
+/** The right-hand wall's brick: the back wall's own brick, deep in shadow. */
+function brickWall(rect: (x: number, y: number, w: number, h: number, col: string) => void, c: (n: number) => string, x0: number, w: number, B: { mortar: number; tones: number[]; lit: number; course: number; len: number }, R: () => number): void {
+  rect(x0, 0, w, H, c(B.mortar));
+  for (let row = 0; row * B.course < H; row++) {
+    const off = row % 2 ? B.len / 2 : 0;
+    const y = row * B.course;
+    for (let x = x0 - off; x < x0 + w; x += B.len) {
+      const bx = Math.max(x0, x + 1);
+      const bw = Math.min(x0 + w, x + B.len - 1) - bx;
+      if (bw <= 0) continue;
+      rect(bx, y + 1, bw, B.course - 2, c(B.tones[Math.floor(R() * 4)]));
+      rect(bx, y + 1, bw, 1, c(B.lit));
+    }
+  }
 }

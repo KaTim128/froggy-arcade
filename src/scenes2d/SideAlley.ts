@@ -20,7 +20,7 @@ import { backPlate, SUBTITLE_Y } from '../ui/plate';
 import { TokenHud } from '../ui/hud';
 import { attachPockets } from '../ui/pockets';
 import { clock } from '../game/life';
-import { ALLEYS, paintSideAlley, type AlleyLight } from '../art/alleyArt';
+import { ALLEYS, paintMouthEdge, paintSideAlley, type AlleyLight } from '../art/alleyArt';
 import { Patrol, alleyWatch } from '../game/patrol';
 
 export class SideAlley extends Phaser.Scene {
@@ -67,6 +67,16 @@ export class SideAlley extends Phaser.Scene {
       }
     }
     this.add.image(0, 0, key).setOrigin(0, 0);
+    // the end of the alley's wall stands in FRONT of the walkers (art/alleyArt)
+    const edge = `${key}_edge`;
+    if (!this.textures.exists(edge)) {
+      const t = this.textures.createCanvas(edge, GAME_W, GAME_H);
+      if (t) {
+        paintMouthEdge(t.getContext(), this.variant, light);
+        t.refresh();
+      }
+    }
+    this.add.image(0, 0, edge).setOrigin(0, 0).setDepth(70);
     const L = ALLEYS[this.variant];
     this.player = new Player(this, L.sides[0] + 14, L.walkY, light === 'night');
     this.player.setSurface('gravel');
@@ -105,6 +115,11 @@ export class SideAlley extends Phaser.Scene {
       dark: () => dark,
       alley: true,
       lock: (on) => (this.locked = on),
+      // (user, 5 Nov) between the alley's walls, never through them -- and in
+      // at its mouth, from behind the end of its wall
+      minX: ALLEYS[this.variant].sides[0] - 12,
+      maxX: GAME_W - ALLEYS[this.variant].sides[1] - 10,
+      entryX: ALLEYS[this.variant].sides[0] - 10,
     });
   }
 
@@ -118,6 +133,8 @@ export class SideAlley extends Phaser.Scene {
     if (this.locked) return;
     this.locked = true;
     audio.sfx('footstep_gravel', 0.5);
+    // one on your heels comes out of the alley after you, onto the street
+    this.patrol?.outOfAlley(this.streetX);
     fadeToScene(this, 'StreetEast', { atX: this.streetX });
   }
 

@@ -285,11 +285,8 @@ export class StreetEast extends Phaser.Scene {
     if (this.gap && !this.spot) return this.intoAlley();
     if (this.locked || this.busy() || !this.spot) return;
     const f = this.spot;
-    // (a shop is no place to hide: they would only follow you in)
-    if (this.patrol?.chasing) {
-      this.say('NOT IN THERE - THEY WOULD FOLLOW ME IN!');
-      return;
-    }
+    // (user, 5 Nov) in you may go -- but one on your heels follows you in,
+    // and one unsure of you who saw you go in comes in for a look
     if (!shopsOpen() && !((f.kind === 'barber' || f.kind === 'clothes') && stealthPhase())) {
       audio.sfx('door_rattle', 0.5);
       this.say(`${f.name} IS SHUT FOR THE NIGHT. OPEN ${SHOP_HOURS}.`);
@@ -297,6 +294,7 @@ export class StreetEast extends Phaser.Scene {
     }
     this.locked = true;
     audio.sfx('door_open', 0.5);
+    this.patrol?.inAt(f.kind);
     visit(f.kind);
     // in through the door, as into the arcade
     fadeToScene(this, STORE_SCENE[f.kind], {});

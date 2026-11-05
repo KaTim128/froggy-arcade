@@ -351,7 +351,7 @@ export class StreetWest extends Phaser.Scene {
     }
     this.locked = true;
     audio.sfx('door_open');
-    this.patrol?.safe();
+    this.patrol?.inAt('lily');
     fadeToScene(this, 'Hotel', { area: 'lobby' });
   }
 

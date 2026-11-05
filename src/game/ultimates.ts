@@ -431,7 +431,7 @@ const SPEC: Record<string, [string, UltFx[]]> = {
   b_queen: ['BRASS SHRINK', [shrink(5), rootfield(1.2, 70), shield(2)]],
   b_maw: ['SOUL MAW', [soullink(4), rage(4), rootfield(1.2, 60)]],
   b_cloud: ['STORM FIREWORKS', [fireworks(3, 10), blind(2), slowfield(2.5, 90)]],
-  b_wyrm: ['WORLD NIGHTMARE', [nightmare(5, 5), blind(2.5), stun(0.8, 70)]],
+  b_wyrm: ['WORLD NIGHTMARE', [nightmare(5, 4), blind(1.5)]],
   b_kraken: ['KRAKEN GLAIVE', [boomerang(16), slowfield(2.5, 90), shred(3)]],
   b_mammoth: ['MAMMOTH ICICLES', [icicles(9, 14), shield(2.5), stun(0.8, 70)]],
   b_roc: ['HURRICANE', [hurricane(4, 6), blind(2), haste(3)]],
@@ -688,7 +688,7 @@ function fullWords(f: UltFx): string {
     case 'leash': return `TIES THE ENEMY TO IT WITH A LEASH FOR ${f.t}S. IF THEY GET MORE THAN 50PX AWAY, THE LEASH YANKS THEM BACK FOR ${f.dmg} DAMAGE.`;
     case 'confuse': return `SCRAMBLES THE ENEMY FOR ${f.t}S: THEIR MOVEMENT IS FLIPPED, LEFT FOR RIGHT AND UP FOR DOWN.`;
     case 'firewall': return `RAISES A WALL OF FIRE BETWEEN ITSELF AND THE ENEMY FOR ${f.t}S. IT BLOCKS THE ENEMY AND THEIR SHOTS, AND THE GROUND ALONG IT BURNS ANYONE WHO STANDS THERE.`;
-    case 'nightmare': return `A SHADOW OF THE ENEMY TEARS LOOSE AND HUNTS THEM FOR ${f.t}S, CLAWING FOR ${f.dmg} DAMAGE WHENEVER IT CATCHES THEM.`;
+    case 'nightmare': return `A SHADOW OF THE ENEMY TEARS LOOSE A WAY BEHIND THEM, RISES FOR 1S, THEN HUNTS THEM FOR ${f.t}S, SLOWER THAN THEY CAN RUN. IT CLAWS FOR ${f.dmg} DAMAGE WHENEVER IT CATCHES THEM.`;
     case 'net': return `THROWS A WIDE NET AT THE ENEMY. IF IT CATCHES THEM IT DEALS ${f.dmg} DAMAGE AND HOLDS THEM TANGLED IN PLACE FOR ${f.t}S.`;
     case 'trapdoll': return `LEAVES A DOLL OF ITSELF THAT WALKS AT THE ENEMY. WHEN IT REACHES THEM IT BLOWS UP FOR ${f.dmg} DAMAGE. IT CAN BE SHOT DOWN FIRST.`;
     case 'duel': return `CALLS A DUEL: A RING OF WALLS CLOSES AROUND THEM BOTH FOR ${f.t}S, AND WHILE IT STANDS EVERY HIT IT LANDS DEALS ${pct(DUEL_MUL)}% MORE.`;
@@ -909,7 +909,11 @@ const FIXED: ReadonlySet<K> = new Set<K>(['reset', 'cleanse', 'timewarp']);
  * sphinx's RIDDLE WALL "more impactful and worthwhile" -- it gains a
  * crushing hit of its own and a third again of everything else.)
  */
-const BUFF: Record<string, number> = { b_sphinx: 1.35 };
+// (user, 5 Nov: the Deep Wyrm's WORLD NIGHTMARE "too strong ... give the
+// player space to run away": under budget, and its shadow outrunnable;
+// the oracle, lich and maw measured at 100+ damage in 6s against a dodging
+// fighter, near a whole creature -- brought under budget too)
+const BUFF: Record<string, number> = { b_sphinx: 1.35, b_wyrm: 0.55, b_oracle: 0.5, b_lich: 0.65, b_maw: 0.65 };
 function balance(fx: UltFx[], boss: boolean, hp: number, buff = 1): UltFx[] {
   const want = (boss ? BOSS_BUDGET : BUDGET) * buff;
   // the fixed parts stay as designed; the rest is scaled, a few rounds so
