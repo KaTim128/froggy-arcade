@@ -18,7 +18,7 @@
  * windows come on warm, and the lamps throw their pools on the ground.
  */
 
-import { daylight, nightify } from '../render/palette';
+import { PALETTE, daylight, nightify } from '../render/palette';
 
 export type AlleyLight = 'day' | 'evening' | 'night';
 
@@ -345,16 +345,19 @@ function paintMouth(
     g.fillStyle = glow;
     g.fillRect(0, ground - 70, ow, 60);
   }
-  // the far pavement and kerb
-  rect(0, ground - 30, ow, 8, c(0xa8a8a8));
-  rect(0, ground - 22, ow, 1, c(0x6a6a6e));
-  // the road
-  rect(0, ground - 21, ow, 17, c(0x3a3a42));
-  for (let x = 2; x < ow; x += 9) rect(x, ground - 13, 5, 1, c(0xd8d0a0));
-  // the near pavement, out to the alley's floor
-  rect(0, ground - 4, ow, 1, c(0x6a6a6e));
-  rect(0, ground - 3, ow, 180 - ground + 3, c(0x9a9aa0));
-  for (let y = ground + 4; y < 180; y += 8) rect(0, y, ow, 1, c(0x84848a));
+  // ---- THE STREET'S OWN PAVEMENT (user, 5 Nov): no road out there -- the
+  // same slabs the street is paved with (art/shopfront paintStreet), running
+  // straight across the opening, the way the patrols walk past along it.
+  const top = ground - 30;
+  rect(0, top, ow, 180 - top, c(PALETTE.steel));
+  rect(0, top, ow, 2, c(PALETTE.ash));
+  rect(0, top + 2, ow, 2, c(0x3a3a46));
+  for (let y = top + 4, k = 0; y < 180; k++) {
+    const h = 7 + (k % 3);
+    rect(0, y + h - 1, ow, 1, c(PALETTE.slate));
+    for (let x = [0, 10, 4][k % 3]; x < ow; x += 22) rect(x, y, 1, h, c(PALETTE.slate));
+    y += h;
+  }
   // the street's light: brighter out there than in here
   g.fillStyle = night ? 'rgba(255,220,160,0.06)' : 'rgba(255,255,240,0.10)';
   g.fillRect(0, 0, ow, 180);
