@@ -3,8 +3,8 @@
  *
  * Two ways round, chosen after PLAY:
  *
- *   BIG FROG   you are the frog.  Catch the tadpole before the clock runs out
- *              -- or before it eats every fly: it has the same job you have
+ *   BIG FROG   you are the frog.  Catch the tadpole before it eats every fly
+ *              (no clock -- user, 5 Nov): it has the same job you have
  *              as the survivor, and goes after them (see `runnerChoice`).
  *              It is QUICKER than you, and it runs: every turn it takes keeps
  *              it farthest from you with the most room behind it.  What the
@@ -842,7 +842,7 @@ function refreshHud(): void {
   if (phase === 'pick') hud.setText('');
   else if (role === 'frog') {
     const trap = traps.size >= maxTraps() ? 'ALL DOWN' : trapCd > 0 ? `${Math.ceil(trapCd)}S` : 'READY';
-    hud.setText(`BIG FROG  ${Math.max(0, Math.ceil(HUNT_S - clock))}S  FLIES ${flies.size}  TRAP ${trap} ${traps.size}/${maxTraps()}`);
+    hud.setText(`BIG FROG    FLIES LEFT ${flies.size}    TRAP ${trap} ${traps.size}/${maxTraps()}`);
   }
   else hud.setText(`SURVIVOR    FLIES LEFT ${flies.size}    ${Math.floor(clock)}S`);
 }
@@ -858,7 +858,7 @@ export const croaked: MinigameModule = {
     pitch: 'A MAZE, A BIG FROG, AND SOMETHING SMALL. PICK A SIDE.',
     steps: [
       { say: 'AFTER PLAY, PICK A SIDE: BIG FROG HUNTS, THE SURVIVOR RUNS.', demo: 'croak.pick' },
-      { say: `BIG FROG: CATCH THE TADPOLE IN ${HUNT_S} SECONDS, BEFORE IT EATS EVERY FLY. YOU ARE THE QUICKER, SO RUN IT DOWN OR TRAP IT.`, demo: 'croak.hunt' },
+      { say: `BIG FROG: CATCH THE TADPOLE BEFORE IT EATS EVERY FLY. YOU ARE THE QUICKER, SO RUN IT DOWN OR TRAP IT.`, demo: 'croak.hunt' },
       { say: `SPACE DROPS A TRAP WHERE YOU STAND (${TUNE.playerMaxTraps} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, phone: `TAP TRAP TO DROP ONE WHERE YOU STAND (${TUNE.playerMaxTraps} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, demo: 'croak.trap' },
       { say: 'SURVIVOR: YOU ARE THE SMALL ONE. EAT EVERY FLY, AND MIND THE FAINT RINGS - THE FROG\'S TRAPS.', demo: 'croak.survive' },
       { say: 'W A S D OR THE ARROWS STEER. PRESS A WAY EARLY AND YOU TURN AT THE NEXT GAP.', phone: 'THE STICK STEERS. PUSH A WAY EARLY AND YOU TURN AT THE NEXT GAP.', demo: 'croak.steer' },
@@ -981,7 +981,8 @@ export const croaked: MinigameModule = {
       end(role === 'frog', role === 'frog' ? 'GULP! CAUGHT IT!' : 'CROAKED!');
       return;
     }
-    if (role === 'frog' && clock >= HUNT_S) end(false, 'IT GOT AWAY');
+    // (user, 5 Nov: no timer -- the frog hunts until it catches the tadpole
+    // or the tadpole has eaten every fly)
   },
 
   snapshot() {
@@ -1085,7 +1086,7 @@ export function simulateCroaked(r: Role, rounds = 100, noise = 0.15, tune: Parti
       if (Math.hypot(a.x - b.x, a.y - b.y) < CATCH) {
         caught = true;
         end(r === 'frog', '');
-      } else if (r === 'frog' && clock >= HUNT_S) end(false, '');
+      }
     }
     // (won: the frog caught it before the flies ran out, or the tadpole ate them all)
     if (r === 'frog' ? caught && flies.size > 0 : flies.size === 0) wins++;

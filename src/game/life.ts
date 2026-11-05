@@ -58,7 +58,8 @@ export function twelveHour(hour: number, minute = 0): string {
 }
 
 /** Begging: one cash per this many real milliseconds of sitting there. */
-export const BEG_MS = 7 * 60 * 1000;
+/** (user, 5 Nov: five minutes a dollar, was seven) */
+export const BEG_MS = 5 * 60 * 1000;
 /** What a sold thing fetches: this fraction of what it cost.  Never more. */
 export const RESALE = 0.4;
 
