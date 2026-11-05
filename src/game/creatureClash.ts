@@ -28,7 +28,7 @@
  *                 your creatures.
  */
 
-import { cfgNum, cfgPct, cfgStr } from '../core/gameConfig';
+import { cfgNum, cfgPct, cfgStr, inTestZone } from '../core/gameConfig';
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
 import {
@@ -176,6 +176,24 @@ export function recruitChosen(ids: string | string[]): Result {
   });
   store.flush();
   return ok(list.length === 1 ? `${creatureById(list[0])!.name.toUpperCase()} JOINS YOU.` : `${list.length} CREATURES JOIN YOU.`);
+}
+
+/**
+ * THE ADMIN'S CLEAN SLATE (user, 5 Nov: "a button to release all creatures"):
+ * in the test zone only, every creature on the team goes at once.
+ */
+export function releaseAll(): Result {
+  const c = C();
+  if (!inTestZone()) return no('ADMIN TEST ZONE ONLY.');
+  if (c.battle) return no('NOT IN THE MIDDLE OF A BATTLE.');
+  const n = c.owned.length;
+  if (!n) return no('THE TEAM IS ALREADY EMPTY.');
+  edit((s) => {
+    s.owned = [];
+    s.active = -1;
+  });
+  store.flush();
+  return ok(`ALL ${n} RELEASED.`);
 }
 
 /** Turn over one of the nine: it is yours, and the pack is spent. */
