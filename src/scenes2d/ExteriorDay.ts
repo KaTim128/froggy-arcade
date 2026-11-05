@@ -28,7 +28,7 @@ import { PALETTE, daylight } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
-import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
+import { centerText, confirmDialog, fadeIn, fadeToScene, text } from '../core/ui';
 import { paintEntrance, paintExterior, startSignFlicker, KERB_Y, MAN_X } from '../art/exterior';
 import { MysteryMan } from '../art/mysteryMan';
 import { Player } from '../art/player';
@@ -526,7 +526,7 @@ export class ExteriorDay extends Phaser.Scene {
     if (this.talking) return;
     const dark = clock().dark;
     const line = dark
-      ? `BEG WITH THE CAN ($1 EVERY 5 MINUTES), OR SLEEP HERE TILL MORNING. THIEVES WORK THIS STREET AT NIGHT: ONE NIGHT IN FOUR THEY TAKE HALF YOUR CASH AND TOKENS.`
+      ? `BEG WITH THE CAN ($1 EVERY 5 MINUTES), OR SLEEP HERE TILL MORNING. THIEVES WORK THIS STREET AT NIGHT: ONE NIGHT IN FOUR THEY TAKE HALF YOUR CASH, TOKENS AND POCKETS.`
       : `BEG WITH THE CAN: $1 EVERY 5 MINUTES. SLEEPING OUT HERE IS FOR NIGHT-TIME ONLY.`;
     this.talking = openTalkPanel(this, {
       who: 'YOUR PITCH',
@@ -607,17 +607,17 @@ export class ExteriorDay extends Phaser.Scene {
           this.scene.restart({ woke: r.msg });
           return;
         }
-        const what =
-          got.cash || got.tokens
-            ? `SOMEONE STOLE ${[got.cash ? `$${got.cash} OF YOUR CASH` : '', got.tokens ? `${got.tokens} OF YOUR TOKENS` : ''].filter(Boolean).join(' AND ')} WHILE YOU WERE ASLEEP.`
-            : 'SOMEONE WENT THROUGH YOUR POCKETS IN THE NIGHT. THERE WAS NOTHING TO TAKE.';
+        const took = [got.cash ? `$${got.cash} OF YOUR CASH` : '', got.tokens ? `${got.tokens} OF YOUR TOKENS` : '', got.items.length ? `YOUR ${got.items.join(', ')}` : ''].filter(Boolean);
+        const what = took.length
+          ? `SOMEONE STOLE ${took.length > 1 ? `${took.slice(0, -1).join(', ')} AND ${took[took.length - 1]}` : took[0]} WHILE YOU WERE ASLEEP.`
+          : 'SOMEONE WENT THROUGH YOUR POCKETS IN THE NIGHT. THERE WAS NOTHING TO TAKE.';
         this.cameras.main.resetFX();
         this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 1).setOrigin(0, 0).setDepth(5000);
         const t = centerText(this, GAME_W / 2, GAME_H / 2 - 6, what, PALETTE.cream).setDepth(5001).setMaxWidth(270).setAlpha(0);
         const t2 = centerText(this, GAME_W / 2, GAME_H / 2 + 20, 'THIEVES.', 0xd06060).setDepth(5001).setAlpha(0);
         audio.sfx('eerie_swell', 0.25);
         this.tweens.add({ targets: [t, t2], alpha: 1, duration: 700 });
-        this.time.delayedCall(4200, () => this.scene.restart({ woke: got.cash || got.tokens ? 'MORNING. LIGHTER POCKETS THAN LAST NIGHT.' : r.msg }));
+        this.time.delayedCall(4200, () => this.scene.restart({ woke: took.length ? 'MORNING. LIGHTER POCKETS THAN LAST NIGHT.' : r.msg }));
       });
     });
   }
@@ -749,7 +749,28 @@ export class ExteriorDay extends Phaser.Scene {
         // one button per week: what is owed from before, then this week
         ...(!l.rented && l.debt > 0 ? [{ label: `OVERDUE WEEK $${RENT_PRICE}`, fn: pay(payDebt) }] : []),
         { label: l.rented ? `PAY THIS WEEK $${RENT_PRICE}` : l.debt > 0 ? `THIS WEEK $${RENT_PRICE}` : `RENT 213 - $${RENT_PRICE}`, fn: pay(l.rented ? payRent : rent) },
-        ...(l.rented && d <= 0 ? [{ label: 'MOVE OUT', fn: pay(() => (evict(), { ok: true, msg: store.get().life.notice || 'MOVED OUT.' })) }] : []),
+        // (user, 5 Nov: MOVE OUT asks first, so nobody moves out by accident)
+        ...(l.rented && d <= 0
+          ? [{
+              label: 'MOVE OUT',
+              fn: () => {
+                this.talking = null;
+                this.locked = true;
+                confirmDialog(this, {
+                  lines: ['MOVE OUT OF 213?', 'YOU GIVE UP THE ROOM. YOUR THINGS GO TO STORAGE.'],
+                  confirm: 'MOVE OUT',
+                  cancel: 'CANCEL',
+                  edge: PALETTE.blood,
+                  depth: 3000,
+                  onConfirm: () => {
+                    this.locked = false;
+                    pay(() => (evict(), { ok: true, msg: store.get().life.notice || 'MOVED OUT.' }))();
+                  },
+                  onCancel: () => (this.locked = false),
+                });
+              },
+            }]
+          : []),
         {
           label: 'PRIZES',
           fn: () => {

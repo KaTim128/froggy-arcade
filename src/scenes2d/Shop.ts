@@ -13,7 +13,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, text } from '../core/ui';
+import { button, centerText, confirmDialog, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { Player } from '../art/player';
 import { drawFurniture } from '../art/furnitureArt';
@@ -62,6 +62,8 @@ interface Act {
   label: string;
   fn: () => Result | void;
   off?: boolean;
+  /** Asked first, YES / NO, before it is done (a thing that cannot be undone). */
+  confirm?: string[];
 }
 interface Mode {
   title: string;
@@ -238,7 +240,19 @@ export class Shop extends Phaser.Scene {
     if (this.msg) L.add(centerText(this, GAME_W / 2, 167, this.msg, PALETTE.gold));
   }
 
-  private act(a: Act): void {
+  private act(a: Act, asked = false): void {
+    if (a.confirm && !asked) {
+      confirmDialog(this, {
+        lines: a.confirm,
+        confirm: a.label,
+        cancel: 'CANCEL',
+        edge: PALETTE.blood,
+        depth: 3000,
+        onConfirm: () => this.act(a, true),
+        onCancel: () => this.draw(),
+      });
+      return;
+    }
     const res = a.fn();
     if (res) {
       this.msg = res.msg;
@@ -529,9 +543,12 @@ export class Shop extends Phaser.Scene {
               { label: `PAY THIS WEEK $${RENT_PRICE}`, fn: () => rent(), off: l.debt > 0 },
             ];
           return [
-            { label: `PAY THIS WEEK $${RENT_PRICE}`, fn: () => payRent(), off: rentInDays(l) > RENT_DAYS - 1 },
+            // (short enough to fit its half of the row beside MOVE OUT)
+            { label: `PAY RENT $${RENT_PRICE}`, fn: () => payRent(), off: rentInDays(l) > RENT_DAYS - 1 },
             {
               label: 'MOVE OUT',
+              // (user, 5 Nov: asked first, so nobody moves out by accident)
+              confirm: ['MOVE OUT OF YOUR APARTMENT?', 'YOU GIVE UP THE KEY. YOUR THINGS GO TO STORAGE.'],
               fn: () => {
                 evict();
                 return { ok: true, msg: 'MOVED OUT. YOUR THINGS ARE IN STORAGE.' };
