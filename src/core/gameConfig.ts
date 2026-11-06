@@ -89,7 +89,7 @@ export function schemas(): GameSchema[] {
     id: 'clash',
     title: 'CREATURE CLASH',
     params: [
-      { key: 'clash.packCost', label: 'RECRUIT COST', kind: 'int', def: 50, min: 0, max: 500, step: 5 },
+      { key: 'clash.packCost', label: 'RECRUIT COST', kind: 'int', def: 25, min: 0, max: 500, step: 5 },
       { key: 'clash.firstFree', label: 'FIRST RECRUIT FREE', kind: 'choice', def: 'yes', choices: [['yes', 'YES'], ['no', 'NO']] },
       pct('clash.xp', 'XP %', 'EXPERIENCE FROM EVERY FIGHT'),
       pct('clash.storyPay', 'STORY PRICES %', 'WHAT STORY FIGHTS COST AND PAY'),
