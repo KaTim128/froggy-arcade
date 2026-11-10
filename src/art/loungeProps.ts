@@ -10,7 +10,7 @@
 import Phaser from 'phaser';
 import { PALETTE, nightify } from '../render/palette';
 import { depthFor } from './player';
-import { centerText } from '../core/ui';
+import { centerSmall, centerText } from '../core/ui';
 
 export type CraneKind = 'plush' | 'oddity';
 /**
@@ -22,7 +22,9 @@ export const CRANE_SPOTS: ReadonlyArray<{ kind: CraneKind; x: number; y: number;
   { kind: 'plush', x: 44, y: 78, title: 'PLUSH CRANE' },
   { kind: 'oddity', x: 82, y: 78, title: 'ODDITY CRANE' },
 ];
-export const CLASH_SPOT = { x: 284, y: 90 };
+/** (user, 8 Nov: smaller in the front room -- three quarters of its own size) */
+export const CLASH_SCALE = 0.75;
+export const CLASH_SPOT = { x: 282, y: 90 };
 export const CRANE_W = 30;
 /** A little over 2 m against the 26-pixel man, marquee and all. */
 export const CRANE_H = 36;
@@ -256,7 +258,7 @@ export const CLASH_W = 40;
 export const CLASH_H = 50;
 
 /** CREATURE CLASH, the cabinet: feet on `y`, sorted with the player like the cranes. */
-export function paintClashCabinet(scene: Phaser.Scene, x: number, y: number, night: boolean): Phaser.GameObjects.Container {
+export function paintClashCabinet(scene: Phaser.Scene, x: number, y: number, night: boolean, scale = 1): Phaser.GameObjects.Container {
   // ---- CREATURE CLASH: a premium upright, the room's centrepiece.
   //
   // A cabinet you would cross an arcade for: a shaped silhouette with a
@@ -266,7 +268,7 @@ export function paintClashCabinet(scene: Phaser.Scene, x: number, y: number, nig
   // with a stick and three lit buttons, a coin door, and a kick plate with a
   // strip of light under it that throws a glow on the floor.  After closing
   // it is all there and all switched off.
-  const c = scene.add.container(x, y).setDepth(depthFor(y));
+  const c = scene.add.container(x, y).setDepth(depthFor(y)).setScale(scale);
   const n = (col: number) => (night ? nightify(col, 0.7) : col);
   const W = CLASH_W;
   const H = CLASH_H;
@@ -338,7 +340,9 @@ export function paintClashCabinet(scene: Phaser.Scene, x: number, y: number, nig
   }
   // the logo at full size (scaled down it was unreadable), a creature's
   // head either side of it squaring up
-  c.add(centerText(scene, 0, mq + 5, 'CLASH', night ? nightify(PINK, 0.5) : 0xffffff));
+  if (scale === 1) c.add(centerText(scene, 0, mq + 5, 'CLASH', night ? nightify(PINK, 0.5) : 0xffffff));
+  // (scaled down, pixel lettering garbles: the small type at its own size, over it)
+  else centerSmall(scene, x, y + (mq + 5) * scale - 3, 'CLASH', night ? nightify(PINK, 0.5) : 0xffffff).setDepth(depthFor(y) + 0.0001);
   g.fillStyle(n(0xe8642a), 1).fillCircle(L + 6, mq + 5, 1.6);
   g.fillStyle(n(0x3a8ad8), 1).fillCircle(R - 6, mq + 5, 1.6);
   // ---- THE SCREEN: a deep bezel, a curved glass, and a fight on it

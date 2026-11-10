@@ -163,8 +163,10 @@ export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
   scene.add.rectangle(0, 44, GAME_W, 4, c(PALETTE.ink)).setOrigin(0, 0);
 
   // ---- side walls
-  scene.add.rectangle(0, 0, 14, GAME_H, c(PALETTE.ink)).setOrigin(0, 0);
-  scene.add.rectangle(GAME_W - 14, 0, 14, GAME_H, c(PALETTE.ink)).setOrigin(0, 0);
+  // (user, 8 Nov: solid, never see-through -- above the back wall's
+  // panelling, which used to show through the top of them)
+  scene.add.rectangle(0, 0, 14, GAME_H, c(PALETTE.ink)).setOrigin(0, 0).setDepth(0.002);
+  scene.add.rectangle(GAME_W - 14, 0, 14, GAME_H, c(PALETTE.ink)).setOrigin(0, 0).setDepth(0.002);
 
   // ---- neon strip along the back wall.  Gold in the casino, and a row of
   // bulbs under it rather than a single line of tube.

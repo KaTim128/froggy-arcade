@@ -739,7 +739,7 @@ const ARCADE_BASE: RoomDef = {
     // in the back-right (x 284), right of the desk's return.
     { x: -8.74, z: -8.7, w: 2.2, d: 1.6, h: 2.6, color: 0xff4fa3, prop: 'cabinet', face: 0 },
     { x: -5.87, z: -8.7, w: 2.2, d: 1.6, h: 2.6, color: 0x7a4fd8, prop: 'cabinet', face: 0 },
-    { x: 9.5, z: -8.6, w: 2.6, d: 1.6, h: 2.9, color: 0xe8559f, prop: 'cabinet', face: 0 },
+    { x: 9.4, z: -8.6, w: 2.0, d: 1.3, h: 2.2, color: 0xe8559f, prop: 'cabinet', face: 0 },
 
     // ---- AND SIX ALONG THE FRONT WALL at y 164, three either side of the
     // doors -- CHOMP, WHACK and BOG BALL; BOWLING, POND HUNT and the cash

@@ -34,7 +34,7 @@ import {
   STAFF_DOOR,
 } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
-import { paintClashCabinet, paintCrane, CLASH_SPOT, CLASH_W, CRANE_SPOTS, CRANE_W } from '../art/loungeProps';
+import { paintClashCabinet, paintCrane, CLASH_SCALE, CLASH_SPOT, CLASH_W, CRANE_SPOTS, CRANE_W } from '../art/loungeProps';
 import { audio as sfxBus } from '../core/audio';
 import { GAME_W } from '../render/pixelScaler';
 import { fitPrompt, SUBTITLE_Y } from '../ui/plate';
@@ -85,7 +85,7 @@ export class ArcadeDark extends Phaser.Scene {
     this.paintSideDoor();
     // the claw machines and CREATURE CLASH, where the lit room has them, dark
     for (const cr of CRANE_SPOTS) paintCrane(this, cr.x, cr.y, cr.kind, true);
-    paintClashCabinet(this, CLASH_SPOT.x, CLASH_SPOT.y, true);
+    paintClashCabinet(this, CLASH_SPOT.x, CLASH_SPOT.y, true, CLASH_SCALE);
     // THE HUB'S OWN CABINETS, AND ONLY THOSE.  This drew every machine in the
     // building -- the back room's and the casino's on top of the front room's
     // -- which put ten cabinets in a room that has six and made the dark
@@ -96,7 +96,7 @@ export class ArcadeDark extends Phaser.Scene {
     this.solids = [
       ...cabinetsIn('hub').map((def) => machineSpot(def.x, def.y, CAB_W, CAB_FOOT).solid!),
       ...CRANE_SPOTS.map((cr) => machineSpot(cr.x, cr.y, CRANE_W, 10).solid!),
-      machineSpot(CLASH_SPOT.x, CLASH_SPOT.y, CLASH_W, 10).solid!,
+      machineSpot(CLASH_SPOT.x, CLASH_SPOT.y, CLASH_W * CLASH_SCALE, 10).solid!,
       machineSpot(CHANGE_MACHINE.x, CHANGE_MACHINE.y, 24, CAB_FOOT).solid!,
     ];
 

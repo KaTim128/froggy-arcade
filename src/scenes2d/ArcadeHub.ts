@@ -8,7 +8,7 @@
  */
 
 import Phaser from 'phaser';
-import { paintClashCabinet, paintCrane, CLASH_H, CLASH_SPOT, CLASH_W, CRANE_H, CRANE_SPOTS, CRANE_W } from '../art/loungeProps';
+import { paintClashCabinet, paintCrane, CLASH_H, CLASH_SCALE, CLASH_SPOT, CLASH_W, CRANE_H, CRANE_SPOTS, CRANE_W } from '../art/loungeProps';
 import { CRANE_COST } from './CraneGame';
 import { FULL_LINE, pocketsFull } from '../game/inventory';
 import { StageFigure } from '../render/stageFigure';
@@ -386,7 +386,7 @@ export class ArcadeHub extends Phaser.Scene {
     // machines top left, CREATURE CLASH top right, the cash exchange a
     // machine of its own in the bottom-right corner
     for (const cr of CRANE_SPOTS) this.spots.set(cr, machineSpot(cr.x, cr.y, CRANE_W, 10));
-    this.spots.set(CLASH_SPOT, machineSpot(CLASH_SPOT.x, CLASH_SPOT.y, CLASH_W, 10));
+    this.spots.set(CLASH_SPOT, machineSpot(CLASH_SPOT.x, CLASH_SPOT.y, CLASH_W * CLASH_SCALE, 10));
     this.spots.set(CHANGE_MACHINE, machineSpot(CHANGE_MACHINE.x, CHANGE_MACHINE.y, 24, CAB_FOOT));
     this.solids = [...this.spots.values()].map((s) => s.solid!);
     for (const cr of CRANE_SPOTS) {
@@ -396,9 +396,9 @@ export class ArcadeHub extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => this.walkTo(this.spots.get(cr)!, () => this.useCrane(cr)));
     }
-    paintClashCabinet(this, CLASH_SPOT.x, CLASH_SPOT.y, false);
+    paintClashCabinet(this, CLASH_SPOT.x, CLASH_SPOT.y, false, CLASH_SCALE);
     this.add
-      .zone(CLASH_SPOT.x, CLASH_SPOT.y - CLASH_H / 2, CLASH_W + 4, CLASH_H)
+      .zone(CLASH_SPOT.x, CLASH_SPOT.y - (CLASH_H * CLASH_SCALE) / 2, CLASH_W * CLASH_SCALE + 4, CLASH_H * CLASH_SCALE)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.walkTo(this.spots.get(CLASH_SPOT)!, () => this.useClash()));
     const counterBox: Box = { x: COUNTER.x - COUNTER_EDGE + 3, y: 0, w: COUNTER.w + 2 * COUNTER_EDGE - 6, h: COUNTER_STAND };
@@ -1678,11 +1678,12 @@ export class ArcadeHub extends Phaser.Scene {
     const w = GAME_W - ROOM.right - 2;
     const wall = Phaser.Display.Color.IntegerToColor(PALETTE.ink);
     const warm = Phaser.Display.Color.IntegerToColor(PALETTE.brown);
-    const mix = Phaser.Display.Color.Interpolate.ColorWithColor(wall, warm, 100, 22);
+    // (user, 8 Nov: barely visible -- a tenth of the way from the wall to brown)
+    const mix = Phaser.Display.Color.Interpolate.ColorWithColor(wall, warm, 100, 9);
     this.add.rectangle(x, top, w, HIDDEN_DOOR.h, Phaser.Display.Color.GetColor(mix.r, mix.g, mix.b)).setOrigin(0, 0).setDepth(0.57);
-    this.add.rectangle(x, top, 1, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.18);
-    this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.18);
-    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 1, 3, PALETTE.amberDark).setOrigin(0, 0).setDepth(0.58).setAlpha(0.15);
+    this.add.rectangle(x, top, 1, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
+    this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
+    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 1, 3, PALETTE.amberDark).setOrigin(0, 0).setDepth(0.58).setAlpha(0.08);
   }
 
   /** Into CREATURE CLASH.  Nothing is paid here: the packs and the battles inside ask. */
