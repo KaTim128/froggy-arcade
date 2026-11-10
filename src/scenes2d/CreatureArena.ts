@@ -2189,7 +2189,7 @@ export class CreatureArena extends Phaser.Scene {
         const ty = Phaser.Math.Clamp(f.y + uy * d, ARENA.y + 6, ARENA.y + ARENA.h - 6);
         this.shots.push({
           owner: f, x: f.x, y: f.y, vx: 0, vy: 0, life: 9, dmg, a, pierce: true, t: 0, ang: 0,
-          arc: { sx: f.x, sy: f.y, tx, ty, t: 0, dur: 0.75, r: 16 },
+          arc: { sx: f.x, sy: f.y, tx, ty, t: 0, dur: a.sp === 'ice_boulder' ? 0.95 : 0.75, r: a.sp === 'ice_boulder' ? 28 : 16 },
         });
         audio.sfx('throw_whoosh', 0.35);
         break;
@@ -2945,6 +2945,18 @@ export class CreatureArena extends Phaser.Scene {
         to.blind = Math.max(to.blind, 2);
         to.slow = Math.max(to.slow, 3);
         break;
+      case 'death_roll':
+        // clamped on: held, rolled, and bleeding -- one bleed at a time,
+        // a fresh roll only restarts it
+        if (!to.st.unstop) to.root = Math.max(to.root, 1);
+        to.st.croc_bleed = 3;
+        from.st.u_spin = 0.6;
+        this.floatNum(to, 0, 0xff4a4a, 'CLAMPED ');
+        for (let n = 0; n < 6; n++) this.fx.push({ kind: 'spark', x: to.x + (Math.random() - 0.5) * 14, y: to.y + (Math.random() - 0.5) * 8, r: 3, t: 0, life: 0.5, col: n % 2 ? 0xc01020 : 0x8a7a5a });
+        this.fx.push({ kind: 'ring', x: to.x, y: to.y, r: 18, t: 0, life: 0.4, col: 0xc01020 });
+        this.cameras.main.shake(140, 0.006);
+        audio.sfx('crumble', 0.6);
+        break;
       case 'rut_bellow':
         if (!to.st.unstop) to.stun = Math.max(to.stun, 0.4);
         to.weak = Math.max(to.weak, 1.5);
@@ -2963,8 +2975,20 @@ export class CreatureArena extends Phaser.Scene {
       this.props.push(part);
       this.repaintCover();
     }
-    // a direct hit with the boulder: encased
-    if (a.sp === 'ice_boulder' && Math.hypot(o.x - x, o.y - y) < 10 * o.scale) o.stun = Math.max(o.stun, 0.8);
+    // the giant snowball: a burst of snow; caught in it, slowed; hit square, frozen
+    if (a.sp === 'ice_boulder') {
+      this.fx.push({ kind: 'ring', x, y, r: 30, t: 0, life: 0.55, col: 0xffffff });
+      this.fx.push({ kind: 'boom', x, y, r: 26, t: 0, life: 0.5, col: 0xe8f4ff });
+      for (let n = 0; n < 12; n++) {
+        const ang = (n / 12) * Math.PI * 2;
+        this.fx.push({ kind: 'spark', x: x + Math.cos(ang) * (10 + Math.random() * 14), y: y + Math.sin(ang) * (6 + Math.random() * 8), r: 2 + Math.random() * 2, t: 0, life: 0.5 + Math.random() * 0.3, col: n % 3 ? 0xffffff : 0xbfe0ff });
+      }
+      this.cameras.main.shake(180, 0.007);
+      audio.sfx('item_thud', 0.6);
+      const dd = Math.hypot(o.x - x, o.y - y);
+      if (dd < 28 + 5 * o.scale) o.slow = Math.max(o.slow, 2);
+      if (dd < 10 * o.scale) o.stun = Math.max(o.stun, 0.8);
+    }
   }
 
   /** Where the body is drawn, off its true spot, for its step and its lunge. */
@@ -2985,6 +3009,18 @@ export class CreatureArena extends Phaser.Scene {
       ox += f.atkX * d * f.scale;
       oy += f.atkY * d * f.scale * 0.7;
       k = 1 + (p > 0.25 && p < 0.6 ? 0.08 : 0);
+    }
+    // a death roll: tumbling over and over as it goes
+    if ((f.st.u_spin ?? 0) > 0) {
+      const sa = this.time.now / 45;
+      ox += Math.cos(sa) * 2.2 * f.scale;
+      oy += Math.sin(sa) * 1.4 * f.scale;
+      k *= 0.92 + Math.abs(Math.sin(sa)) * 0.1;
+    }
+    // reared up before bringing its jaws down
+    if ((f.st.u_rear ?? 0) > 0) {
+      oy -= 5 * Math.min(1, f.st.u_rear / 0.25) * f.scale;
+      k *= 1.12;
     }
     return { ox: Math.round(ox), oy: Math.round(oy), k };
   }
@@ -3026,6 +3062,15 @@ export class CreatureArena extends Phaser.Scene {
     const prevStar = f.st.starShell ?? 0;
     const prevAir = f.st.air ?? 0;
     for (const k of Object.keys(f.st)) if (!k.startsWith('n_')) f.st[k] = Math.max(0, f.st[k] - dt);
+    // a death roll's bleed: 3 every half second while it lasts (one at a time)
+    if ((f.st.croc_bleed ?? 0) > 0) {
+      f.st.n_bleedAcc = (f.st.n_bleedAcc ?? 0) + dt;
+      while (f.st.n_bleedAcc >= 0.5) {
+        f.st.n_bleedAcc -= 0.5;
+        this.fx.push({ kind: 'spark', x: f.x + (Math.random() - 0.5) * 6, y: f.y + 3, r: 2.5, t: 0, life: 0.45, col: 0xc01020 });
+        this.hit(o, f, 3, null);
+      }
+    } else f.st.n_bleedAcc = 0;
     // (a hop chain left unfinished still owes its cooldown)
     if (prevHop > 0 && !f.st.hopT && (f.st.n_hops ?? 0) > 0 && f.ref.hopSlot !== undefined) {
       f.cds[f.ref.hopSlot] = f.c.attacks[f.ref.hopSlot].cd;
@@ -4653,6 +4698,49 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('throw_whoosh', 0.6);
         break;
       }
+      case 'chop': {
+        // ---- CRAG GUILLOTINE: it rears up, a red line marks where the jaws
+        // will fall, and they come down like a dropped slab -- dust, shards,
+        // the arena rocking
+        const reach = 70;
+        const [jx, jy] = inArena(f.x + ux * reach, f.y + uy * reach);
+        f.st.u_rear = 0.5;
+        this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: jx, y2: jy, r: 6, t: 0, life: 0.5, col: 0xff3a3a });
+        this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: jx, y2: jy, r: 1, t: 0, life: 0.5, col: 0xffd0c0 });
+        audio.sfx('stinger', 0.5);
+        later(500, () => {
+          if (this.over || f.hp <= 0) return;
+          // the strike: the jaws down the line, heavy
+          this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: jx, y2: jy, r: 10, t: 0, life: 0.35, col: 0xc8b890 });
+          this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: jx, y2: jy, r: 3, t: 0, life: 0.35, col: 0xffffff });
+          for (let k = 0; k <= 4; k++) {
+            const px = f.x + (jx - f.x) * (k / 4);
+            const py = f.y + (jy - f.y) * (k / 4);
+            this.fx.push({ kind: 'boom', x: px, y: py, r: 10 + k * 2, t: 0, life: 0.45, col: 0x8a7a5a });
+            for (let n = 0; n < 3; n++) this.fx.push({ kind: 'spark', x: px + (Math.random() - 0.5) * 16, y: py + (Math.random() - 0.5) * 10, r: 2 + Math.random() * 2, t: 0, life: 0.5 + Math.random() * 0.3, col: n ? 0xd8c8a0 : 0x6a5a3a });
+          }
+          this.fx.push({ kind: 'ring', x: jx, y: jy, r: 34, t: 0, life: 0.5, col: 0xffe0b0 });
+          this.cameras.main.shake(320, 0.014);
+          this.cameras.main.flash(90, 255, 230, 200, false);
+          audio.sfx('boom', 0.9);
+          audio.sfx('crumble', 0.7);
+          // on the line: the lot; just off it: half
+          const lx = jx - f.x;
+          const ly = jy - f.y;
+          const L2 = lx * lx + ly * ly || 1;
+          const tt = Phaser.Math.Clamp(((o.x - f.x) * lx + (o.y - f.y) * ly) / L2, 0, 1);
+          const off = Math.hypot(o.x - (f.x + lx * tt), o.y - (f.y + ly * tt));
+          const w = 8 + 5 * o.scale;
+          if (off < w) {
+            this.hit(f, o, e.dmg, null);
+            if (!o.st.unstop) o.stun = Math.max(o.stun, 0.6);
+            o.kx += ux * 260;
+            o.ky += uy * 260;
+            this.floatNum(o, 0, 0xffd0a0, 'CHOP! ');
+          } else if (off < w * 2.2) this.hit(f, o, Math.round(e.dmg / 2), null);
+        });
+        break;
+      }
       case 'judgement': {
         // a cross of light through them, the width and height of the arena
         const [jx, jy] = [o.x, o.y];
@@ -5273,6 +5361,13 @@ export class CreatureArena extends Phaser.Scene {
         }
       }
       this.step(f, f.dash.vx, f.dash.vy, dt);
+      // a death roll: a spiral of grit and dust off it as it spins along
+      if (f.dash.a.sp === 'death_roll' && !f.dash.flee) {
+        f.st.u_spin = Math.max(f.st.u_spin ?? 0, 0.1);
+        const sa = this.time.now / 40;
+        this.fx.push({ kind: 'spark', x: f.x + Math.cos(sa) * 8, y: f.y + Math.sin(sa) * 4, r: 2.2, t: 0, life: 0.35, col: 0x9a8a68 });
+        if (Math.random() < dt * 20) this.fx.push({ kind: 'ring', x: f.x, y: f.y + 3, r: 9, t: 0, life: 0.25, col: 0xb8a888 });
+      }
       // a burning trail behind a lingering charge
       if (f.dash.a.mod === 'linger' && !f.dash.flee && Math.random() < dt * 14) this.pool(f, f.x, f.y, 9);
       const o = this.other(f);
@@ -6524,7 +6619,15 @@ export class CreatureArena extends Phaser.Scene {
         continue;
       }
       if (f.st.invis) {
-        g.lineStyle(1, 0xffffff, 0.15 + Math.sin(t * 9) * 0.08).strokeEllipse(f.x, f.y, 14 * f.scale, 10 * f.scale);
+        // (user, 8 Nov) only the side it belongs to sees where it is: a
+        // faded circle under the ground for a sunk one, a shimmer otherwise;
+        // the other side sees nothing at all
+        if (f === this.me) {
+          if (f.st.sunk) {
+            g.fillStyle(0x3a2a1e, 0.25).fillEllipse(f.x, f.y + 4, 16 * f.scale, 6 * f.scale);
+            g.lineStyle(1, 0xd8c8a0, 0.25 + Math.sin(t * 6) * 0.1).strokeEllipse(f.x, f.y + 4, 16 * f.scale, 6 * f.scale);
+          } else g.lineStyle(1, 0xffffff, 0.15 + Math.sin(t * 9) * 0.08).strokeEllipse(f.x, f.y, 14 * f.scale, 10 * f.scale);
+        }
         continue;
       }
       const lift = f.st.air || f.st.aloft ? 10 : f.st.u_lift ? 16 : 0;
@@ -6748,6 +6851,17 @@ export class CreatureArena extends Phaser.Scene {
       }
     }
     for (const s of this.shots) {
+      if (s.arc && s.a.sp === 'ice_boulder') {
+        const k = Phaser.Math.Clamp(s.arc.t / s.arc.dur, 0, 1);
+        const h = Math.sin(k * Math.PI) * 30;
+        const r = 5 + Math.sin(k * Math.PI) * 3;
+        g.fillStyle(0x000000, 0.25).fillEllipse(s.x, s.y + 2, r * 2.2 * (1 - k * 0.2), r * 0.9);
+        g.fillStyle(0xbfd8ee, 1).fillCircle(s.x, s.y - h, r + 0.8);
+        g.fillStyle(0xffffff, 1).fillCircle(s.x - 0.6, s.y - h - 0.6, r);
+        g.fillStyle(0xe2eef8, 1).fillCircle(s.x + r * 0.35, s.y - h + r * 0.35, r * 0.55);
+        g.fillStyle(0xffffff, 0.9).fillCircle(s.x - r * 0.4, s.y - h - r * 0.45, r * 0.25);
+        continue;
+      }
       const size = s.a.mod === 'grow' ? 1 + s.t * 2.2 : s.grace !== undefined && s.life < 0.4 && s.a.mod === 'none' ? 0.7 : 1;
       // what this element (or this particular shot) is made of, in flight
       const el = s.owner.c.element;
