@@ -497,8 +497,27 @@ export class Hotel extends Phaser.Scene {
       // what he left: the stairwell door hanging open on the dark, and the
       // front doors gone, glass across the marble
       const g = this.add.graphics().setDepth(1);
+      // (user, 10 Nov) the steel stair door torn clean off its hinges and
+      // lying flat on the floor in front of the frame, dented, the frame
+      // bent where the hinges ripped out
       g.fillStyle(0x05060a, 1).fillRect(STAIR_DOOR_X - 9, 118, 18, 34);
-      g.fillStyle(0x4a3422, 1).fillRect(STAIR_DOOR_X + 6, 118, 4, 34);
+      g.fillStyle(0x3a3e44, 1).fillRect(STAIR_DOOR_X - 10, 120, 1, 4).fillRect(STAIR_DOOR_X - 10, 138, 1, 4);
+      g.fillStyle(0x8a8e94, 1).fillRect(STAIR_DOOR_X - 9, 121, 2, 1).fillRect(STAIR_DOOR_X - 9, 139, 2, 1);
+      const lx = STAIR_DOOR_X - 4;
+      const ly = 154;
+      // its shadow, then the door itself, foreshortened flat on the marble
+      g.fillStyle(0x000000, 0.35).fillPoints([{ x: lx - 13, y: ly + 2 }, { x: lx + 22, y: ly }, { x: lx + 25, y: ly + 7 }, { x: lx - 10, y: ly + 9 }], true);
+      g.fillStyle(0x6a6e74, 1).fillPoints([{ x: lx - 14, y: ly }, { x: lx + 21, y: ly - 2 }, { x: lx + 24, y: ly + 5 }, { x: lx - 11, y: ly + 7 }], true);
+      g.fillStyle(0xa8acb0, 1).fillPoints([{ x: lx - 14, y: ly }, { x: lx + 21, y: ly - 2 }, { x: lx + 21, y: ly - 1 }, { x: lx - 14, y: ly + 1 }], true);
+      // its two pressed panels, the push bar across it, the kick plate
+      g.fillStyle(0x5a5e64, 1).fillRect(lx - 6, ly + 1, 9, 4).fillRect(lx + 6, ly, 8, 4);
+      g.fillStyle(0xc8c8c0, 1).fillRect(lx + 4, ly - 1, 1, 6);
+      g.fillStyle(0xb8963e, 1).fillRect(lx + 18, ly - 1, 2, 6);
+      // a dent where it was hit, and a hinge still bolted to it
+      g.fillStyle(0x3a3e44, 1).fillRect(lx - 2, ly + 2, 3, 2);
+      g.fillStyle(0x9a9ea4, 1).fillRect(lx - 13, ly + 1, 2, 2).fillRect(lx - 12, ly + 5, 2, 2);
+      // flakes of paint and a sheared bolt on the floor
+      g.fillStyle(0x8a8e94, 1).fillRect(lx + 26, ly + 3, 1, 1).fillRect(lx - 16, ly + 6, 1, 1).fillRect(STAIR_DOOR_X - 7, 151, 2, 1);
       g.fillStyle(0x07101e, 1).fillRect(9, 120, 28, 30);
       g.fillStyle(0x3a4a68, 0.6);
       for (const [x, y, w, h] of [[9, 120, 3, 6], [20, 120, 4, 3], [32, 121, 4, 8], [9, 142, 4, 6], [29, 141, 6, 7]]) g.fillRect(x, y, w, h);

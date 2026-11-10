@@ -630,11 +630,13 @@ function stairDoor(g: Ctx, cx: number): void {
   rect(g, x - 2, y - 2, w + 4, DOOR_H + 2, HP.woodDark);
   rect(g, x - 2, y - 2, w + 4, 1, HP.woodHi);
   rect(g, x - 1, y - 1, w + 2, DOOR_H + 1, HP.woodDeep);
-  rect(g, x, y, w, DOOR_H, '#7a5a3a');
-  rect(g, x + 1, y + 1, w - 2, 1, '#9a7a52');
-  // panels
-  rect(g, x + 2, y + 13, w - 4, 8, '#6a4a2e');
-  rect(g, x + 2, y + 24, w - 4, 7, '#6a4a2e');
+  // (user, 10 Nov) a steel fire door, not wood: grey sheet, two pressed panels
+  rect(g, x, y, w, DOOR_H, HP.steelDark);
+  rect(g, x + 1, y + 1, w - 2, 1, HP.steel);
+  rect(g, x + 2, y + 13, w - 4, 8, '#5a5e64');
+  rect(g, x + 2, y + 13, w - 4, 1, HP.steel);
+  rect(g, x + 2, y + 24, w - 4, 7, '#5a5e64');
+  rect(g, x + 2, y + 24, w - 4, 1, HP.steel);
   // the narrow wired-glass window
   rect(g, x + 6, y + 3, 6, 8, HP.goldDark);
   rect(g, x + 7, y + 4, 4, 6, '#2a3440');
