@@ -303,9 +303,11 @@ function step(m: Mover, dt: number, choose: (m: Mover) => Dir | null): void {
   }
 }
 
-/** The player's turn at a junction: what was asked for if it is open, else straight on. */
+/** The player's way on at a cell: only while a direction is held. */
 function playerChoice(m: Mover): Dir | null {
-  if (m.want !== null && open(m.cx + DX[m.want], m.cy + DY[m.want])) return m.want;
+  if (m.want === null) return null;
+  if (open(m.cx + DX[m.want], m.cy + DY[m.want])) return m.want;
+  // (a turn held early is taken at the next opening; until then, straight on)
   if (open(m.cx + DX[m.dir], m.cy + DY[m.dir])) return m.dir;
   return null;
 }
@@ -960,8 +962,20 @@ export const croaked: MinigameModule = {
     if (phase !== 'play' || !you || !them) return;
     trapCd = Math.max(0, trapCd - dt);
     expireTraps();
-    // the way asked for: held, or the last one pressed
-    for (const [d, name] of [[0, 'up'], [1, 'right'], [2, 'down'], [3, 'left']] as Array<[Dir, string]>) if (keys[name]?.some((x) => x.isDown)) you.want = d;
+    // (user, 8 Nov: hold to move, both sides -- let go and you stop where
+    // you are; nothing carries on by itself)
+    you.want = null;
+    for (const [d, name] of [[0, 'up'], [1, 'right'], [2, 'down'], [3, 'left']] as Array<[Dir, string]>) if (you.want === null && keys[name]?.some((x) => x.isDown)) you.want = d;
+    // held back the way it came, mid-cell: it turns round at once
+    if (you.want !== null && you.k < 1 && you.want === ((you.dir + 2) % 4)) {
+      const [ox, oy] = [you.cx, you.cy];
+      you.cx = you.tx;
+      you.cy = you.ty;
+      you.tx = ox;
+      you.ty = oy;
+      you.dir = you.want;
+      you.k = 1 - you.k;
+    }
     // (from a standstill, a press sets off at once)
     if (you.held <= 0 && you.k >= 1 && you.want !== null && open(you.cx + DX[you.want], you.cy + DY[you.want])) {
       you.dir = you.want;
@@ -970,7 +984,8 @@ export const croaked: MinigameModule = {
       you.k = 0;
       arrived(you);
     }
-    step(you, dt, playerChoice);
+    if (you.want !== null) step(you, dt, playerChoice);
+    else you.held = Math.max(0, you.held - dt);
     if (phase !== 'play') return;
     step(them, dt, role === 'frog' ? runnerChoice : hunterChoice);
     clock += dt;

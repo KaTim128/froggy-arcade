@@ -163,8 +163,10 @@ export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
   scene.add.rectangle(0, 44, GAME_W, 4, c(PALETTE.ink)).setOrigin(0, 0);
 
   // ---- side walls
-  scene.add.rectangle(0, 0, 14, GAME_H, c(PALETTE.ink)).setOrigin(0, 0);
-  scene.add.rectangle(GAME_W - 14, 0, 14, GAME_H, c(PALETTE.ink)).setOrigin(0, 0);
+  // (user, 8 Nov: solid, never see-through -- above the back wall's
+  // panelling, which used to show through the top of them)
+  scene.add.rectangle(0, 0, 14, GAME_H, c(PALETTE.ink)).setOrigin(0, 0).setDepth(0.002);
+  scene.add.rectangle(GAME_W - 14, 0, 14, GAME_H, c(PALETTE.ink)).setOrigin(0, 0).setDepth(0.002);
 
   // ---- neon strip along the back wall.  Gold in the casino, and a row of
   // bulbs under it rather than a single line of tube.
@@ -371,53 +373,93 @@ export function paintOpening(
   const top = opts.y - h / 2;
   const glow = opts.night ? nightify(opts.glow) : opts.glow;
 
-  // ---- the light on this room's floor, first, so everything stands in it
+  // ---- (user, 10 Nov) an OPENING, not a door, and cut INTO the wall rather
+  // than framed out from it: nothing here crosses the wall's inside face
+  // (`mouth`), so the wall line stays straight and the arch reads as a hole
+  // through it.  What makes it noticeable is light, not trim: the next room's
+  // colour fills the arch, brightest at the far end, and breathes out across
+  // this room's floor.
+  const night = !!opts.night;
+  const wallOuter = left ? 0 : GAME_W;
+  const x0 = left ? wallOuter + 2 : mouth; // the cut, 12 px into the 14 px wall
+  const w = 12;
+  const arch = 0; // (user, 10 Nov: a rounded head read as a stray handle -- square, flush)
+
+  // the floor glow, a wedge out of the mouth, pulsing slowly
   const spill = scene.add.graphics().setDepth(0.4);
-  spill.fillStyle(glow, opts.night ? 0.05 : 0.13);
-  spill.fillTriangle(mouth, top + 2, mouth, top + h - 2, mouth + dir * 46, opts.y);
-  spill.fillStyle(glow, opts.night ? 0.04 : 0.09);
-  spill.fillTriangle(mouth, top + 6, mouth, top + h - 6, mouth + dir * 26, opts.y);
+  spill.fillStyle(glow, night ? 0.05 : 0.16);
+  spill.fillTriangle(mouth, top + 3, mouth, top + h, mouth + dir * 52, opts.y + h / 4);
+  spill.fillStyle(glow, night ? 0.04 : 0.12);
+  spill.fillTriangle(mouth, top + 8, mouth, top + h - 2, mouth + dir * 28, opts.y + h / 5);
+  if (!night) {
+    scene.tweens.add({ targets: spill, alpha: { from: 1, to: 0.6 }, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
 
-  // ---- the recess itself: black, with the next room's light at the back of it
-  const recessX = left ? mouth - 12 : mouth - 4;
-  scene.add.rectangle(recessX, top, 16, h, PALETTE.black).setOrigin(0, 0).setDepth(0.5);
-  const backX = left ? recessX : recessX + 13;
-  scene.add.rectangle(backX, top + 3, 3, h - 6, glow).setOrigin(0, 0).setDepth(0.51).setAlpha(opts.night ? 0.25 : 0.7);
-  scene.add
-    .rectangle(left ? recessX + 3 : recessX + 9, top + 5, 4, h - 10, glow)
-    .setOrigin(0, 0)
-    .setDepth(0.51)
-    .setAlpha(opts.night ? 0.08 : 0.22);
-
-  // ---- the frame: a lintel, a threshold, and a post on the room side
-  const frameX = left ? mouth - 14 : mouth - 2;
-  scene.add.rectangle(frameX, top - 3, 18, 3, c(PALETTE.steel)).setOrigin(0, 0).setDepth(0.6);
-  scene.add.rectangle(frameX, top + h, 18, 3, c(PALETTE.slate)).setOrigin(0, 0).setDepth(0.6);
-  const postX = left ? mouth + 2 : mouth - 4;
-  scene.add.rectangle(postX, top - 3, 2, h + 6, c(PALETTE.steel)).setOrigin(0, 0).setDepth(0.6);
-  // a tube of the next room's colour down the post, so the opening is lit
-  scene.add
-    .rectangle(left ? postX + 2 : postX - 1, top, 1, h, glow)
-    .setOrigin(0, 0)
-    .setDepth(0.61)
-    .setAlpha(opts.night ? 0.2 : 0.85);
-
+  const g = scene.add.graphics().setDepth(0.5);
+  // a 1 px steel trim around the cut, on the wall face
+  g.fillStyle(c(PALETTE.steel), 1);
+  g.fillRect(x0 - 1, top + arch - 1, w + 2, h - arch + 2);
+  // the hole: dark, then the next room's light layered in toward the far side
+  g.fillStyle(PALETTE.black, 1);
+  g.fillRect(x0, top + arch, w, h - arch);
+  const bands = night ? [0.1, 0.06, 0.03] : [0.7, 0.4, 0.18];
+  bands.forEach((alpha, i) => {
+    const bw = 4;
+    const bx = left ? x0 + i * bw : x0 + w - (i + 1) * bw;
+    g.fillStyle(glow, alpha);
+    g.fillRect(bx, top + arch + 1, bw, h - arch - 1);
+  });
+  // the floor running through: a threshold strip at the foot of the arch
+  g.fillStyle(c(PALETTE.slate), 1).fillRect(x0, top + h - 2, w, 2);
+  g.fillStyle(glow, night ? 0.1 : 0.5).fillRect(x0, top + h - 2, w, 1);
+  // the lit edge where the wall turns into the opening, room side
+  g.fillStyle(glow, night ? 0.2 : 0.9);
+  g.fillRect(left ? mouth - 1 : mouth, top + arch, 1, h - arch - 2);
 }
 
 /** The change machine, decorative in Act I and dead at night. */
-export function paintChangeMachine(scene: Phaser.Scene, night: boolean): void {
+export function paintChangeMachine(scene: Phaser.Scene, night: boolean, at: { x: number; y: number } = { x: 282, y: 164 }): void {
+  // ---- THE CASH EXCHANGE (user, 8 Nov): a machine of its own on the floor,
+  // not a panel on the wall -- an upright with a lit marquee, a screen that
+  // says what it does, a slot for notes and a tray the tokens drop into.
+  // Feet on `at.y`, y-sorted with the player like every other machine.
   const c = (col: number) => (night ? nightify(col) : col);
-  const g = scene.add.graphics();
-  g.fillStyle(c(0x0c0a10), 1).fillRect(261, 9, 22, 34);
-  g.fillStyle(c(PALETTE.steel), 1).fillRect(262, 10, 20, 32);
-  grain(g, 263, 11, 18, 30, c(PALETTE.steel), 262, 0.08, 0.12);
-  bevel(g, 262, 10, 20, 32, c(PALETTE.steel));
-  g.fillStyle(c(PALETTE.ink), 1).fillRect(264, 14, 16, 12);
-  g.fillStyle(night ? PALETTE.black : PALETTE.gold, 1).fillRect(265, 15, 14, 10);
-  if (!night) g.fillStyle(0xffffff, 0.3).fillTriangle(265, 15, 271, 15, 265, 20);
-  g.fillStyle(c(PALETTE.ink), 1).fillRect(266, 32, 12, 3);
-  g.fillStyle(c(tone(PALETTE.steel, 1.3)), 1).fillRect(266, 35, 12, 1);
-  g.fillStyle(night ? 0x1a1010 : PALETTE.ember, 1).fillRect(270, 28, 4, 2);
+  const W = 24;
+  const H = 38;
+  const x0 = Math.round(at.x - W / 2);
+  const y0 = at.y - H;
+  const g = scene.add.graphics().setDepth(depthFor(at.y));
+  // its shadow on the carpet
+  g.fillStyle(0x000000, 0.35).fillEllipse(at.x, at.y + 1, W + 6, 5);
+  // the cabinet: a dark outline, steel sides, a lighter face set into them
+  g.fillStyle(c(0x0c0a10), 1).fillRect(x0 - 1, y0 - 1, W + 2, H + 2);
+  g.fillStyle(c(tone(PALETTE.steel, 0.75)), 1).fillRect(x0, y0, W, H);
+  g.fillStyle(c(PALETTE.steel), 1).fillRect(x0 + 2, y0 + 2, W - 4, H - 3);
+  grain(g, x0 + 3, y0 + 3, W - 6, H - 6, c(PALETTE.steel), at.x, 0.08, 0.12);
+  bevel(g, x0 + 2, y0 + 2, W - 4, H - 3, c(PALETTE.steel));
+  // the marquee along the top, lit gold
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 2, y0 + 2, W - 4, 7);
+  g.fillStyle(night ? 0x2a2210 : PALETTE.gold, 1).fillRect(x0 + 3, y0 + 3, W - 6, 5);
+  // the screen: cash in, tokens out
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 4, y0 + 11, W - 8, 10);
+  g.fillStyle(night ? 0x0a1410 : 0x123a2a, 1).fillRect(x0 + 5, y0 + 12, W - 10, 8);
+  if (!night) {
+    g.fillStyle(0x6ad86a, 1).fillRect(x0 + 6, y0 + 14, 3, 4); // the $ note
+    g.fillStyle(0x6ad86a, 1).fillTriangle(x0 + 10, y0 + 15, x0 + 10, y0 + 17, x0 + 12, y0 + 16); // the arrow
+    g.fillStyle(PALETTE.gold, 1).fillCircle(x0 + 15.5, y0 + 16, 2); // a token
+    g.fillStyle(0xffffff, 0.25).fillTriangle(x0 + 5, y0 + 12, x0 + 10, y0 + 12, x0 + 5, y0 + 16);
+  }
+  // the note slot, its green lip, and the coin slot beside it
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 5, y0 + 24, 9, 2);
+  g.fillStyle(night ? 0x1a2a1a : 0x4ac85a, 1).fillRect(x0 + 5, y0 + 26, 9, 1);
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 17, y0 + 23, 2, 4);
+  // the tray at the bottom, with a token in it
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 5, y0 + 30, W - 10, 5);
+  g.fillStyle(c(tone(PALETTE.steel, 1.3)), 1).fillRect(x0 + 5, y0 + 35, W - 10, 1);
+  if (!night) g.fillStyle(PALETTE.gold, 1).fillCircle(x0 + 9, y0 + 33, 1.5);
+  // the light on top, and the word on the marquee
+  g.fillStyle(night ? 0x1a1010 : PALETTE.ember, 1).fillRect(at.x - 1, y0 - 3, 3, 2);
+  centerText(scene, at.x, y0 + 5, '$', night ? 0x4a4030 : PALETTE.ink).setDepth(depthFor(at.y) + 0.0001);
 }
 
 /**

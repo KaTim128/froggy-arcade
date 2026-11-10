@@ -138,6 +138,12 @@ export interface RoomDef {
    * out, which is the lit arcade's).
    */
   wallOpenings?: WallOpening[];
+  /**
+   * Shut doors flush in a side wall (user, 8 Nov: the front room's hidden
+   * door, in steel).  Scenery: nothing behind them, the wall's collision
+   * unbroken.  `z` its middle along the wall, `w` its width, `h` its height.
+   */
+  wallDoors?: Array<{ side: 'left' | 'right'; z: number; w: number; h: number }>;
   /** Where he goes once he has finished with the door.  Kept off the furniture. */
   froggyStart: { x: number; z: number };
   /**
@@ -699,8 +705,9 @@ const ARCADE_BASE: RoomDef = {
     // the desk and the case behind it, which is what the room has to say first
     { x: 1.2, z: -7.8, color: 0xffb45e, intensity: 13 },
     { x: 5.6, z: -6.4, color: 0xffd45e, intensity: 9 },
-    // the machine on the left wall, lighting the wall it stands against
-    { x: -8.6, z: -1.3, color: 0xff4fa3, intensity: 10 },
+    // the claw machines in the back-left corner, and CREATURE CLASH back right
+    { x: -7.3, z: -7.4, color: 0xff4fa3, intensity: 10 },
+    { x: 9.3, z: -7.0, color: 0xe8559f, intensity: 8 },
     // the front row, either side of the doors
     { x: -6.4, z: 7.4, color: 0xffd45e, intensity: 10 },
     { x: 8.0, z: 7.4, color: 0x7b4bd8, intensity: 10 },
@@ -733,23 +740,28 @@ const ARCADE_BASE: RoomDef = {
     // stands two and a half metres clear of the desk, so there is floor to
     // stand on in front of it rather than a slot to be wedged into.
     { x: 1.2, z: -9.5, w: 7.4, d: 0.9, h: 2.8, color: 0x203048, prop: 'case', face: 0 },
-    // the change machine, past the right-hand end of the desk, where x 272 is
-    { x: 9.6, z: -9.3, w: 1.8, d: 1.2, h: 2.3, color: 0x4a4258, prop: 'change', face: 0 },
+    // ---- (user, 8 Nov) THE FRONT ROOM AS IT NOW STANDS, to scale: the two
+    // claw machines in the back-left corner (x 44 and 82), CREATURE CLASH
+    // in the back-right (x 284), right of the desk's return.
+    { x: -8.74, z: -8.7, w: 2.2, d: 1.6, h: 2.6, color: 0xff4fa3, prop: 'cabinet', face: 0 },
+    { x: -5.87, z: -8.7, w: 2.2, d: 1.6, h: 2.6, color: 0x7a4fd8, prop: 'cabinet', face: 0 },
+    { x: 9.4, z: -8.7, w: 2.0, d: 1.3, h: 2.2, color: 0xe8559f, prop: 'cabinet', face: 0 },
+    // the bin, beside the desk's left-hand end (x 104, y 70 in the lit room)
+    { x: -4.4, z: -4.3, w: 0.6, d: 0.6, h: 0.85, color: 0x3a3f48, low: true },
 
-    // ---- FIVE MACHINES, WHERE THE LIT ROOM STANDS THEM.
-    //
-    // One against the left wall at (52, 88), turned to face into the room the
-    // way a machine against a wall has to be.
-    { x: -10.3, z: -1.3, w: 1.3, d: 2.0, h: 2.1, color: 0xff4fa3, prop: 'cabinet', face: Math.PI / 2 },
-    // And four along the front wall at y 164, two either side of the doors,
+    // ---- AND SIX ALONG THE FRONT WALL at y 164, three either side of the
+    // doors -- CHOMP, WHACK and BOG BALL; BOWLING, POND HUNT and the cash
+    // exchange in the corner, a machine of its own --
     // ALL FACING BACK UP THE ROOM at the counter.  That is the way the lit
     // room has them and it is the way a player standing at the doors sees
     // them: you come over the desk into a row of lit fronts, and the backs are
     // what the wall gets.
-    { x: -8.13, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0xff7a3d, prop: 'cabinet', face: Math.PI },
-    { x: -4.67, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0x6fbb6a, prop: 'cabinet', face: Math.PI },
-    { x: 4.67, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: Math.PI },
-    { x: 8.13, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: Math.PI },
+    { x: -9.11, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xff7a3d, prop: 'cabinet', face: Math.PI },
+    { x: -6.25, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x6fbb6a, prop: 'cabinet', face: Math.PI },
+    { x: -3.39, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x5a8a3a, prop: 'cabinet', face: Math.PI },
+    { x: 3.39, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: Math.PI },
+    { x: 6.25, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: Math.PI },
+    { x: 9.04, z: 8.8, w: 1.6, d: 1.2, h: 2.3, color: 0x4a4258, prop: 'change', face: Math.PI },
   ],
   // ---- NOTHING TO HIDE IN, and nothing that is not in the lit room either.
   // The bin and the plant that used to be by the doors are gone with the
@@ -797,7 +809,10 @@ const ARCADE_BASE: RoomDef = {
   // dark recess and the same bricked-up nothing behind it.
   wallOpenings: [
     { side: 'left', z: 2.5, w: 3.4, h: 2.8 },
-    { side: 'right', z: -0.4, w: 3.4, h: 2.8, color: 0xe8559f },
+  ],
+  // the hidden door, where the lit room has it (y 118): steel, shut, flush
+  wallDoors: [
+    { side: 'right', z: 2.3, w: 1.3, h: 2.3 },
   ],
 };
 

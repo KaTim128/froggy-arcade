@@ -92,7 +92,6 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
 
   ArcadeHub: ROOM,
   ArcadeAnnex: ROOM,
-  ArcadeLounge: ROOM,
   // the claw: left and right to aim, and the one button that drops it
   // the board is all buttons and spaces you tap
   // the claw: left and right only (in the side view, left and right are front

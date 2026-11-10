@@ -131,7 +131,10 @@ export function paintHotel(g: CanvasRenderingContext2D, o: HotelOpts): void {
 
   // ---- the render, faintly mottled, and the cladding up the corners
   r(0, 0, HOTEL_W, HOTEL_H, P.wall);
-  for (let k = 0; k < 220; k++) r((k * 37) % HOTEL_W, 18 + ((k * 23) % (HOTEL_GROUND - 18)), 1, 1, k % 2 ? P.slab : P.trim, 0.35);
+  // (user, 10 Nov: cleaner) smooth render in large panels: a faint joint
+  // between bays and a faint shade at the foot of each storey, no speckle
+  for (const cx of hotelColumns()) r(cx + 12, 17, 1, HOTEL_GROUND - 19, P.slab, 0.55);
+  for (const top of HOTEL_FLOORS) r(7, top + 10, HOTEL_W - 14, 3, P.slab, 0.18);
   for (const x0 of [0, HOTEL_W - 7]) {
     r(x0, 15, 7, HOTEL_GROUND - 15, P.clad);
     for (let y = 22; y < HOTEL_GROUND; y += 8) r(x0, y, 7, 1, P.cladEdge);
@@ -150,45 +153,89 @@ export function paintHotel(g: CanvasRenderingContext2D, o: HotelOpts): void {
   r(0, 15, HOTEL_W, 2, P.trim);
   r(0, 17, HOTEL_W, 1, P.trimShadow, 0.5);
 
-  // ---- the flats: a wide window and a balcony to each, a slab at each floor
+  // ---- the flats (user, 10 Nov): apartment windows, each with its own
+  // curtains -- some drawn back, some half across, some shut -- and a real
+  // balcony (a slab and a railing of balusters) on some of them, the rest a
+  // sill and now and then a window box.
   const cols = hotelColumns();
+  const CURTAINS = o.dusk ? ['#8a7a64', '#5e6a52', '#7a5458', '#566078'] : ['#ece2cc', '#b9c9a6', '#dca9a6', '#a9b9d4'];
   FLOORS.forEach((top, f) => {
     // the floor slab's edge, running right across
     r(7, top + 13, HOTEL_W - 14, 2, P.trim);
     r(7, top + 15, HOTEL_W - 14, 1, P.trimShadow, 0.5);
     cols.forEach((cx, w) => {
-      const x = cx - 8;
+      const h = (f * 7 + w * 13 + f * w) % 12;
       const lit = o.dusk && (f * 7 + w * 3) % 4 !== 0;
       const tone = LIT[(f * 5 + w) % 3];
-      // the window wall: a sliding door onto the balcony
-      r(x, top - 1, 16, 14, P.frame);
-      r(x + 1, top, 14, 13, lit ? tone : P.glass);
+      const cur = CURTAINS[(f * 3 + w * 5) % CURTAINS.length];
+      const state = h % 3; // 0 open, 1 shut, 2 half across
+      const balcony = (f + w) % 2 === 0;
+      // the window: a white frame, two casements under a top light
+      const x = cx - 7;
+      const y = top;
+      const W = 14;
+      const H = balcony ? 12 : 10;
+      r(x - 1, y - 1, W + 2, H + 2, P.frame);
+      r(x, y, W, H, P.trim);
+      r(x + 1, y + 1, W - 2, H - 2, lit ? tone : P.glass);
       if (!lit) {
-        r(x + 1, top, 14, 2, P.glassHi);
-        r(x + 3, top + 3, 1, 3, P.glassHi);
-        r(x + 1, top + 10, 14, 3, P.glassLo);
+        r(x + 1, y + 1, W - 2, 1, P.glassHi);
+        r(x + 1, y + H - 3, W - 2, 2, P.glassLo);
       } else {
-        r(x + 1, top + 8, 14, 5, '#e8a850', 0.45);
-        if ((f + w * 2) % 5 === 0) r(x + 9, top + 3, 2, 9, '#5a3a2a', 0.55);
+        r(x + 1, y + H - 4, W - 2, 3, '#e8a850', 0.4);
       }
-      // a curtain drawn to one side, now and then
-      if ((f * 3 + w * 5) % 4 === 0) r(x + 1, top, 3, 13, P.curtain, lit ? 0.85 : 0.7);
-      r(cx, top, 1, 13, P.frame);
-      // the balcony: its glass railing on the slab, a steel top rail
-      r(x - 1, top + 7, 18, 6, P.rail, 0.45);
-      r(x - 1, top + 6, 18, 1, P.steel);
-      r(x - 1, top + 6, 1, 7, P.steel);
-      r(x + 16, top + 6, 1, 7, P.steel);
-      // what people keep out there
-      const kind = (f * 11 + w * 7) % 6;
-      if (kind === 0) {
-        r(x + 2, top + 9, 3, 4, P.pot);
-        r(x + 1, top + 7, 5, 3, P.leaf);
-        r(x + 2, top + 6, 2, 1, P.leafHi);
-      } else if (kind === 3) {
-        r(x + 10, top + 10, 4, 1, P.steelDark);
-        r(x + 10, top + 11, 1, 2, P.steelDark);
-        r(x + 13, top + 11, 1, 2, P.steelDark);
+      // the curtains, inside the glass
+      const ci = x + 1;
+      const cw = W - 2;
+      const ch = H - 2;
+      const curtain = (cx0: number, cwid: number): void => {
+        r(cx0, y + 1, cwid, ch, cur, lit ? 0.9 : 1);
+        if (lit) r(cx0, y + 1, cwid, ch, tone, 0.3);
+        for (let k = cx0 + 1; k < cx0 + cwid; k += 2) r(k, y + 1, 1, ch, '#000000', 0.12);
+      };
+      if (state === 0) {
+        // drawn right back, tied at each side
+        curtain(ci, 2);
+        curtain(ci + cw - 2, 2);
+      } else if (state === 1) {
+        // shut: two panels meeting in the middle
+        curtain(ci, cw / 2);
+        curtain(ci + cw / 2, cw / 2);
+        r(ci + cw / 2, y + 1, 1, ch, '#000000', 0.25);
+      } else {
+        // half across from one side, back on the other
+        const fromLeft = w % 2 === 0;
+        curtain(fromLeft ? ci : ci + 4, cw - 4);
+        curtain(fromLeft ? ci + cw - 2 : ci, 2);
+      }
+      // the rail across the top, the mullion and the transom
+      r(x, y + 1, W, 1, P.steelDark, 0.6);
+      r(cx, y, 1, H, P.trim);
+      r(x, y + 3, W, 1, P.trim);
+      if (balcony) {
+        // a balcony: the slab out in front, a railing of balusters on it
+        const bx = cx - 9;
+        const bw = 18;
+        r(bx - 1, top + 12, bw + 2, 2, P.trim);
+        r(bx - 1, top + 14, bw + 2, 1, P.trimShadow);
+        r(bx, top + 7, bw, 1, P.steelDark);
+        for (let k = bx; k < bx + bw; k += 2) r(k, top + 8, 1, 4, P.steelDark);
+        r(bx, top + 7, 1, 5, P.steelDark);
+        r(bx + bw - 1, top + 7, 1, 5, P.steelDark);
+        // now and then a plant out there
+        if ((f * 5 + w * 3) % 5 === 0) {
+          r(bx + 2, top + 9, 3, 3, P.pot);
+          r(bx + 1, top + 6, 5, 3, P.leaf);
+          r(bx + 2, top + 5, 2, 1, P.leafHi);
+        }
+      } else {
+        // a stone sill, and now and then a window box of flowers
+        r(x - 2, y + H + 1, W + 4, 1, P.trim);
+        r(x - 2, y + H + 2, W + 4, 1, P.trimShadow, 0.6);
+        if ((f * 2 + w * 7) % 4 === 1) {
+          r(x + 1, y + H - 1, W - 2, 2, P.pot);
+          for (let k = x + 2; k < x + W - 1; k += 2) r(k, y + H - 2, 1, 1, k % 4 ? '#e86a7a' : '#f2d36a');
+        }
       }
     });
   });

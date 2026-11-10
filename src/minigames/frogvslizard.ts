@@ -172,7 +172,6 @@ let chargeDir = 1;
 let sel: ItemId = 'rock';
 let proj: Projectile | null = null;
 let settleMs = 0;
-let best = 0;
 
 let aimG: Phaser.GameObjects.Graphics | null = null;
 let windFill: Phaser.GameObjects.Rectangle | null = null;
@@ -264,7 +263,6 @@ export const frogVsLizard: MinigameModule = {
     proj = null;
     settleMs = 0;
     slots = [];
-    best = store.highScore(ID);
 
     paintYard(scene);
     groundShadow(scene, FROG_X, 26);
@@ -1839,19 +1837,13 @@ function finish(): void {
     (roundsWon.frog === roundsWon.lizard && sides.frog.dealt > sides.lizard.dealt);
   const drawn = roundsWon.frog === roundsWon.lizard && sides.frog.dealt === sides.lizard.dealt;
 
-  if (store.setHighScore(ID, sides.frog.dealt)) best = sides.frog.dealt;
+  store.setHighScore(ID, sides.frog.dealt);
   apiRef?.record(sides.frog.dealt);
   // UNTOUCHABLE: the match won without the lizard landing a thing on you --
   // no hit, no splash, no poison tick, across every round (log #58)
   if (won && sides.lizard.dealt === 0) apiRef?.badge('m_fence');
   refreshHud();
-  const score = ROUNDS > 1 ? ` ${roundsWon.frog}-${roundsWon.lizard}` : '';
-  const line = drawn
-    ? 'DEAD HEAT - TOKENS BACK'
-    : won
-      ? `YOU WIN${score}`
-      : `THE LIZARD WINS${ROUNDS > 1 ? ` ${roundsWon.lizard}-${roundsWon.frog}` : ''}`;
-  centerText(scene0, GAME_W / 2, 96, line, won ? PALETTE.gold : PALETTE.fog, 16).setDepth(80);
-  centerText(scene0, GAME_W / 2, 112, `DAMAGE ${sides.frog.dealt} - ${sides.lizard.dealt}   BEST ${best}`, PALETTE.ash).setDepth(80);
-  scene0.time.delayedCall(1700, () => (won ? apiRef?.win() : drawn ? apiRef?.draw() : apiRef?.lose()));
+  // (user, 8 Nov: no words over the field at the end -- the result panel
+  // that follows says it, YOU WIN +20)
+  scene0.time.delayedCall(900, () => (won ? apiRef?.win() : drawn ? apiRef?.draw() : apiRef?.lose()));
 }

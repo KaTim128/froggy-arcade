@@ -22,7 +22,6 @@ import { store, type SavedPlace } from '../core/state';
 export const RESUMABLE = new Set([
   'ArcadeHub',
   'ArcadeAnnex',
-  'ArcadeLounge',
   'ArcadeCasino',
   'ExteriorDay',
   'StreetEast',

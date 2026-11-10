@@ -159,6 +159,7 @@ export type UltFx =
   | { k: 'hurricane'; t: number; dps: number }
   | { k: 'pendulum'; t: number; dmg: number }
   | { k: 'judgement'; dmg: number }
+  | { k: 'chop'; dmg: number }
   | { k: 'iceberg'; dmg: number }
   | { k: 'constrict'; t: number; dps: number };
 
@@ -311,11 +312,11 @@ const nightmare = (t = 5, dmg = 5) => F('nightmare', { t, dmg });
 const net = (t = 2, dmg = 12) => F('net', { t, dmg });
 const trapdoll = (dmg = 35) => F('trapdoll', { dmg });
 const duel = (t = 5) => F('duel', { t });
-const banish = (t = 2.5) => F('banish', { t });
 const snowball = (dmg = 22) => F('snowball', { dmg });
 const hurricane = (t = 4, dps = 6) => F('hurricane', { t, dps });
 const pendulum = (t = 5, dmg = 14) => F('pendulum', { t, dmg });
 const judgement = (dmg = 40) => F('judgement', { dmg });
+const chop = (dmg = 46) => F('chop', { dmg });
 const iceberg = (dmg = 34) => F('iceberg', { dmg });
 const constrict = (t = 4, dps = 10) => F('constrict', { t, dps });
 
@@ -389,7 +390,8 @@ const SPEC: Record<string, [string, UltFx[]]> = {
   obelisk: ['GRAVITY WELL', [blackhole(3, 5), silence(2)]],
   hedgehog: ['GEODE SPINES', [thorns(3), stun(0.5, 40)]],
   armadillo: ['RUBBLE BLAST', [nova(16, 44), shield(2)]],
-  crocodile: ['DEATH ROLL', [banish(2.5), shred(3)]],
+  // (user, 8 Nov: no heal -- a chop of the jaws that lands like a falling slab)
+  crocodile: ['CRAG GUILLOTINE', [chop(46), shred(3)]],
   pangolin: ['SCALE BOULDER', [bouncer(4, 8), shield(1.5)]],
   goat: ['CRAG THROW', [rockthrow(24), stun(0.6, 50)]],
   // ------------------------------------------------------------------- gale
@@ -568,6 +570,7 @@ function words(f: UltFx): string {
     case 'hurricane': return `A HURRICANE ${f.t}S, ${f.dps} A SECOND`;
     case 'pendulum': return `A GIANT PENDULUM ${f.t}S, ${f.dmg} A HIT`;
     case 'judgement': return `A CROSS OF LIGHT THROUGH THEM FOR ${f.dmg}`;
+    case 'chop': return `A CRUSHING CHOP OF THE JAWS FOR ${f.dmg}`;
     case 'iceberg': return `DROPS AN ICEBERG ON THEM FOR ${f.dmg}`;
     case 'constrict': return `A FIRE SERPENT COILS ROUND THEM ${f.t}S`;
   }
@@ -695,6 +698,7 @@ function fullWords(f: UltFx): string {
     case 'banish': return `BANISHES THE ENEMY OUT OF THE FIGHT FOR ${f.t}S: THEY VANISH, CANNOT ACT OR BE HIT, WHILE IT HEALS ${BANISH_HEAL} HEALTH A SECOND. THEY COME BACK WHERE THEY LEFT.`;
     case 'hurricane': return `A HURRICANE WHIRLS ROUND THE WHOLE ARENA FOR ${f.t}S, SWEEPING THE ENEMY ROUND AND ROUND IN IT. FLYING DEBRIS HITS THEM FOR ${f.dps} DAMAGE A SECOND.`;
     case 'pendulum': return `A GIANT PENDULUM BLADE SWINGS BACK AND FORTH ACROSS THE ARENA FOR ${f.t}S, HUNG FROM THE TOP WALL. EVERY TIME IT PASSES THROUGH THE ENEMY IT DEALS ${f.dmg} DAMAGE.`;
+    case 'chop': return `REARS UP AND BRINGS ITS STONE JAWS DOWN LIKE A GUILLOTINE ON A LINE AT THE ENEMY, 0.5S AFTER A RED WARNING: ${f.dmg} DAMAGE, A HARD STUN OF 0.6S AND A KNOCK BACK TO AN ENEMY CAUGHT ON IT, AND HALF THAT TO ONE JUST BESIDE IT.`;
     case 'judgement': return `MARKS A CROSS OF LIGHT ON THE ARENA, ONE LINE ACROSS AND ONE UP AND DOWN, MEETING ON THE ENEMY. A SECOND LATER IT BURNS: ${f.dmg} DAMAGE IF THEY ARE STILL ON EITHER LINE.`;
     case 'iceberg': return `DROPS AN ICEBERG ON THE ENEMY, MARKED FIRST: ${f.dmg} DAMAGE AND A HARD KNOCK AWAY. IT STAYS IN THE ARENA AS COVER FOR 6S.`;
     case 'constrict': return `A SERPENT OF FIRE COILS ROUND THE ENEMY FOR ${f.t}S, ITS RING TIGHTENING AS IT GOES. TOUCHING THE RING BURNS FOR ${f.dps} DAMAGE A SECOND.`;
@@ -717,7 +721,7 @@ const RANGE: Partial<Record<K, number>> = {
   bubble: 220, tentacles: 220, riptide: 999, counter: 80, execute: 200, bleed: 200, hunt: 200, overload: 45, balllightning: 220,
   rot: 220, miasma: 50, carrionmark: 220, radiance: 50, prismfan: 220, steal: 220, leash: 120, confuse: 220, firewall: 220,
   nightmare: 220, net: 160, trapdoll: 200, duel: 80, banish: 220, snowball: 220,
-  hurricane: 999, pendulum: 999, judgement: 999, iceberg: 220, constrict: 220,
+  hurricane: 999, pendulum: 999, judgement: 999, chop: 90, iceberg: 220, constrict: 220,
 };
 
 /**
@@ -842,6 +846,7 @@ function worth(f: UltFx, hp: number): number {
     case 'hurricane': return f.t * f.dps * 0.8 + f.t * 3;
     case 'pendulum': return (f.t / 1.4) * f.dmg * 0.6;
     case 'judgement': return f.dmg * 0.75;
+    case 'chop': return f.dmg * 0.85;
     case 'iceberg': return f.dmg * 0.9 + 6;
     case 'constrict': return f.t * f.dps * 0.5 + f.t * 2;
   }
@@ -872,7 +877,7 @@ function scaled(f: UltFx, k: number): UltFx {
     case 'stealth': return { ...f, t: lim(f.t * k, 1, 4, 0.1) };
     case 'spiders': case 'clones': return { ...f, n: lim(f.n * k, 2, 8, 1) };
     case 'reset': case 'cleanse': case 'timewarp': return f;
-    case 'judgement': case 'iceberg': return { ...f, dmg: lim(f.dmg * k, 5, 120, 1) };
+    case 'judgement': case 'iceberg': case 'chop': return { ...f, dmg: lim(f.dmg * k, 5, 120, 1) };
     case 'pendulum': return { ...f, dmg: lim(f.dmg * k, 2, 60, 1) };
     case 'hurricane': case 'constrict': return { ...f, dps: lim(f.dps * k, 2, 30, 1) };
     case 'tidalwave': case 'avalanche': case 'railgun': case 'boomerang': case 'doom': case 'rockthrow': case 'execute':

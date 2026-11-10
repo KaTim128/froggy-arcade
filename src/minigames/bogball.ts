@@ -30,6 +30,7 @@
  */
 
 import Phaser from 'phaser';
+import { isTouch } from '../core/device';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { centerText, smallText, text } from '../core/ui';
@@ -58,7 +59,7 @@ const BALL_M = 1.7;
 /** Pull this far back for full power. */
 // (short enough that a frog right up against the wall can still be pulled
 // back all the way: at 56 the edge of the screen stopped the finger first)
-const PULL_MAX = 34;
+const PULL_MAX = 28;
 const LAUNCH_MAX = 440;
 /** The bog: a steady drag plus one that grows with speed. */
 const MU_FROG = 120;
@@ -228,12 +229,15 @@ let step: Step = 'pick';
 let aimAngle = 0;
 /** ms the power bar has been swinging. */
 let powerT = 0;
-/** The power bar's swing: 0 to full and back in this long. */
-const POWER_SWING_MS = 1500;
 let stepText: Phaser.GameObjects.BitmapText | null = null;
 let aimKeys: { l: Phaser.Input.Keyboard.Key[]; r: Phaser.Input.Keyboard.Key[] } = { l: [], r: [] };
-const powerNow = (): number => 0.5 - 0.5 * Math.cos((powerT / POWER_SWING_MS) * Math.PI * 2);
 let pullX = 0;
+/** Where the drag started. */
+let dragFrom = { x: 0, y: 0 };
+/** SPACE held, drawing the frog back. */
+let keyCharging = false;
+/** The key draw: up to full in 0.9s, then held there. */
+const keyPower = (): number => Math.min(1, powerT / 900);
 let pullY = 0;
 let stillMs = 0;
 let movingMs = 0;
@@ -263,15 +267,16 @@ export const bogBall: MinigameModule = {
   tutorial: {
     pitch: 'SLING YOUR FROGS TO KNOCK THE MUD BALL HOME.',
     steps: [
-      { say: '1 - CLICK ONE OF YOUR GREEN FROGS (OR 1 2 3).', phone: '1 - TAP ONE OF YOUR GREEN FROGS.', demo: 'bog.pick' },
-      { say: '2 - AIM WITH THE MOUSE (OR A/D) AND CLICK TO SET IT. 3 - CLICK AGAIN TO STOP THE POWER BAR.', phone: '2 - DRAG TO AIM, TAP TO SET. 3 - TAP TO STOP THE POWER BAR.', demo: 'bog.sling' },
+      { say: 'PRESS ON ONE OF YOUR GREEN FROGS AND HOLD.', phone: 'PRESS ON ONE OF YOUR GREEN FROGS AND HOLD.', demo: 'bog.pick' },
+      { say: 'PULL BACK THE OTHER WAY FROM THE SHOT, AND LET GO. THE FURTHER BACK, THE HARDER. KEYS: 1-3 PICK, A/D AIM, HOLD SPACE AND LET GO.', phone: 'PULL BACK THE OTHER WAY FROM THE SHOT, AND LET GO. THE FURTHER BACK, THE HARDER.', demo: 'bog.sling' },
       { say: 'KNOCK THE BALL INTO HIS ARCH. TEN SHOTS EACH - MOST GOALS WINS.', demo: 'bog.goal' },
     ],
     objective: ['KNOCK THE MUD BALL INTO HIS ARCH.', 'ONE FROG A TURN, TEN SHOTS EACH.', 'MOST GOALS WINS.'],
     controls: [
-      ['CLICK / 1 2 3', 'PICK A FROG'],
-      ['MOUSE / A D', 'AIM - CLICK OR SPACE SETS'],
-      ['CLICK / SPACE', 'STOP THE POWER BAR'],
+      ['DRAG', 'PULL A FROG BACK, LET GO TO SHOOT'],
+      ['1 2 3', 'PICK A FROG'],
+      ['A / D', 'AIM'],
+      ['HOLD SPACE', 'DRAW BACK - LET GO TO SHOOT'],
     ],
   },
   // (played entirely by dragging the frogs: nothing to put under the thumbs)
@@ -317,14 +322,16 @@ export const bogBall: MinigameModule = {
     const hud = scene.add.graphics().setDepth(20);
     hud.fillStyle(0x0c0a0c, 0.92).fillRect(0, HUD_Y - 1, GAME_W, 17);
     hud.fillStyle(0x3a3436, 1).fillRect(0, HUD_Y + 15, GAME_W, 1);
-    hud.fillStyle(0x1e3a1a, 1).fillRect(4, HUD_Y + 1, 70, 12);
-    hud.fillStyle(0x4a1a10, 1).fillRect(GAME_W - 74, HUD_Y + 1, 70, 12);
-    hud.fillStyle(0x6fbb6a, 1).fillRect(4, HUD_Y + 1, 2, 12);
-    hud.fillStyle(0xff7a3d, 1).fillRect(GAME_W - 6, HUD_Y + 1, 2, 12);
-    text(scene, 9, HUD_Y + 2, 'GREEN', PALETTE.mossLight).setDepth(21);
-    scoreG = text(scene, 64, HUD_Y + 2, '0', PALETTE.cream).setDepth(21);
-    text(scene, GAME_W - 37, HUD_Y + 2, 'RED', PALETTE.ember).setDepth(21);
-    scoreR = text(scene, GAME_W - 68, HUD_Y + 2, '0', PALETTE.cream).setDepth(21);
+    // (user, 8 Nov: the pulls left as clear counters, one each, under the
+    // name -- the panels run the whole height of the board to hold them)
+    hud.fillStyle(0x1e3a1a, 1).fillRect(4, HUD_Y - 1, 72, 17);
+    hud.fillStyle(0x4a1a10, 1).fillRect(GAME_W - 76, HUD_Y - 1, 72, 17);
+    hud.fillStyle(0x6fbb6a, 1).fillRect(4, HUD_Y - 1, 2, 17);
+    hud.fillStyle(0xff7a3d, 1).fillRect(GAME_W - 6, HUD_Y - 1, 2, 17);
+    text(scene, 9, HUD_Y, 'GREEN', PALETTE.mossLight).setDepth(21);
+    scoreG = text(scene, 66, HUD_Y, '0', PALETTE.cream).setDepth(21);
+    text(scene, GAME_W - 37, HUD_Y, 'RED', PALETTE.ember).setDepth(21);
+    scoreR = text(scene, GAME_W - 70, HUD_Y, '0', PALETTE.cream).setDepth(21);
     hud.fillStyle(0x000000, 1).fillRect(GAME_W / 2 - 58, HUD_Y + 1, 116, 12);
     hud.lineStyle(1, 0x5a4a3a, 1).strokeRect(GAME_W / 2 - 58, HUD_Y + 1, 116, 12);
     marquee = centerText(scene, GAME_W / 2, HUD_Y + 7, '', PALETTE.gold).setDepth(21);
@@ -343,7 +350,8 @@ export const bogBall: MinigameModule = {
       kb.on('keydown-ONE', pickN(0));
       kb.on('keydown-TWO', pickN(1));
       kb.on('keydown-THREE', pickN(2));
-      kb.on('keydown-SPACE', () => confirmStep());
+      kb.on('keydown-SPACE', () => keyDraw());
+      kb.on('keyup-SPACE', () => keyRelease());
       kb.on('keydown-BACKSPACE', () => backStep());
     }
 
@@ -502,13 +510,23 @@ function refreshHud(): void {
   scoreG?.setText(String(score.green));
   scoreR?.setText(String(score.red));
   const total = sudden ? SHOTS_EACH + SUDDEN_EACH : SHOTS_EACH;
-  // the shots each side still has to come, as pips under its name
+  // the pulls each side still has, one round counter each under its name:
+  // bright and full while it is still to come, a dark empty ring once used
   pipG?.clear();
+  const gap = total > 10 ? 5 : 6;
+  const pip = (x: number, left: boolean, on: number, rim: number, off: number): void => {
+    const y = HUD_Y + 12;
+    if (left) {
+      pipG?.fillStyle(rim, 1).fillCircle(x, y, 2.5);
+      pipG?.fillStyle(on, 1).fillCircle(x, y, 2);
+      pipG?.fillStyle(0xffffff, 0.7).fillRect(x - 1, y - 1.5, 1, 1);
+    } else {
+      pipG?.lineStyle(1, off, 1).strokeCircle(x, y, 2);
+    }
+  };
   for (let k = 0; k < total; k++) {
-    const gLeft = k < total - shots.green;
-    const rLeft = k < total - shots.red;
-    pipG?.fillStyle(gLeft ? 0x9ae07c : 0x2a3a26, 1).fillRect(9 + k * 4, HUD_Y + 11, 2, 1);
-    pipG?.fillStyle(rLeft ? 0xffa060 : 0x3a2016, 1).fillRect(GAME_W - 11 - k * 4, HUD_Y + 11, 2, 1);
+    pip(11 + k * gap, k < total - shots.green, 0x9ae07c, 0x2f6a24, 0x3e5a36);
+    pip(GAME_W - 11 - k * gap, k < total - shots.red, 0xffa060, 0x8a3a14, 0x6a3a26);
   }
 }
 
@@ -618,37 +636,59 @@ function finish(): void {
 
 // ------------------------------------------------------------------ the player
 
+/**
+ * ---- THE SLINGSHOT (user, 8 Nov): press on one of your frogs, drag back
+ * the other way from where it should go, and let go -- the drag is both the
+ * aim and the power.  Once a frog is picked the drag can start anywhere, so
+ * a frog by the side has all the room it needs.  A tiny drag is no shot.
+ * Keys: 1-3 pick, A/D aim, hold SPACE to draw it back, let go to shoot.
+ */
 function onDown(p: Phaser.Input.Pointer): void {
   if (phase !== 'aim' || turn !== 'green') return;
-  // a green frog under the pointer is always a (re)pick
   let best: Body | null = null;
-  let bd = 14;
+  let bd = 16;
   for (const f of frogs) {
     if (f.team !== 'green') continue;
     const d = Math.hypot(p.worldX - f.x, p.worldY - f.y);
     if (d < bd) (bd = d), (best = f);
   }
-  if (best && (step === 'pick' || step === 'dir')) {
-    pickFrog(best);
-    return;
-  }
-  pullX = p.worldX;
-  pullY = p.worldY;
-  if (step === 'dir' && selected) aimAngle = Math.atan2(selected.y - pullY, selected.x - pullX);
-  confirmStep();
+  if (best) pickFrog(best);
+  if (!selected) return;
+  dragging = true;
+  // (the pull is measured from where the finger went down, so pressing
+  // beside the frog is not already a pull)
+  dragFrom = { x: p.worldX, y: p.worldY };
+  pullX = selected.x;
+  pullY = selected.y;
+  step = 'power';
 }
 
 function onMove(p: Phaser.Input.Pointer): void {
-  pullX = p.worldX;
-  pullY = p.worldY;
-  // step 2: the pull follows the pointer (the frog goes the other way)
-  if (phase === 'aim' && step === 'dir' && selected && Math.hypot(selected.x - pullX, selected.y - pullY) > 4) {
-    aimAngle = Math.atan2(selected.y - pullY, selected.x - pullX);
+  if (phase !== 'aim' || turn !== 'green' || !dragging || !selected) {
+    pullX = p.worldX;
+    pullY = p.worldY;
+    return;
   }
+  pullX = selected.x + (p.worldX - dragFrom.x);
+  pullY = selected.y + (p.worldY - dragFrom.y);
+  const pl = pullOf(selected, pullX, pullY);
+  aimAngle = pl.angle;
 }
 
 function onUp(_p: Phaser.Input.Pointer): void {
+  if (!dragging) return;
   dragging = false;
+  if (phase !== 'aim' || turn !== 'green' || !selected) return;
+  const pl = pullOf(selected, pullX, pullY);
+  if (Math.hypot(selected.x - pullX, selected.y - pullY) < 4) {
+    // (a tap: the frog stays picked, nothing is shot)
+    step = 'dir';
+    showStep();
+    return;
+  }
+  step = 'pick';
+  launch(selected, pl.angle, Math.max(0.06, pl.power));
+  showStep();
 }
 
 /** Step 1: this frog. */
@@ -662,37 +702,39 @@ function pickFrog(f: Body): void {
   showStep();
 }
 
-/** SPACE / a click: set the step that is up and go on to the next. */
-function confirmStep(): void {
+/** SPACE down: pick the first frog if none, then start drawing it back. */
+function keyDraw(): void {
   if (phase !== 'aim' || turn !== 'green') return;
-  if (step === 'pick') {
+  if (!selected) {
     const first = frogs.find((f) => f.team === 'green');
     if (first) pickFrog(first);
     return;
   }
-  if (!selected) return;
-  if (step === 'dir') {
-    step = 'power';
-    powerT = 0;
-    audio.sfx('ui_hover', 0.5);
-    showStep();
-    return;
-  }
-  // step 3: the power bar stops where it is, and the frog goes
-  const pw = Math.max(0.06, powerNow());
-  step = 'pick';
-  launch(selected, aimAngle, pw);
+  if (keyCharging) return;
+  keyCharging = true;
+  powerT = 0;
+  step = 'power';
+  audio.sfx('ui_hover', 0.5);
   showStep();
 }
 
-/** BACKSPACE: one step back. */
+/** SPACE up: let go. */
+function keyRelease(): void {
+  if (!keyCharging) return;
+  keyCharging = false;
+  if (phase !== 'aim' || turn !== 'green' || !selected) return;
+  step = 'pick';
+  launch(selected, aimAngle, Math.max(0.06, keyPower()));
+  showStep();
+}
+
+/** BACKSPACE: put the frog down. */
 function backStep(): void {
   if (phase !== 'aim' || turn !== 'green') return;
-  if (step === 'power') step = 'dir';
-  else if (step === 'dir') {
-    step = 'pick';
-    selected = null;
-  }
+  keyCharging = false;
+  dragging = false;
+  step = 'pick';
+  selected = null;
   showStep();
 }
 
@@ -701,16 +743,17 @@ function showStep(): void {
   const total = sudden ? SHOTS_EACH + SUDDEN_EACH : SHOTS_EACH;
   const mine = Math.max(0, total - shots.green);
   const his = Math.max(0, total - shots.red);
+  const touch = isTouch();
   const what =
     turn !== 'green' || phase !== 'aim'
       ? ''
       : step === 'pick'
-        ? '1 PICK A FROG'
+        ? touch ? 'PRESS A FROG, PULL BACK, LET GO' : 'PRESS A FROG, PULL BACK, LET GO (OR 1-3, A/D, HOLD SPACE)'
         : step === 'dir'
-          ? '2 AIM - CLICK TO SET'
-          : '3 CLICK TO STOP POWER';
-  const decided = sudden ? 'NEXT GOAL WINS' : `BEST AFTER ${SHOTS_EACH} EACH`;
-  stepText?.setText(`${what ? `${what}   ` : ''}PULLS LEFT ${mine} - ${his}   ${decided}`);
+          ? 'PULL BACK THE WAY OPPOSITE THE SHOT'
+          : 'LET GO TO SHOOT';
+  const decided = sudden ? 'NEXT GOAL WINS' : '';
+  stepText?.setText(`${what}${what ? '   ' : ''}YOU ${mine} LEFT - RED ${his}${decided ? `   ${decided}` : ''}`);
 }
 
 /**
@@ -725,7 +768,8 @@ function pullCap(f: Body, angle: number): number {
   const uy = -Math.sin(angle);
   const room = (v: number, u: number, size: number): number => (u > 0.001 ? (size - 3 - v) / u : u < -0.001 ? (3 - v) / u : Infinity);
   const edge = Math.min(room(f.x, ux, GAME_W), room(f.y, uy, GAME_H));
-  return Math.max(12, Math.min(PULL_MAX, edge));
+  // (user, 8 Nov: 100% easy to reach by the side: full power well before the edge)
+  return Math.max(12, Math.min(PULL_MAX, edge * 0.75));
 }
 
 /** Where a pull to (px, py) sends frog f: the opposite way, harder the further. */
@@ -883,6 +927,7 @@ function drawAim(): void {
   const f = selected;
   // the player's three steps, or the machine's pull as it takes it
   const mine = phase === 'aim' && turn === 'green' && f && step !== 'pick';
+  const pulling = mine && (dragging || keyCharging);
   if (!f || !(mine || phase === 'pull')) {
     powerText?.setVisible(false);
     if (phase === 'aim' && turn === 'green') showStep();
@@ -891,16 +936,16 @@ function drawAim(): void {
   if (mine) {
     const dt = sceneRef?.game.loop.delta ?? 16;
     // A / D turn the aim in step 2
-    if (step === 'dir') {
+    if (!dragging) {
       if (aimKeys.l.some((k) => k.isDown)) aimAngle -= dt * 0.0025;
       if (aimKeys.r.some((k) => k.isDown)) aimAngle += dt * 0.0025;
     }
-    if (step === 'power') powerT += dt;
+    if (keyCharging) powerT += dt;
   }
   const angle = mine ? aimAngle : pullOf(f, pullX, pullY).angle;
-  const power = mine ? (step === 'power' ? powerNow() : 0.55) : pullOf(f, pullX, pullY).power;
+  const power = mine ? (dragging ? pullOf(f, pullX, pullY).power : keyCharging ? keyPower() : 0.3) : pullOf(f, pullX, pullY).power;
   const red = f.team === 'red';
-  const col = mine && step === 'dir' ? 0xbfe8ff : power < 0.5 ? (red ? 0xff9a3c : 0x9ae07c) : power < 0.85 ? 0xffd45e : 0xff5a3a;
+  const col = mine && !pulling ? 0xbfe8ff : power < 0.5 ? (red ? 0xff9a3c : 0x9ae07c) : power < 0.85 ? 0xffd45e : 0xff5a3a;
   // the band, pulled back the other way
   const bx = f.x - Math.cos(angle) * (8 + power * 16);
   const by = f.y - Math.sin(angle) * (8 + power * 16);
@@ -920,7 +965,7 @@ function drawAim(): void {
   let py = ey;
   let dx = Math.cos(angle);
   let dy = Math.sin(angle);
-  const reach = (mine && step === 'dir' ? 0.7 : power) * 150;
+  const reach = (mine && !pulling ? 0.5 : power) * 150;
   for (let d = 0; d < reach; d += 6) {
     px += dx * 6;
     py += dy * 6;
@@ -928,8 +973,8 @@ function drawAim(): void {
     if (px < P.l + FROG_R || px > P.r - FROG_R) dx = -dx;
     g.fillStyle(col, 0.7 * (1 - d / reach)).fillRect(Math.round(px), Math.round(py), 1, 1);
   }
-  // step 3: the power bar beside the frog, swinging
-  if (mine && step === 'power') {
+  // the power bar beside the frog, filling as it is pulled
+  if (pulling) {
     const bxp = f.x + 11;
     const byp = f.y - 12;
     g.fillStyle(0x0c0a0c, 0.85).fillRect(bxp - 1, byp - 1, 5, 26);
@@ -937,7 +982,7 @@ function drawAim(): void {
     g.lineStyle(1, 0xffffff, 0.6).strokeRect(bxp - 1, byp - 1, 5, 26);
   }
   powerText
-    ?.setVisible(!(mine && step === 'dir'))
+    ?.setVisible(!mine || !!pulling)
     .setText(`${Math.round(power * 100)}%`)
     .setPosition(f.x, f.y - 14)
     .setTint(col);

@@ -103,7 +103,9 @@ const NEAR_SENSE = 2.0;
  * or once he has seen you, he is 1.4 times you: 1.4 times your walk while he
  * searches, 1.4 times your run when he is running you down.  See copPace.
  */
-const EN_ROUTE = RUN * 2;
+// (user, 10 Nov: more time to reach a room) 1.6 times your run on the way
+// in, not twice, and they wait about 4 s longer at the doors (makeCops)
+const EN_ROUTE = RUN * 1.6;
 const ON_FLOOR_WALK = WALK * 1.4;
 const ON_FLOOR_RUN = RUN * 1.4;
 /** How close is caught. */
@@ -646,9 +648,9 @@ export class PoliceEscape3D extends Phaser.Scene {
     const b = this.b!;
     const door = b.entrance!;
     const plan = [
-      { home: TOP, at: { x: door.x + 0.3, z: door.z - 0.45 }, wait: this.retry ? 3.5 : 5.5 },
-      { home: 3, at: { x: door.x - 0.2, z: door.z + 0.5 }, wait: this.retry ? 4.7 : 6.9 },
-      { home: 1, at: { x: door.x - 0.6, z: door.z - 0.1 }, wait: this.retry ? 6 : 8.5 },
+      { home: TOP, at: { x: door.x + 0.3, z: door.z - 0.45 }, wait: this.retry ? 7 : 9.5 },
+      { home: 3, at: { x: door.x - 0.2, z: door.z + 0.5 }, wait: this.retry ? 8.5 : 11 },
+      { home: 1, at: { x: door.x - 0.6, z: door.z - 0.1 }, wait: this.retry ? 10 : 12.5 },
     ];
     OFFICER_LOOKS.forEach((look, i) => {
       const model = new PoliceOfficer(look, 101 + i * 7);

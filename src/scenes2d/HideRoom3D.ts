@@ -1593,6 +1593,26 @@ export class HideRoom3D extends Phaser.Scene {
     // metre short of the wall plane in the first place -- so there are two
     // independent reasons the player never gets through it, and neither of
     // them is a hole in the collision that could be found somewhere else.
+    // ---- STEEL DOORS, shut and flush in a side wall (RoomDef.wallDoors):
+    // a brushed slab with a push bar and a kick plate, a hairline round it --
+    // no hole in the wall, nothing behind it
+    for (const dr of d.wallDoors ?? []) {
+      const sx = dr.side === 'left' ? -1 : 1;
+      const wallX = sx * d.halfW;
+      const steel = new THREE.MeshStandardMaterial({ color: 0x5c626b, metalness: 0.6, roughness: 0.42 });
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(0.06, dr.h, dr.w), steel);
+      slab.position.set(wallX - sx * 0.03, dr.h / 2, dr.z);
+      st.scene.add(slab);
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.05, dr.h + 0.06, dr.w + 0.06), new THREE.MeshLambertMaterial({ color: 0x15171c }));
+      seam.position.set(wallX - sx * 0.02, (dr.h + 0.06) / 2, dr.z);
+      st.scene.add(seam);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.07, dr.w * 0.8), new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.8, roughness: 0.3 }));
+      bar.position.set(wallX - sx * 0.09, 1.0, dr.z);
+      st.scene.add(bar);
+      const kick = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.25, dr.w * 0.95), new THREE.MeshStandardMaterial({ color: 0x7a8088, metalness: 0.7, roughness: 0.35 }));
+      kick.position.set(wallX - sx * 0.065, 0.14, dr.z);
+      st.scene.add(kick);
+    }
     for (const w of d.wallOpenings ?? []) {
       const frame = w.color ?? 0x2f8f9f;
       const sx = w.side === 'left' ? -1 : 1;

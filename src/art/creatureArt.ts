@@ -45,11 +45,30 @@ const WIDE: Partial<Record<Body | BossBody, number>> = {
   newt: 16, eel: 16, gecko: 16, ferret: 16, rhino: 16, bear: 16, urchin: 14, tortoise: 16, boar: 15, falcon: 10, firefly: 10, bee: 10,
 };
 
-export function drawCreature(g: Phaser.GameObjects.Graphics, c: Drawable, x: number, y: number, s = 1, f = 1, t = 0): void {
+/**
+ * ---- HOW EACH BODY GETS ABOUT (user, 8 Nov: legs that walk, wings that
+ * fly, fins that swim -- no gliding about on the spot).  The arena moves
+ * each the way it moves: a walker steps and leans, a flyer hovers off its
+ * shadow and banks, a swimmer glides and undulates, a slitherer ripples
+ * along the ground, and a floating thing drifts.
+ */
+export type Gait = 'walk' | 'fly' | 'swim' | 'slither' | 'float';
+const GAITS: Partial<Record<Body | BossBody, Gait>> = {
+  moth: 'fly', owl: 'fly', bat: 'fly', bee: 'fly', falcon: 'fly', crow: 'fly', firefly: 'fly', wasp: 'fly', parrot: 'fly', dragonfly: 'fly', ladybug: 'fly', vulture: 'fly', roc: 'fly', seraph: 'fly',
+  ray: 'swim', jelly: 'swim', puffer: 'swim', angler: 'swim', seahorse: 'swim', eel: 'swim', octopus: 'swim', shark: 'swim', narwhal: 'swim', kraken: 'swim', leviathan: 'swim',
+  serpent: 'slither', slug: 'slither', snail: 'slither', caterpillar: 'slither', leech: 'slither', worm: 'slither', wyrm: 'slither', serpentking: 'slither',
+  wisp: 'float', wraith: 'float', cloud: 'float', lich: 'float', oracle: 'float',
+};
+export const gaitOf = (body: Body | BossBody): Gait => GAITS[body] ?? 'walk';
+
+export function drawCreature(g: Phaser.GameObjects.Graphics, c: Drawable, x: number, y: number, s = 1, f = 1, t = 0, hover = 0): void {
   const e = ELEMENTS[c.element];
   const boss = BOSS_BODIES.includes(c.body as BossBody);
-  // a soft shadow under everything, and a boss stands in its own weather
-  g.fillStyle(0x000000, 0.25).fillEllipse(x, y + 7.5 * s, (WIDE[c.body] ?? 12) * s, 3 * s);
+  // a soft shadow under everything (on the ground, under a hovering one,
+  // smaller the higher it is), and a boss stands in its own weather
+  const sh = Math.max(0.45, 1 - hover / 24);
+  g.fillStyle(0x000000, 0.25 * sh).fillEllipse(x, y + 7.5 * s, (WIDE[c.body] ?? 12) * s * sh, 3 * s * sh);
+  y -= hover;
   if (boss) g.lineStyle(0.6 * s, e.light, 0.35 + Math.sin(t * 2.5) * 0.15).strokeEllipse(x, y + 6.5 * s, (24 + Math.sin(t * 2) * 1.5) * s, 8 * s);
   const def = BODY_DEFS[c.body];
   if (!def) return;

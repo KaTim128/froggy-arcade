@@ -185,11 +185,11 @@ export class BackAlley extends Phaser.Scene {
 
     // Inside.  This is the last ordinary thing that happens.  The back door is
     // the arcade's SIDE door: it lets you into the new room, dark, and shuts
-    // behind you.  See ArcadeLounge.
+    // behind you.  See ArcadeDark (the hidden door in the front room's right wall).
     audio.sfx('door_open');
     store.patch({ route: 'ejected' });
     store.flush();
-    this.time.delayedCall(700, () => fadeToScene(this, 'ArcadeLounge', { fromAlley: true }));
+    this.time.delayedCall(700, () => fadeToScene(this, 'ArcadeDark', { fromAlley: true }));
   }
 
   update(_t: number, delta: number): void {

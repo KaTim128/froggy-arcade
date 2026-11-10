@@ -31,7 +31,7 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { button, centerText, confirmDialog, forfeitLines, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { drawCreature } from '../art/creatureArt';
+import { drawCreature, gaitOf } from '../art/creatureArt';
 import { plainWords, TILE_PX } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
@@ -306,6 +306,11 @@ interface Mine {
  * (x2, y2); a `ring` is a band at radius `r` (a shockwave); a `meteor` falls
  * from the sky onto a growing shadow.  `go` runs when it goes off.
  */
+/** A fighter in a mirror trap starts for the edge after a moment's reaction, sooner the sharper it is. */
+function h_escape(skill: number, since: number): boolean {
+  return since > 0.6 - skill * 0.45;
+}
+
 interface Hazard {
   kind: 'mark' | 'meteor' | 'line' | 'ring';
   x: number;
@@ -324,8 +329,8 @@ interface Hazard {
   owner?: Fighter;
   /** It drifts after its target at this speed (px/s) until it goes off. */
   seek?: number;
-  /** The sphinx's riddle: the one true answer (an eye), or a false one (a mirror). */
-  riddle?: 'true' | 'false';
+  /** The sphinx's mirror trap: a ring of mirrors round the enemy -- be out of it when it shatters. */
+  trap?: boolean;
 }
 
 /**
@@ -486,7 +491,7 @@ export class CreatureArena extends Phaser.Scene {
    * battle -- the clock is off, and QUIT never goes away.
    */
   private training = false;
-  private from = 'ArcadeLounge';
+  private from = 'ArcadeHub';
   private me!: Fighter;
   private foe!: Fighter;
   private shots: Shot[] = [];
@@ -590,7 +595,7 @@ export class CreatureArena extends Phaser.Scene {
     this.meV = { x: 0, y: 0 };
     this.dodge = { vx: 0, vy: 0, t: 0 };
     this.seenShots = new WeakSet<Shot>();
-    this.from = data.from ?? 'ArcadeLounge';
+    this.from = data.from === 'ArcadeLounge' || !data.from ? 'ArcadeHub' : data.from;
     this.shots = [];
     this.fx = [];
     this.mines = [];
@@ -687,6 +692,7 @@ export class CreatureArena extends Phaser.Scene {
       this.level = step.level;
       this.boss = step.boss;
       wild = step.foe;
+      this.foeLevel = step.foeLevel;
       this.skill = step.boss ? 1 : 0.3 + ((step.level - 1) / (LADDER_LEVELS - 1)) * 0.6;
     } else {
       // a zone's wild one is matched to yours: your level, give or take one
@@ -2188,7 +2194,7 @@ export class CreatureArena extends Phaser.Scene {
         const ty = Phaser.Math.Clamp(f.y + uy * d, ARENA.y + 6, ARENA.y + ARENA.h - 6);
         this.shots.push({
           owner: f, x: f.x, y: f.y, vx: 0, vy: 0, life: 9, dmg, a, pierce: true, t: 0, ang: 0,
-          arc: { sx: f.x, sy: f.y, tx, ty, t: 0, dur: 0.75, r: 16 },
+          arc: { sx: f.x, sy: f.y, tx, ty, t: 0, dur: a.sp === 'ice_boulder' ? 0.95 : 0.75, r: a.sp === 'ice_boulder' ? 28 : 16 },
         });
         audio.sfx('throw_whoosh', 0.35);
         break;
@@ -2766,33 +2772,39 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('crumble', 0.7);
         return true;
       case 'mirror_riddle': {
-        // ---- THE RIDDLE (user, 5 Nov: in place of the mirror copies).  Three
-        // glyphs ring the other one; only one is the truth -- the eye.  Be
-        // standing in it when the riddle closes, or answer for it: the hit,
-        // every move set back, and a moment frozen.  It moves them where the
-        // sphinx wants them -- usually straight down its pounce line.
-        const base = Math.random() * Math.PI * 2;
-        const truth = Math.floor(Math.random() * 3);
-        const T = 2.2;
-        const R = 11;
-        for (let k = 0; k < 3; k++) {
-          const px = cx(o.x + Math.cos(base + (k * Math.PI * 2) / 3) * 28);
-          const py = cy(o.y + Math.sin(base + (k * Math.PI * 2) / 3) * 22);
-          const right = k === truth;
-          this.hazards.push({ kind: 'mark', x: px, y: py, r: R, t: T, t0: T, dmg: 0, owner: f, riddle: right ? 'true' : 'false', go: right ? () => {
-            if (this.over || f.hp <= 0 || o.hp <= 0) return;
-            if (Math.hypot(o.x - px, o.y - py) <= R + 3) {
-              const n = centerText(this, o.x, o.y - 18, 'SOLVED', 0xfff4a0).setDepth(60);
-              this.tweens.add({ targets: n, y: n.y - 8, alpha: 0, duration: 700, onComplete: () => n.destroy() });
-              return;
-            }
-            this.hit(f, o, dmg, a);
-            for (let i = 0; i < 3; i++) o.cds[i] += SILENCE_S;
-            o.stun = Math.max(o.stun, 0.6);
-            this.fx.push({ kind: 'ring', x: o.x, y: o.y, r: 14, t: 0, life: 0.4, col: 0xfff4a0 });
-            audio.sfx('glass_crack', 0.6);
-          } : undefined });
+        // ---- MIRROR TRAP (user, 10 Nov: the riddle left players not knowing
+        // what to do).  One rule anyone gets at a glance: a ring of mirrors
+        // stands round the enemy, and in 2 s it shatters inward.  Out of the
+        // ring by then: nothing.  Still inside: the hit and a second frozen --
+        // usually right where the sphinx's pounce line is waiting.
+        const T = 2;
+        const R = 30;
+        const at = { x: o.x, y: o.y };
+        let warn: Phaser.GameObjects.BitmapText | null = null;
+        if (o === this.me) {
+          warn = centerText(this, o.x, o.y - 22, 'GET OUT!', 0xfff4a0).setDepth(60);
+          this.tweens.add({ targets: warn, alpha: 0.35, duration: 180, yoyo: true, repeat: -1 });
+          this.time.delayedCall(T * 1000, () => warn?.destroy());
         }
+        this.hazards.push({ kind: 'mark', x: at.x, y: at.y, r: R, t: T, t0: T, dmg: 0, owner: f, trap: true, go: () => {
+          warn?.destroy();
+          if (this.over || f.hp <= 0 || o.hp <= 0) return;
+          for (let k = 0; k < 10; k++) {
+            const ang = (k / 10) * Math.PI * 2;
+            this.fx.push({ kind: 'spark', x: at.x + Math.cos(ang) * R, y: at.y + Math.sin(ang) * R * 0.8, r: 2, t: 0, life: 0.35, col: 0xbfe8ff });
+          }
+          audio.sfx('glass_crack', 0.7);
+          if (o.st.air || Math.hypot(o.x - at.x, (o.y - at.y) / 0.8) > R + 2) {
+            const n = centerText(this, o.x, o.y - 18, 'ESCAPED', 0xbfe8ff).setDepth(60);
+            this.tweens.add({ targets: n, y: n.y - 8, alpha: 0, duration: 700, onComplete: () => n.destroy() });
+            return;
+          }
+          this.hit(f, o, dmg, a);
+          o.stun = Math.max(o.stun, 1);
+          const n = centerText(this, o.x, o.y - 18, 'TRAPPED', 0xff8a8a).setDepth(60);
+          this.tweens.add({ targets: n, y: n.y - 8, alpha: 0, duration: 800, onComplete: () => n.destroy() });
+          this.fx.push({ kind: 'ring', x: o.x, y: o.y, r: 14, t: 0, life: 0.4, col: 0xbfe8ff });
+        } });
         audio.sfx('chime', 0.6);
         return true;
       }
@@ -2944,6 +2956,18 @@ export class CreatureArena extends Phaser.Scene {
         to.blind = Math.max(to.blind, 2);
         to.slow = Math.max(to.slow, 3);
         break;
+      case 'death_roll':
+        // clamped on: held, rolled, and bleeding -- one bleed at a time,
+        // a fresh roll only restarts it
+        if (!to.st.unstop) to.root = Math.max(to.root, 1);
+        to.st.croc_bleed = 3;
+        from.st.u_spin = 0.6;
+        this.floatNum(to, 0, 0xff4a4a, 'CLAMPED ');
+        for (let n = 0; n < 6; n++) this.fx.push({ kind: 'spark', x: to.x + (Math.random() - 0.5) * 14, y: to.y + (Math.random() - 0.5) * 8, r: 3, t: 0, life: 0.5, col: n % 2 ? 0xc01020 : 0x8a7a5a });
+        this.fx.push({ kind: 'ring', x: to.x, y: to.y, r: 18, t: 0, life: 0.4, col: 0xc01020 });
+        this.cameras.main.shake(140, 0.006);
+        audio.sfx('crumble', 0.6);
+        break;
       case 'rut_bellow':
         if (!to.st.unstop) to.stun = Math.max(to.stun, 0.4);
         to.weak = Math.max(to.weak, 1.5);
@@ -2962,20 +2986,67 @@ export class CreatureArena extends Phaser.Scene {
       this.props.push(part);
       this.repaintCover();
     }
-    // a direct hit with the boulder: encased
-    if (a.sp === 'ice_boulder' && Math.hypot(o.x - x, o.y - y) < 10 * o.scale) o.stun = Math.max(o.stun, 0.8);
+    // the giant snowball: a burst of snow; caught in it, slowed; hit square, frozen
+    if (a.sp === 'ice_boulder') {
+      this.fx.push({ kind: 'ring', x, y, r: 30, t: 0, life: 0.55, col: 0xffffff });
+      this.fx.push({ kind: 'boom', x, y, r: 26, t: 0, life: 0.5, col: 0xe8f4ff });
+      for (let n = 0; n < 12; n++) {
+        const ang = (n / 12) * Math.PI * 2;
+        this.fx.push({ kind: 'spark', x: x + Math.cos(ang) * (10 + Math.random() * 14), y: y + Math.sin(ang) * (6 + Math.random() * 8), r: 2 + Math.random() * 2, t: 0, life: 0.5 + Math.random() * 0.3, col: n % 3 ? 0xffffff : 0xbfe0ff });
+      }
+      this.cameras.main.shake(180, 0.007);
+      audio.sfx('item_thud', 0.6);
+      const dd = Math.hypot(o.x - x, o.y - y);
+      if (dd < 28 + 5 * o.scale) o.slow = Math.max(o.slow, 2);
+      if (dd < 10 * o.scale) o.stun = Math.max(o.stun, 0.8);
+    }
   }
 
   /** Where the body is drawn, off its true spot, for its step and its lunge. */
-  private bodyMotion(f: Fighter): { ox: number; oy: number; k: number } {
+  private bodyMotion(f: Fighter): { ox: number; oy: number; k: number; hover: number } {
     let ox = 0;
     let oy = 0;
     let k = 1;
-    if (f.moving && !f.atk) {
+    let hover = 0;
+    const now = this.time.now / 1000;
+    const seed = (f === this.me ? 0 : 1.7);
+    const gait = gaitOf(f.c.body);
+    if (gait === 'fly') {
+      // off the ground over its shadow, bobbing with each wingbeat; moving,
+      // tipped forward into the way it is going
+      hover = (6 + Math.sin(now * 5 + seed) * 1.6) * f.scale;
+      if (f.moving && !f.atk) {
+        ox += f.face * 1.2 * f.scale;
+        oy += Math.sin(now * 10 + seed) * 0.6 * f.scale;
+      }
+    } else if (gait === 'swim') {
+      // gliding through the air as through water: a slow rise and fall, and
+      // moving, an undulating sway
+      hover = (3 + Math.sin(now * 2.2 + seed) * 1.2) * f.scale;
+      if (f.moving && !f.atk) {
+        oy += Math.sin(now * 6 + seed) * 1.1 * f.scale;
+        ox += f.face * 0.8 * f.scale;
+        k *= 1 + Math.sin(now * 6 + seed) * 0.03;
+      }
+    } else if (gait === 'float') {
+      hover = (4 + Math.sin(now * 1.5 + seed) * 2) * f.scale;
+      if (f.moving && !f.atk) ox += f.face * 0.8 * f.scale;
+    } else if (gait === 'slither') {
+      // low along the ground, never bouncing: a ripple down its length
+      if (f.moving && !f.atk) {
+        ox += Math.sin(f.stride * Math.PI * 2) * 0.9 * f.scale;
+        k *= 1 + Math.sin(f.stride * Math.PI * 4) * 0.035;
+      }
+    } else if (f.moving && !f.atk) {
       const ph = f.stride;
-      // up on each step (two a stride), leaning into the way it is going
+      // up on each step (two a stride), leaning into the way it is going,
+      // and the body settling a touch each time a foot comes down
       oy -= Math.abs(Math.sin(ph * Math.PI)) * 1.4 * f.scale;
       ox += f.face * 0.6 * f.scale;
+      k *= 1 - (1 - Math.abs(Math.sin(ph * Math.PI))) * 0.03;
+    } else if (!f.atk) {
+      // standing: breathing
+      k *= 1 + Math.sin(now * 2.4 + seed) * 0.012;
     }
     if (f.atk > 0) {
       const p = 1 - f.atk / ATK_T; // 0 -> 1 over the lunge
@@ -2985,7 +3056,19 @@ export class CreatureArena extends Phaser.Scene {
       oy += f.atkY * d * f.scale * 0.7;
       k = 1 + (p > 0.25 && p < 0.6 ? 0.08 : 0);
     }
-    return { ox: Math.round(ox), oy: Math.round(oy), k };
+    // a death roll: tumbling over and over as it goes
+    if ((f.st.u_spin ?? 0) > 0) {
+      const sa = this.time.now / 45;
+      ox += Math.cos(sa) * 2.2 * f.scale;
+      oy += Math.sin(sa) * 1.4 * f.scale;
+      k *= 0.92 + Math.abs(Math.sin(sa)) * 0.1;
+    }
+    // reared up before bringing its jaws down
+    if ((f.st.u_rear ?? 0) > 0) {
+      oy -= 5 * Math.min(1, f.st.u_rear / 0.25) * f.scale;
+      k *= 1.12;
+    }
+    return { ox: Math.round(ox), oy: Math.round(oy), k, hover: Math.round(hover) };
   }
 
   /** The step and lunge clocks, and the dust each footfall kicks up. */
@@ -3025,6 +3108,15 @@ export class CreatureArena extends Phaser.Scene {
     const prevStar = f.st.starShell ?? 0;
     const prevAir = f.st.air ?? 0;
     for (const k of Object.keys(f.st)) if (!k.startsWith('n_')) f.st[k] = Math.max(0, f.st[k] - dt);
+    // a death roll's bleed: 3 every half second while it lasts (one at a time)
+    if ((f.st.croc_bleed ?? 0) > 0) {
+      f.st.n_bleedAcc = (f.st.n_bleedAcc ?? 0) + dt;
+      while (f.st.n_bleedAcc >= 0.5) {
+        f.st.n_bleedAcc -= 0.5;
+        this.fx.push({ kind: 'spark', x: f.x + (Math.random() - 0.5) * 6, y: f.y + 3, r: 2.5, t: 0, life: 0.45, col: 0xc01020 });
+        this.hit(o, f, 3, null);
+      }
+    } else f.st.n_bleedAcc = 0;
     // (a hop chain left unfinished still owes its cooldown)
     if (prevHop > 0 && !f.st.hopT && (f.st.n_hops ?? 0) > 0 && f.ref.hopSlot !== undefined) {
       f.cds[f.ref.hopSlot] = f.c.attacks[f.ref.hopSlot].cd;
@@ -4652,6 +4744,49 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('throw_whoosh', 0.6);
         break;
       }
+      case 'chop': {
+        // ---- CRAG GUILLOTINE: it rears up, a red line marks where the jaws
+        // will fall, and they come down like a dropped slab -- dust, shards,
+        // the arena rocking
+        const reach = 70;
+        const [jx, jy] = inArena(f.x + ux * reach, f.y + uy * reach);
+        f.st.u_rear = 0.5;
+        this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: jx, y2: jy, r: 6, t: 0, life: 0.5, col: 0xff3a3a });
+        this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: jx, y2: jy, r: 1, t: 0, life: 0.5, col: 0xffd0c0 });
+        audio.sfx('stinger', 0.5);
+        later(500, () => {
+          if (this.over || f.hp <= 0) return;
+          // the strike: the jaws down the line, heavy
+          this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: jx, y2: jy, r: 10, t: 0, life: 0.35, col: 0xc8b890 });
+          this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2: jx, y2: jy, r: 3, t: 0, life: 0.35, col: 0xffffff });
+          for (let k = 0; k <= 4; k++) {
+            const px = f.x + (jx - f.x) * (k / 4);
+            const py = f.y + (jy - f.y) * (k / 4);
+            this.fx.push({ kind: 'boom', x: px, y: py, r: 10 + k * 2, t: 0, life: 0.45, col: 0x8a7a5a });
+            for (let n = 0; n < 3; n++) this.fx.push({ kind: 'spark', x: px + (Math.random() - 0.5) * 16, y: py + (Math.random() - 0.5) * 10, r: 2 + Math.random() * 2, t: 0, life: 0.5 + Math.random() * 0.3, col: n ? 0xd8c8a0 : 0x6a5a3a });
+          }
+          this.fx.push({ kind: 'ring', x: jx, y: jy, r: 34, t: 0, life: 0.5, col: 0xffe0b0 });
+          this.cameras.main.shake(320, 0.014);
+          this.cameras.main.flash(90, 255, 230, 200, false);
+          audio.sfx('boom', 0.9);
+          audio.sfx('crumble', 0.7);
+          // on the line: the lot; just off it: half
+          const lx = jx - f.x;
+          const ly = jy - f.y;
+          const L2 = lx * lx + ly * ly || 1;
+          const tt = Phaser.Math.Clamp(((o.x - f.x) * lx + (o.y - f.y) * ly) / L2, 0, 1);
+          const off = Math.hypot(o.x - (f.x + lx * tt), o.y - (f.y + ly * tt));
+          const w = 8 + 5 * o.scale;
+          if (off < w) {
+            this.hit(f, o, e.dmg, null);
+            if (!o.st.unstop) o.stun = Math.max(o.stun, 0.6);
+            o.kx += ux * 260;
+            o.ky += uy * 260;
+            this.floatNum(o, 0, 0xffd0a0, 'CHOP! ');
+          } else if (off < w * 2.2) this.hit(f, o, Math.round(e.dmg / 2), null);
+        });
+        break;
+      }
       case 'judgement': {
         // a cross of light through them, the width and height of the arena
         const [jx, jy] = [o.x, o.y];
@@ -5272,6 +5407,13 @@ export class CreatureArena extends Phaser.Scene {
         }
       }
       this.step(f, f.dash.vx, f.dash.vy, dt);
+      // a death roll: a spiral of grit and dust off it as it spins along
+      if (f.dash.a.sp === 'death_roll' && !f.dash.flee) {
+        f.st.u_spin = Math.max(f.st.u_spin ?? 0, 0.1);
+        const sa = this.time.now / 40;
+        this.fx.push({ kind: 'spark', x: f.x + Math.cos(sa) * 8, y: f.y + Math.sin(sa) * 4, r: 2.2, t: 0, life: 0.35, col: 0x9a8a68 });
+        if (Math.random() < dt * 20) this.fx.push({ kind: 'ring', x: f.x, y: f.y + 3, r: 9, t: 0, life: 0.25, col: 0xb8a888 });
+      }
       // a burning trail behind a lingering charge
       if (f.dash.a.mod === 'linger' && !f.dash.flee && Math.random() < dt * 14) this.pool(f, f.x, f.y, 9);
       const o = this.other(f);
@@ -5369,7 +5511,15 @@ export class CreatureArena extends Phaser.Scene {
         break;
       }
     }
-    if (B.dodge.t > 0) {
+    // ---- CAUGHT IN A MIRROR TRAP: get out of the ring before it shatters
+    const trap = this.hazards.find((h) => h.trap && h.owner !== f && Math.hypot(f.x - h.x, (f.y - h.y) / 0.8) < h.r + 6);
+    if (trap && h_escape(sk, trap.t0 - trap.t)) {
+      const ex = f.x - trap.x || 0.01;
+      const ey = f.y - trap.y;
+      const el = Math.hypot(ex, ey) || 1;
+      vx = (ex / el) * spd * 1.2;
+      vy = (ey / el) * spd * 1.2;
+    } else if (B.dodge.t > 0) {
       B.dodge.t -= dt;
       vx = B.dodge.vx * spd * 1.3;
       vy = B.dodge.vy * spd * 1.3;
@@ -5937,7 +6087,7 @@ export class CreatureArena extends Phaser.Scene {
       const col = ELEMENTS[own.c.element].col;
       if (h.kind === 'line') this.fx.push({ kind: 'beam', x: h.x, y: h.y, x2: h.x2, y2: h.y2, r: h.r, t: 0, life: 0.25, col });
       else if (h.kind === 'ring') this.fx.push({ kind: 'ring', x: h.x, y: h.y, r: h.r, t: 0, life: 0.3, col });
-      else this.fx.push({ kind: 'boom', x: h.x, y: h.y, r: h.r, t: 0, life: h.kind === 'meteor' ? 0.5 : 0.3, col: h.kind === 'meteor' ? 0xffb040 : col });
+      else if (!h.trap) this.fx.push({ kind: 'boom', x: h.x, y: h.y, r: h.r, t: 0, life: h.kind === 'meteor' ? 0.5 : 0.3, col: h.kind === 'meteor' ? 0xffb040 : col });
       if (h.kind === 'meteor') audio.sfx('arcane_blast', 0.55);
       h.go?.();
       if (h.dmg > 0 && this.caught(h, tgt.x, tgt.y) && !tgt.st.air) {
@@ -6495,19 +6645,23 @@ export class CreatureArena extends Phaser.Scene {
         const sy = h.y - fall * 120;
         g.lineStyle(3, 0xffb040, 0.5).lineBetween(sx + 10, sy - 18, sx, sy);
         g.fillStyle(0xfff0a0, 1).fillCircle(sx, sy, 3 + k * 2);
-      } else if (h.riddle) {
-        // the riddle's glyphs: the true one an eye in gold, the false ones mirrors
-        const truth = h.riddle === 'true';
-        const c = truth ? 0xffd060 : 0xbfe8ff;
-        g.lineStyle(1, c, 0.9).strokeCircle(h.x, h.y, h.r);
-        g.lineStyle(1, c, 0.35).strokeCircle(h.x, h.y, h.r - 3);
-        g.fillStyle(c, 0.12 + k * 0.2).fillCircle(h.x, h.y, h.r * k);
-        if (truth) {
-          g.fillStyle(0xfff4c0, 1).fillEllipse(h.x, h.y, 9, 5);
-          g.fillStyle(0x2a1a10, 1).fillCircle(h.x, h.y, 1.6);
-        } else {
-          g.fillStyle(0xe8fcff, 0.8).fillTriangle(h.x - 3, h.y + 3, h.x + 3, h.y + 3, h.x, h.y - 4);
-          g.lineStyle(1, 0x6a8aa8, 0.9).lineBetween(h.x - 1, h.y - 1, h.x + 1, h.y + 2);
+      } else if (h.trap) {
+        // the mirror trap: a fixed ring (wider than tall, on the floor), a
+        // pale fill rising as it gets ready, and ten mirror shards circling
+        // on its edge; the edge turns red in the last half second
+        const late = h.t < 0.5;
+        const edge = late ? 0xff6a6a : 0xbfe8ff;
+        const rx = h.r;
+        const ry = h.r * 0.8;
+        g.fillStyle(0xbfe8ff, 0.06 + k * 0.16).fillEllipse(h.x, h.y, rx * 2, ry * 2);
+        g.lineStyle(2, edge, late ? 0.95 : 0.8).strokeEllipse(h.x, h.y, rx * 2, ry * 2);
+        const spin = this.time.now / 600;
+        for (let i = 0; i < 10; i++) {
+          const ang = spin + (i / 10) * Math.PI * 2;
+          const sx = h.x + Math.cos(ang) * rx;
+          const sy = h.y + Math.sin(ang) * ry;
+          g.fillStyle(0xe8fcff, 0.95).fillTriangle(sx - 2, sy + 3, sx + 2, sy + 3, sx, sy - 4);
+          g.fillStyle(0x6a8aa8, 0.9).fillRect(sx - 0.5, sy - 1, 1, 3);
         }
       } else {
         g.lineStyle(1, h.holds ? 0x8ae86a : 0xff3a3a, 0.9).strokeCircle(h.x, h.y, h.r);
@@ -6523,7 +6677,15 @@ export class CreatureArena extends Phaser.Scene {
         continue;
       }
       if (f.st.invis) {
-        g.lineStyle(1, 0xffffff, 0.15 + Math.sin(t * 9) * 0.08).strokeEllipse(f.x, f.y, 14 * f.scale, 10 * f.scale);
+        // (user, 8 Nov) only the side it belongs to sees where it is: a
+        // faded circle under the ground for a sunk one, a shimmer otherwise;
+        // the other side sees nothing at all
+        if (f === this.me) {
+          if (f.st.sunk) {
+            g.fillStyle(0x3a2a1e, 0.25).fillEllipse(f.x, f.y + 4, 16 * f.scale, 6 * f.scale);
+            g.lineStyle(1, 0xd8c8a0, 0.25 + Math.sin(t * 6) * 0.1).strokeEllipse(f.x, f.y + 4, 16 * f.scale, 6 * f.scale);
+          } else g.lineStyle(1, 0xffffff, 0.15 + Math.sin(t * 9) * 0.08).strokeEllipse(f.x, f.y, 14 * f.scale, 10 * f.scale);
+        }
         continue;
       }
       const lift = f.st.air || f.st.aloft ? 10 : f.st.u_lift ? 16 : 0;
@@ -6533,7 +6695,7 @@ export class CreatureArena extends Phaser.Scene {
       // ground each time a foot comes down.  Attacking, it lunges: it draws
       // back for a beat, throws itself at the aim, and settles -- and it
       // swells a touch at the moment of the blow, so a hit reads as effort.
-      const { ox, oy: oy0, k: k0 } = this.bodyMotion(f);
+      const { ox, oy: oy0, k: k0, hover } = this.bodyMotion(f);
       let oy = oy0;
       let k = k0;
       if (this.boss && f === this.foe && f.hp > 0) {
@@ -6562,7 +6724,11 @@ export class CreatureArena extends Phaser.Scene {
         for (let q = 0; q < 5; q++) g.fillStyle(0xffffff, 1).fillCircle(f.x - 5 + q * 2.5, f.y - 4 + (q % 2), 2.5);
         g.fillStyle(0x2a2a2a, 1).fillEllipse(f.x + f.face * 7, f.y - 2, 5, 4).fillRect(f.x - 4, f.y + 4, 1.5, 3).fillRect(f.x + 3, f.y + 4, 1.5, 3);
       } else {
-        drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate || f.st.u_ice ? 0 : f.moving ? t * 1.8 : t);
+        // its own clock: a walker's legs only stride while it walks, at its
+        // pace (stood still, barely a shift); wings and fins never stop
+        const gt = gaitOf(f.c.body);
+        const pace = f.moving ? 0.8 + f.c.speed / 50 : gt === 'walk' || gt === 'slither' ? 0.3 : 1;
+        drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate || f.st.u_ice ? 0 : t * pace, hover);
       }
       if ((f.st.hail ?? 0) > 0) for (let q = 0; q < (f.st.n_hail ?? 0); q++) g.fillStyle(0xe8fcff, 1).fillCircle(f.x + Math.cos(t * 3 + (q * Math.PI) / 3) * 14 * f.scale, f.y + Math.sin(t * 3 + (q * Math.PI) / 3) * 10 * f.scale, 1.6);
       if (f.st.u_ice) g.fillStyle(0xbfe8ff, 0.5).fillRect(f.x - 9 * f.scale, f.y - 11 * f.scale, 18 * f.scale, 18 * f.scale).lineStyle(1, 0xffffff, 0.9).strokeRect(f.x - 9 * f.scale, f.y - 11 * f.scale, 18 * f.scale, 18 * f.scale);
@@ -6747,6 +6913,17 @@ export class CreatureArena extends Phaser.Scene {
       }
     }
     for (const s of this.shots) {
+      if (s.arc && s.a.sp === 'ice_boulder') {
+        const k = Phaser.Math.Clamp(s.arc.t / s.arc.dur, 0, 1);
+        const h = Math.sin(k * Math.PI) * 30;
+        const r = 5 + Math.sin(k * Math.PI) * 3;
+        g.fillStyle(0x000000, 0.25).fillEllipse(s.x, s.y + 2, r * 2.2 * (1 - k * 0.2), r * 0.9);
+        g.fillStyle(0xbfd8ee, 1).fillCircle(s.x, s.y - h, r + 0.8);
+        g.fillStyle(0xffffff, 1).fillCircle(s.x - 0.6, s.y - h - 0.6, r);
+        g.fillStyle(0xe2eef8, 1).fillCircle(s.x + r * 0.35, s.y - h + r * 0.35, r * 0.55);
+        g.fillStyle(0xffffff, 0.9).fillCircle(s.x - r * 0.4, s.y - h - r * 0.45, r * 0.25);
+        continue;
+      }
       const size = s.a.mod === 'grow' ? 1 + s.t * 2.2 : s.grace !== undefined && s.life < 0.4 && s.a.mod === 'none' ? 0.7 : 1;
       // what this element (or this particular shot) is made of, in flight
       const el = s.owner.c.element;

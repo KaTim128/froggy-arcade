@@ -22,6 +22,7 @@
 import { record } from '../game/life';
 import { badgeOnRecord, earnBadge } from '../game/badges';
 import Phaser from 'phaser';
+import { closingTime } from '../core/broke';
 import { RECORDS, best as bestRecord, submit as submitRecord } from '../core/records';
 import { deviceControls, deviceObjective, type ControlRow } from '../ui/controlsList';
 import { PALETTE } from '../render/palette';
@@ -123,7 +124,7 @@ export class MinigameScene extends Phaser.Scene {
   private copT: number | null = null;
   private copBanner: Phaser.GameObjects.Container | null = null;
 
-  private static readonly ARCADE_ROOMS = ['ArcadeHub', 'ArcadeAnnex', 'ArcadeLounge', 'ArcadeCasino'];
+  private static readonly ARCADE_ROOMS = ['ArcadeHub', 'ArcadeAnnex', 'ArcadeCasino'];
 
   /** The game has started: is an officer in the arcade, or might one come in? */
   private armPolice(): void {
@@ -295,6 +296,12 @@ export class MinigameScene extends Phaser.Scene {
     const start = (): void => {
       this.card = null;
       if (this.settled) return;
+      // (user, 8 Nov: once it is closing time no new game starts -- back to
+      // the room, where the closing notice is shown)
+      if (closingTime()) {
+        this.leave();
+        return;
+      }
       // MG-2: the one place in the game that charges for a play.
       if (!def.freeToEnter) {
         if (!ledger.debit(def.cost, 'game.cost')) {

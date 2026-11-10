@@ -8,6 +8,9 @@
  */
 
 import Phaser from 'phaser';
+import { paintClashCabinet, paintCrane, CLASH_H, CLASH_SCALE, CLASH_SPOT, CLASH_W, CRANE_H, CRANE_SPOTS, CRANE_W } from '../art/loungeProps';
+import { CRANE_COST } from './CraneGame';
+import { FULL_LINE, pocketsFull } from '../game/inventory';
 import { StageFigure } from '../render/stageFigure';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
 import { arcadeCop, type IndoorCop } from '../game/indoorPatrol';
@@ -18,6 +21,7 @@ import { store, type GameId } from '../core/state';
 import { KEY_ITEM, ensureKeyInPocket, holdingKey } from '../game/inventory';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
+import { isTouch } from '../core/device';
 import { closeAndShowOut, showOutAtNight } from '../game/closingPull';
 import { closingTime, evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
@@ -32,7 +36,8 @@ import {
   CABINETS,
   COUNTER,
   COUNTER_DEPTH,
-  LOUNGE_DOOR,
+  HIDDEN_DOOR,
+  CHANGE_MACHINE,
   PRIZE_CASE,
   cabinetsIn,
   shelfStock,
@@ -63,11 +68,13 @@ type Target =
   | { kind: 'door' }
   | { kind: 'change' }
   | { kind: 'annex' }
-  | { kind: 'lounge' }
+  | { kind: 'crane'; crane: (typeof CRANE_SPOTS)[number] }
+  | { kind: 'clash' }
+  | { kind: 'froggy' }
   | null;
 
-/** Where the player has to stand to use the change machine on the back wall. */
-const CHANGE_SPOT = { x: 272, y: 62 };
+/** The cash exchange machine, on the floor in the bottom-right corner. */
+const CHANGE_SPOT = CHANGE_MACHINE;
 
 /**
  * ---- WHO IS ON THE COUNTER, AND WHERE THEY STAND.
@@ -248,7 +255,7 @@ export class ArcadeHub extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
   private cabinets: Cabinet[] = [];
   /** Where each machine is played from, and what of the floor is solid. */
-  private spots = new Map<Cabinet, Spot>();
+  private spots = new Map<object, Spot>();
   private solids: Box[] = [];
   /** The counter, staff-side: walked round, never through. */
   private counterSolid: Box = { x: 0, y: 0, w: 0, h: 0 };
@@ -283,7 +290,10 @@ export class ArcadeHub extends Phaser.Scene {
   private staffT = 0;
   private frogOnCounter = false;
   /** Which doorway the player just came back through, if not the front. */
-  private fromDoor: 'lounge' | 'annex' | 'street' | null = null;
+  private fromDoor: 'annex' | 'street' | null = null;
+  /** Back from a claw machine, or from CREATURE CLASH: stood at it. */
+  private atProp: string | null = null;
+  private fromClash = false;
   private frogT = 0;
   /** Whether he has already said it since the player last walked away. */
   private frogSpoke = false;
@@ -309,10 +319,12 @@ export class ArcadeHub extends Phaser.Scene {
     super('ArcadeHub');
   }
 
-  init(data: { atCabinet?: GameId; fromDoor?: 'lounge' | 'annex' | 'street' } = {}): void {
+  init(data: { atCabinet?: GameId; fromDoor?: 'annex' | 'street'; atProp?: string; fromClash?: boolean } = {}): void {
     this.copAsks = (data as { copAsks?: boolean }).copAsks === true;
     this.returnTo = data.atCabinet ?? null;
     this.fromDoor = data.fromDoor ?? null;
+    this.atProp = data.atProp ?? null;
+    this.fromClash = data.fromClash === true;
   }
 
   create(): void {
@@ -340,6 +352,8 @@ export class ArcadeHub extends Phaser.Scene {
       avoid: [
         { from: COUNTER.x - 6, to: COUNTER.x + COUNTER.w + 6 },
         { from: 256, to: GAME_W },
+        // (the claw machines' marquees, top left)
+        { from: 26, to: 100 },
       ],
       // Between the left-hand cabinets and the counter, and in the gap between
       // the two right-hand cabinets: the only two patches of hub floor with
@@ -350,26 +364,44 @@ export class ArcadeHub extends Phaser.Scene {
         // Under the left-hand vent, in the strip of back wall the doorway does
         // not reach and no cabinet stands on.  At 95 it ended up behind a
         // machine and at 117 half inside the counter.
-        { x: 22, y: 66, kind: 'bin' },
+        // (user, 8 Nov: beside the counter's left end, clear of the claws)
+        { x: 104, y: 70, kind: 'bin' },
         // Bottom of the floor, clear of the last cabinet in the row by a dozen
         // pixels.  Wedged into the gap between two machines it overlapped one
         // or the other at every x that fitted, because the gap is twenty
         // pixels wide and the plant is seventeen.
-        { x: 126, y: 170, kind: 'plant' },
       ],
       // The prize case owns 126-226 of the back wall and the change machine
       // 262-282; the vents go in what is left of it.
       vents: [24, 232],
     });
-    paintChangeMachine(this, false);
+    paintChangeMachine(this, false, CHANGE_MACHINE);
     this.paintCounter();
 
     this.cabinets = cabinetsIn('hub').map((def) => new Cabinet(this, def));
     // Each machine stands on the floor: walked round, played from the front.
     // The counter is in the list too, for the walk-to path; walking into it
     // is still kept out by `keepOutOfCounter`.
-    this.spots = new Map(this.cabinets.map((c) => [c, machineSpot(c.def.x, c.def.y, CAB_W, CAB_FOOT)]));
+    this.spots = new Map<object, Spot>(this.cabinets.map((c) => [c, machineSpot(c.def.x, c.def.y, CAB_W, CAB_FOOT)]));
+    // ---- (user, 8 Nov) the fourth room's machines, in here now: the claw
+    // machines top left, CREATURE CLASH top right, the cash exchange a
+    // machine of its own in the bottom-right corner
+    for (const cr of CRANE_SPOTS) this.spots.set(cr, machineSpot(cr.x, cr.y, CRANE_W, 10));
+    this.spots.set(CLASH_SPOT, machineSpot(CLASH_SPOT.x, CLASH_SPOT.y, CLASH_W * CLASH_SCALE, 10));
+    this.spots.set(CHANGE_MACHINE, machineSpot(CHANGE_MACHINE.x, CHANGE_MACHINE.y, 24, CAB_FOOT));
     this.solids = [...this.spots.values()].map((s) => s.solid!);
+    for (const cr of CRANE_SPOTS) {
+      paintCrane(this, cr.x, cr.y, cr.kind, false);
+      this.add
+        .zone(cr.x, cr.y - CRANE_H / 2, CRANE_W + 4, CRANE_H)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.walkTo(this.spots.get(cr)!, () => this.useCrane(cr)));
+    }
+    paintClashCabinet(this, CLASH_SPOT.x, CLASH_SPOT.y, false, CLASH_SCALE);
+    this.add
+      .zone(CLASH_SPOT.x, CLASH_SPOT.y - (CLASH_H * CLASH_SCALE) / 2, CLASH_W * CLASH_SCALE + 4, CLASH_H * CLASH_SCALE)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.walkTo(this.spots.get(CLASH_SPOT)!, () => this.useClash()));
     const counterBox: Box = { x: COUNTER.x - COUNTER_EDGE + 3, y: 0, w: COUNTER.w + 2 * COUNTER_EDGE - 6, h: COUNTER_STAND };
     this.counterSolid = counterBox;
     this.walker = new Walker(() => this.bounds, () => [...this.solids, counterBox]);
@@ -400,17 +432,11 @@ export class ArcadeHub extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', (p: Phaser.Input.Pointer) => this.walkTo(this.counterSpot(p.worldX), () => this.openCounter()));
 
-    // The change machine is on the wall with the rest of the furniture and had
-    // nothing clickable on it, so the mouse path stopped at the counter.
+    // The cash exchange: clicked, it walks you to its front.
     this.add
-      .zone(272, 26, 26, 38)
+      .zone(CHANGE_SPOT.x, CHANGE_SPOT.y - 19, 26, 40)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () =>
-        this.walkTo(
-          doorSpot({ x: CHANGE_SPOT.x, y: CHANGE_SPOT.y + 4 }, (px, py) => Phaser.Math.Distance.Between(px, py, CHANGE_SPOT.x, CHANGE_SPOT.y) < INTERACT_RANGE),
-          () => this.openChangeMachine(),
-        ),
-      );
+      .on('pointerdown', () => this.walkTo(this.spots.get(CHANGE_MACHINE)!, () => this.openChangeMachine()));
 
     // ---- THE DOOR, WHICH HAD NO HITBOX AT ALL.
     //
@@ -454,7 +480,7 @@ export class ArcadeHub extends Phaser.Scene {
     this.paintCounterStaff();
     this.paintCues();
     this.paintAnnexDoor();
-    this.paintLoungeDoor();
+    this.paintHiddenDoor();
 
     this.bounds = new Phaser.Geom.Rectangle(
       ROOM.left + 8,
@@ -470,7 +496,6 @@ export class ArcadeHub extends Phaser.Scene {
     // facing into the room: from a side door you look across it, in off the
     // street you are already looking up it
     if (this.fromDoor === 'annex') this.player.face(1);
-    else if (this.fromDoor === 'lounge') this.player.face(-1);
     // kept with the run, and back on the spot when resumed here (game/place)
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
@@ -605,7 +630,7 @@ export class ArcadeHub extends Phaser.Scene {
         kind: 'change',
         glow: [
           this.add
-            .rectangle(272, 26, 24, 36)
+            .rectangle(CHANGE_SPOT.x, CHANGE_SPOT.y - 19, 26, 40)
             .setStrokeStyle(1, PALETTE.gold)
             .setFillStyle()
             .setDepth(GLOW_DEPTH),
@@ -669,6 +694,16 @@ export class ArcadeHub extends Phaser.Scene {
       this.frogOnCounter = true;
       x = FROG_POST.x;
       half = FROGGY_DESIGN.halfW * FROG_SCALE * 0.8;
+      // (user, 8 Nov) a click on Froggy is a game with him, not the prizes
+      this.add
+        .zone(FROG_POST.x, FROG_CUT - 12, 26, 24)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () =>
+          this.walkTo(
+            doorSpot({ x: FROG_POST.x, y: COUNTER_STAND + 2 }, (px, py) => py < COUNTER_REACH && Math.abs(px - FROG_POST.x) < POST_RANGE),
+            () => this.playFroggy(),
+          ),
+        );
     }
     // And where he meets the counter, the top of it is in his shade: a soft
     // dark band along its back edge, the width of him, so the counter reads
@@ -803,7 +838,9 @@ export class ArcadeHub extends Phaser.Scene {
     const gone = dx > 24 || out > 16;
     if (near && !this.frogSpoke && !this.busy()) {
       this.frogSpoke = true;
-      this.showFrogLine();
+      // (user, 8 Nov) the first time you come up to him, he asks you to play
+      if (!store.get().froggyDuelOffered) this.offerFroggyDuel();
+      else this.showFrogLine();
     } else if (gone) {
       // He says it EVERY TIME you come over.  The gap between the two numbers
       // is only there to stop a player stood exactly on the line setting him
@@ -827,7 +864,7 @@ export class ArcadeHub extends Phaser.Scene {
    */
   private showFrogLine(): void {
     this.hideFrogLine();
-    const LINE = '"FEEL FREE TO TAKE A LOOK AT THE PRIZES AVAILABLE!"';
+    const LINE = isTouch() ? '"FANCY A GAME? PRESS INTERACT - OR TAKE A LOOK AT THE PRIZES!"' : '"FANCY A GAME? PRESS E - OR TAKE A LOOK AT THE PRIZES!"';
     const PAD = 7;
     const HEAD = 11;
     const body = text(this, 22, 0, LINE, PALETTE.cream).setMaxWidth(GAME_W - 46);
@@ -838,6 +875,45 @@ export class ArcadeHub extends Phaser.Scene {
     panel.setStrokeStyle(1, PALETTE.mossLight);
     const who = text(this, 22, y + PAD, 'FROGGY', PALETTE.mossLight);
     this.frogSays = this.add.container(0, 0, [panel, who, body]).setDepth(880);
+  }
+
+  /**
+   * ---- A GAME WITH FROGGY (user, 8 Nov): MINI DUELS has no machine now --
+   * Froggy is it.  The first time you come up to him he asks, once; ACCEPT
+   * opens the duels, DECLINE walks away from it.  After that, E at him (or a
+   * click on him) is a game whenever you like: one token in, two for a win,
+   * nothing for a loss, as the machine was.
+   */
+  private offerFroggyDuel(): void {
+    store.patch({ froggyDuelOffered: true });
+    store.flush();
+    this.hideFrogLine();
+    this.walker.cancel();
+    this.talk = openTalkPanel(this, {
+      who: 'FROGGY',
+      color: PALETTE.mossLight,
+      line: "\"I'M GETTING KINDA BORED... WANNA PLAY A RANDOM GAME WITH ME? IF YOU WIN, I'LL GIVE YOU A TOKEN! BUT IF YOU LOSE... I'LL BE TAKING YOURS INSTEAD. DEAL?\"",
+      options: [
+        { label: 'DEAL!', fn: () => (this.closeTalk(), this.playFroggy()) },
+        { label: 'NO THANKS', fn: () => this.closeTalk() },
+      ],
+    });
+  }
+
+  /** A game of MINI DUELS with Froggy: its card, with what it costs. */
+  private playFroggy(): void {
+    if (this.busy()) return;
+    if (!store.get().froggyDuelOffered) {
+      this.offerFroggyDuel();
+      return;
+    }
+    if (!canEnter('Minigame', store.get(), {})) {
+      audio.sfx('buzzer');
+      return;
+    }
+    this.locked = true;
+    this.hideFrogLine();
+    fadeToScene(this, 'Minigame', { id: 'tictactoe', from: 'ArcadeHub' });
   }
 
   private hideFrogLine(): void {
@@ -1521,7 +1597,12 @@ export class ArcadeHub extends Phaser.Scene {
   private spawnPoint(fallback: { x: number; y: number }): { x: number; y: number } {
     // Back through the right-hand doorway: stood just inside it, a step clear
     // of its interact zone so a stray click does not walk you back out.
-    if (this.fromDoor === 'lounge') return { x: LOUNGE_DOOR.x - 28, y: LOUNGE_DOOR.y - 12 };
+    // back from a game with Froggy: stood at the counter in front of him
+    if (this.returnTo === 'tictactoe') return { x: FROG_POST.x, y: COUNTER_STAND + 4 };
+    // back from a claw machine or from CREATURE CLASH: stood in front of it
+    const crane = CRANE_SPOTS.find((c) => c.kind === this.atProp);
+    if (crane) return { x: crane.x, y: crane.y + 12 };
+    if (this.fromClash) return { x: CLASH_SPOT.x - 4, y: CLASH_SPOT.y + 12 };
     // back in from room two: stood just inside its doorway, on the left
     if (this.fromDoor === 'annex') return { x: ANNEX_DOOR.x + 28, y: ANNEX_DOOR.y - 12 };
     // in off the street: just inside the front doors, which are the middle of
@@ -1573,7 +1654,7 @@ export class ArcadeHub extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () =>
         this.walkTo(
-          doorSpot({ x: this.bounds.x, y: ANNEX_DOOR.y }, (px, py) => px < ANNEX_DOOR.x + 20 && Math.abs(py - ANNEX_DOOR.y) < 28),
+          doorSpot({ x: this.bounds.x, y: ANNEX_DOOR.y }, (px, py) => px < ANNEX_DOOR.x + 24 && Math.abs(py - ANNEX_DOOR.y) < 30),
           () => this.toAnnex(),
         ),
       );
@@ -1586,28 +1667,57 @@ export class ArcadeHub extends Phaser.Scene {
   }
 
   /**
-   * The opening in the RIGHT wall, through to the room kept for the next
-   * games.  Its own light is the neon pink of the sign over the empty floor.
-   * The click answers on the doorway itself and nowhere else: the carpet in
-   * front of it is carpet, the change machine above it is the change machine.
+   * ---- THE HIDDEN DOOR (user, 8 Nov: moved here with the fourth room gone).
+   * IN the right-hand wall, not on it: the leaf fills a door-sized patch of
+   * the wall's own band, a shade warmer than the wall, with a pair of
+   * hairline seams -- by day almost nothing.  After closing it is the door
+   * the break-in comes through (see ArcadeDark).  By day it is no way out.
    */
-  private paintLoungeDoor(): void {
-    paintOpening(this, { side: 'right', y: LOUNGE_DOOR.y, h: LOUNGE_DOOR.h, glow: PALETTE.neon });
-    this.add
-      .zone(LOUNGE_DOOR.x, LOUNGE_DOOR.y, 22, LOUNGE_DOOR.h + 4)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () =>
-        this.walkTo(
-          doorSpot({ x: this.bounds.right, y: LOUNGE_DOOR.y }, (px, py) => px > LOUNGE_DOOR.x - 20 && Math.abs(py - LOUNGE_DOOR.y) < 24),
-          () => this.toLounge(),
-        ),
-      );
+  private paintHiddenDoor(): void {
+    const top = HIDDEN_DOOR.y - HIDDEN_DOOR.h / 2;
+    const x = ROOM.right + 1;
+    const w = GAME_W - ROOM.right - 2;
+    const wall = Phaser.Display.Color.IntegerToColor(PALETTE.ink);
+    // (user, 8 Nov: steel, not wood -- and barely visible: a tenth of the
+    // way from the wall's colour to a cold grey, a faint sheen and rivets)
+    const warm = Phaser.Display.Color.IntegerToColor(0x8a929c);
+    const mix = Phaser.Display.Color.Interpolate.ColorWithColor(wall, warm, 100, 12);
+    this.add.rectangle(x, top, w, HIDDEN_DOOR.h, Phaser.Display.Color.GetColor(mix.r, mix.g, mix.b)).setOrigin(0, 0).setDepth(0.57);
+    this.add.rectangle(x, top, 1, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
+    this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
+    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 3, 1, 0xc8d0d8).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
+    for (const ry of [top + 3, top + HIDDEN_DOOR.h - 4]) this.add.rectangle(x + w - 3, ry, 1, 1, 0xc8d0d8).setOrigin(0, 0).setDepth(0.58).setAlpha(0.1);
+    this.add.rectangle(x + 1, top + 1, w - 2, 1, 0xffffff).setOrigin(0, 0).setDepth(0.58).setAlpha(0.04);
   }
 
-  private toLounge(): void {
+  /** Into CREATURE CLASH.  Nothing is paid here: the packs and the battles inside ask. */
+  private useClash(): void {
+    if (this.busy()) return;
     this.locked = true;
-    audio.sfx('footstep_carpet');
-    fadeToScene(this, 'ArcadeLounge', { from: 'hub' });
+    audio.sfx('coin_drop', 0.5);
+    fadeToScene(this, 'CreatureHub', { from: 'ArcadeHub' });
+  }
+
+  /**
+   * A go on a claw machine: it costs what its plate says, and whatever comes
+   * out of it goes in a pocket -- so it asks for a free one before it takes
+   * the tokens, not after.
+   */
+  private useCrane(cr: (typeof CRANE_SPOTS)[number]): void {
+    if (this.busy()) return;
+    const cost = CRANE_COST[cr.kind];
+    if (pocketsFull()) {
+      audio.sfx('buzzer');
+      this.say(FULL_LINE);
+      return;
+    }
+    if (!ledger.canAfford(cost)) {
+      audio.sfx('buzzer');
+      this.say(`${cost} tokens a go.`);
+      return;
+    }
+    this.locked = true;
+    fadeToScene(this, 'CraneGame', { kind: cr.kind });
   }
 
   private openCounter(): void {
@@ -1699,8 +1809,16 @@ export class ArcadeHub extends Phaser.Scene {
       this.toAnnex();
       return;
     }
-    if (t.kind === 'lounge') {
-      this.toLounge();
+    if (t.kind === 'crane') {
+      this.useCrane(t.crane);
+      return;
+    }
+    if (t.kind === 'clash') {
+      this.useClash();
+      return;
+    }
+    if (t.kind === 'froggy') {
+      this.playFroggy();
       return;
     }
 
@@ -1891,12 +2009,11 @@ export class ArcadeHub extends Phaser.Scene {
       }
     }
     if (best) return { kind: 'cabinet', cab: best };
+    for (const cr of CRANE_SPOTS) if (this.spots.get(cr)?.at(px, py)) return { kind: 'crane', crane: cr };
+    if (this.spots.get(CLASH_SPOT)?.at(px, py)) return { kind: 'clash' };
+    if (this.spots.get(CHANGE_MACHINE)?.at(px, py)) return { kind: 'change' };
 
-    if (px < ANNEX_DOOR.x + 20 && Math.abs(py - ANNEX_DOOR.y) < 28) return { kind: 'annex' };
-    if (px > LOUNGE_DOOR.x - 20 && Math.abs(py - LOUNGE_DOOR.y) < 24) return { kind: 'lounge' };
-    if (Phaser.Math.Distance.Between(px, py, CHANGE_SPOT.x, CHANGE_SPOT.y) < INTERACT_RANGE) {
-      return { kind: 'change' };
-    }
+    if (px < ANNEX_DOOR.x + 24 && Math.abs(py - ANNEX_DOOR.y) < 30) return { kind: 'annex' };
     if (Phaser.Math.Distance.Between(px, py, BELL.x, BELL.y) < INTERACT_RANGE) return { kind: 'bell' };
     // ---- HOW FAR OUT THE COUNTER STILL ANSWERS.
     //
@@ -1906,6 +2023,9 @@ export class ArcadeHub extends Phaser.Scene {
     // it has to be up.  Forty-four is past everywhere you are allowed to stand
     // in front of it and still nowhere near the machines, which are eighty
     // pixels further down the room and answer first anyway.
+    // FROGGY FIRST: stood at him you are playing him, anywhere else along
+    // the counter you are looking at the prizes
+    if (this.frogOnCounter && py < COUNTER_REACH && Math.abs(px - FROG_POST.x) < POST_RANGE) return { kind: 'froggy' };
     if (py < COUNTER_REACH && px > COUNTER.x && px < COUNTER.x + COUNTER.w) {
       // The right-hand end of the counter is a PERSON, not a shelf: stood
       // there you are talking to whoever is on it, and anywhere else along it
@@ -1945,8 +2065,15 @@ export class ArcadeHub extends Phaser.Scene {
       msg = '[E] TALK TO THE STAFF';
     } else if (t.kind === 'annex') {
       msg = '[E] BACK ROOM';
-    } else if (t.kind === 'lounge') {
-      msg = '[E] NEW ROOM';
+    } else if (t.kind === 'clash') {
+      msg = '[E] CREATURE CLASH';
+    } else if (t.kind === 'froggy') {
+      msg = '[E] PLAY WITH FROGGY - 1 TOKEN';
+      color = ledger.balance() >= 1 ? PALETTE.gold : PALETTE.ash;
+    } else if (t.kind === 'crane') {
+      const cost = CRANE_COST[t.crane.kind];
+      msg = `[E] ${t.crane.title} - ${cost} TOKENS`;
+      color = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
     } else if (t.kind === 'bell') {
       msg = '[E] RING';
     } else if (t.kind === 'change') {
@@ -1966,7 +2093,7 @@ export class ArcadeHub extends Phaser.Scene {
     // on the prize case or on the machine itself -- covering the very thing it
     // is naming.  For those two it goes on the carpet in front of him instead,
     // which is empty floor in both cases.
-    const below = t.kind === 'counter' || t.kind === 'staff' || t.kind === 'change';
+    const below = t.kind === 'counter' || t.kind === 'staff' || t.kind === 'froggy';
     const y = below ? this.player.y + 15 : this.player.y - 34;
     this.prompt.setPosition(x, y).setVisible(true);
     fitPrompt(this.promptPlate, this.prompt);
