@@ -745,7 +745,9 @@ const ARCADE_BASE: RoomDef = {
     // in the back-right (x 284), right of the desk's return.
     { x: -8.74, z: -8.7, w: 2.2, d: 1.6, h: 2.6, color: 0xff4fa3, prop: 'cabinet', face: 0 },
     { x: -5.87, z: -8.7, w: 2.2, d: 1.6, h: 2.6, color: 0x7a4fd8, prop: 'cabinet', face: 0 },
-    { x: 9.4, z: -8.6, w: 2.0, d: 1.3, h: 2.2, color: 0xe8559f, prop: 'cabinet', face: 0 },
+    { x: 9.4, z: -8.7, w: 2.0, d: 1.3, h: 2.2, color: 0xe8559f, prop: 'cabinet', face: 0 },
+    // the bin, beside the desk's left-hand end (x 104, y 70 in the lit room)
+    { x: -4.4, z: -4.3, w: 0.6, d: 0.6, h: 0.85, color: 0x3a3f48, low: true },
 
     // ---- AND SIX ALONG THE FRONT WALL at y 164, three either side of the
     // doors -- CHOMP, WHACK and BOG BALL; BOWLING, POND HUNT and the cash
@@ -754,11 +756,11 @@ const ARCADE_BASE: RoomDef = {
     // room has them and it is the way a player standing at the doors sees
     // them: you come over the desk into a row of lit fronts, and the backs are
     // what the wall gets.
-    { x: -8.28, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xff7a3d, prop: 'cabinet', face: Math.PI },
-    { x: -6.02, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x6fbb6a, prop: 'cabinet', face: Math.PI },
-    { x: -3.77, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x5a8a3a, prop: 'cabinet', face: Math.PI },
-    { x: 3.77, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: Math.PI },
-    { x: 6.02, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: Math.PI },
+    { x: -9.11, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xff7a3d, prop: 'cabinet', face: Math.PI },
+    { x: -6.25, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x6fbb6a, prop: 'cabinet', face: Math.PI },
+    { x: -3.39, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x5a8a3a, prop: 'cabinet', face: Math.PI },
+    { x: 3.39, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: Math.PI },
+    { x: 6.25, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: Math.PI },
     { x: 9.04, z: 8.8, w: 1.6, d: 1.2, h: 2.3, color: 0x4a4258, prop: 'change', face: Math.PI },
   ],
   // ---- NOTHING TO HIDE IN, and nothing that is not in the lit room either.

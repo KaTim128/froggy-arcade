@@ -364,7 +364,8 @@ export class ArcadeHub extends Phaser.Scene {
         // Under the left-hand vent, in the strip of back wall the doorway does
         // not reach and no cabinet stands on.  At 95 it ended up behind a
         // machine and at 117 half inside the counter.
-        { x: 22, y: 66, kind: 'bin' },
+        // (user, 8 Nov: beside the counter's left end, clear of the claws)
+        { x: 104, y: 70, kind: 'bin' },
         // Bottom of the floor, clear of the last cabinet in the row by a dozen
         // pixels.  Wedged into the gap between two machines it overlapped one
         // or the other at every x that fitted, because the gap is twenty

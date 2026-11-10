@@ -145,12 +145,12 @@ export const CABINETS: CabinetDef[] = [
   // been at 48 for the same reason.
   // Five in, ten out: the standard table's five-token rung, moved up off the
   // three-token one.
-  { id: 'hoops', title: 'CHUBBY CHOMP', tier: 'medium', cost: 5, reward: 10, x: 50, y: 164, color: 0xff7a3d, symbol: 'CC', motif: 'chomp' },
-  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 80, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
-  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 210, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
+  { id: 'hoops', title: 'CHUBBY CHOMP', tier: 'medium', cost: 5, reward: 10, x: 39, y: 164, color: 0xff7a3d, symbol: 'CC', motif: 'chomp' },
+  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 77, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
+  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 205, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
   // Ten in, twenty out: a hunt takes a while and asks you to think.
   // (user, 5 Nov: 5 in, 10 for a win)
-  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 5, reward: 10, x: 240, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
+  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 5, reward: 10, x: 243, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
 
   // ---- the back room: five to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 10, reward: 20, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
@@ -187,7 +187,7 @@ export const CABINETS: CabinetDef[] = [
   // (user, 8 Nov: the fourth room is gone; BOG BALL stands in the front room's
   // bottom row, left of the doors, and CROAKED and PAD BATTLES finish room
   // two's two rows of five)
-  { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 110, y: 164, color: 0x5a8a3a, symbol: 'BB', motif: 'bog' },
+  { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 115, y: 164, color: 0x5a8a3a, symbol: 'BB', motif: 'bog' },
   // CROAKED, beside it in the second marked spot: a cabinet of its own colours, pond-teal and gold
   // PAD BATTLES (log #98), lily pink: room two's bottom row, right-hand end
   { id: 'padbattles', title: 'PAD BATTLES', tier: 'hard', cost: 10, reward: 20, x: 272, y: 162, color: 0xd85a9a, room: 'annex', symbol: 'PB', motif: 'pads' },

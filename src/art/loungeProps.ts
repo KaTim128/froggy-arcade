@@ -24,7 +24,7 @@ export const CRANE_SPOTS: ReadonlyArray<{ kind: CraneKind; x: number; y: number;
 ];
 /** (user, 8 Nov: smaller in the front room -- three quarters of its own size) */
 export const CLASH_SCALE = 0.75;
-export const CLASH_SPOT = { x: 282, y: 90 };
+export const CLASH_SPOT = { x: 282, y: 78 };
 export const CRANE_W = 30;
 /** A little over 2 m against the 26-pixel man, marquee and all. */
 export const CRANE_H = 36;
