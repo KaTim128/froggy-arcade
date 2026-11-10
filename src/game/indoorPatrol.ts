@@ -31,7 +31,7 @@ import { LOOKS, PLAYER_SPEED, Player } from '../art/player';
 import { PALETTE } from '../render/palette';
 import { openTalkPanel } from '../ui/talkPanel';
 import { collide, findPath, type Box } from './roomWalk';
-import { chaseOutOf, copSay, doubtNow, noteDoubt, patrolsOut, takeIn, takeIndoorChase } from './patrol';
+import { chaseOutOf, copSay, doubtNow, lagFor, noteDoubt, patrolsOut, takeIn, takeIndoorChase } from './patrol';
 import { copCameOut, copInside, copWentIn, nextVisitIn, planVisit, type Place } from './policeVisits';
 
 /** Something in the room that might hide you: its footprint on the floor, and whether it is tall. */
@@ -152,6 +152,20 @@ export class IndoorCop {
   private startT = 0;
   private answerT = 0;
   private auraT = 0;
+  /** On their way in after you (a chase from the last place): arrive hunting. */
+  private pendingChase = false;
+  /**
+   * HUNTING (user, 8 Nov): a chase is on, or was a moment ago -- any sight of
+   * you is a chase again at once, whatever you are wearing.
+   */
+  private hunting = false;
+  /** How sure they still are of where you are, while searching (1 down to 0). */
+  private conf = 0;
+  /** The places to look, in order: where you were, where you were going, behind the cover near it. */
+  private searchPts: Array<{ x: number; y: number }> = [];
+  /** Your way and speed when last seen (px/s). */
+  private pv = { x: 0, y: 0 };
+  private prevP: { x: number; y: number } | null = null;
 
   /**
    * `asks`: they came in on you at a cabinet (scenes2d/MinigameScene): stood
@@ -166,12 +180,23 @@ export class IndoorCop {
       this.arriveBeside();
       return;
     }
-    if (takeIndoorChase(host.place)) {
-      // in at the door after you, a beat behind
-      this.spawn(host.door.x, host.door.y);
-      this.state = 'chase';
-      this.startT = 1.1;
-      this.lastSeen = { x: host.player().x, y: host.player().y };
+    const lag = takeIndoorChase(host.place);
+    if (lag !== null) {
+      this.hunting = true;
+      if (lag < 0.6) {
+        // right on your heels: in at the door after you, a beat behind
+        this.spawn(host.door.x, host.door.y);
+        this.state = 'chase';
+        this.startT = 0.6;
+        this.lastSeen = { x: host.player().x, y: host.player().y };
+        return;
+      }
+      // further back: still out there, on their way, as long as it takes
+      // them to get to the door -- and only then in (see arriveHunting)
+      this.state = 'away';
+      this.pendingChase = true;
+      this.t = lag;
+      host.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shutdown());
       return;
     }
     const plan = planVisit(host.place);
@@ -224,8 +249,13 @@ export class IndoorCop {
   leftRoom(): void {
     // (unsure of you in here: still unsure of you out there -- user, 5 Nov)
     noteDoubt(this.aware);
-    if (this.state === 'chase' || this.state === 'search') chaseOutOf(this.host.place);
-    else if (this.present) {
+    // (still on their way in: they are just outside the door you came out of)
+    if (this.state === 'away' && this.pendingChase) chaseOutOf(this.host.place, Math.min(this.t, 1.5));
+    else if ((this.state === 'chase' || this.state === 'search') && this.cop) {
+      // after you out of it, as far behind as they are from the door
+      const d = this.host.door;
+      chaseOutOf(this.host.place, lagFor(Math.hypot(this.cop.x - d.x, this.cop.y - d.y)));
+    } else if (this.present) {
       // still on their round: in here a while yet, for whoever comes in next
       copWentIn(this.host.place, 12000);
     }
@@ -268,6 +298,29 @@ export class IndoorCop {
     this.cop!.sprite.setAlpha(0);
     this.host.scene.tweens.add({ targets: this.cop!.sprite, alpha: 1, duration: 400 });
     this.say('"Police. Just having a look round."');
+  }
+
+  /**
+   * In after you, from the last place, now they have got to the door: they
+   * do not know where in here you are -- a look round from the doorway, and
+   * any sight of you is the chase again.
+   */
+  private arriveHunting(): void {
+    const d = this.host.door;
+    this.pendingChase = false;
+    this.spawn(d.x, d.y);
+    audio.sfx('door_open', 0.5);
+    audio.sfx('police_radio', 0.3);
+    this.hunting = true;
+    this.lastSeen = null;
+    if (this.sees() > 0) {
+      this.lastSeen = { x: this.host.player().x, y: this.host.player().y };
+      this.say('"STOP RIGHT THERE!"');
+      this.startChase(0.3);
+      return;
+    }
+    this.say('"I KNOW YOU CAME IN HERE..."');
+    this.beginSearch({ x: this.host.bounds().centerX, y: this.host.bounds().centerY });
   }
 
   /** At your elbow at a cabinet: they have had a good look at you already. */
@@ -335,8 +388,12 @@ export class IndoorCop {
     const R = this.range();
     if (d > R) return 0;
     if (Math.abs(wrap(Math.atan2(dy, dx) - this.ang)) > HALF) return 0;
-    if (this.blocked(p.x, p.y)) return 0;
-    return 1 - (d / R) * 0.7;
+    // (user, 8 Nov) not all or nothing: your head, your shoulders and your
+    // feet each count -- half out from behind a machine is half seen
+    const parts = this.host.side ? [[0, 0]] : [[0, 0], [-4, 0], [4, 0], [0, -8]];
+    const out = parts.filter(([ox, oy]) => !this.blocked(p.x + ox, p.y + oy)).length;
+    if (!out) return 0;
+    return (1 - (d / R) * 0.7) * (0.45 + 0.55 * (out / parts.length));
   }
 
   update(delta: number): void {
@@ -345,7 +402,10 @@ export class IndoorCop {
     if (this.state === 'away') {
       this.t -= dt;
       // (not while you are sat at a card, or they would come in on a frozen room)
-      if (this.t <= 0) this.arrive();
+      if (this.t <= 0) {
+        if (this.pendingChase) this.arriveHunting();
+        else this.arrive();
+      }
       return;
     }
     const c = this.cop;
@@ -384,10 +444,12 @@ export class IndoorCop {
         break;
       }
       case 'search': {
-        // where they last saw you, and a good look round there
+        // ---- THE SEARCH (user, 8 Nov): every place you might be, in turn,
+        // a stop and a good look round at each; surer of nothing as it goes
+        this.conf -= dt / 24;
         if (this.goal) {
-          this.walkTo(this.goal, PACE.walk * 1.3, delta);
-          if (Math.hypot(this.goal.x - c.x, this.goal.y - c.y) < 4) {
+          this.walkTo(this.goal, this.searchPts.length >= 3 ? PACE.chase * 0.8 : PACE.walk * 1.35, delta);
+          if (Math.hypot(this.goal.x - c.x, this.goal.y - c.y) < 5) {
             this.goal = null;
             this.baseAng = this.ang;
             this.t = 0;
@@ -395,17 +457,20 @@ export class IndoorCop {
           }
         } else {
           this.t += dt;
-          this.ang = this.baseAng + Math.sin(this.t * 2.6) * 1.4;
+          this.ang = this.baseAng + Math.sin(this.t * 2.6) * 1.5;
           if (this.host.side) this.ang = Math.cos(this.ang) >= 0 ? 0 : Math.PI;
           this.faceAng();
-          if (this.t > 3.5) {
-            this.say('"...Lost him."');
-            this.aware = 0;
-            this.mark?.setVisible(false);
-            this.stops = Math.max(this.stops, 3);
-            this.nextStop();
+          if (this.t > 1.4 + Math.random() * 0.02) {
+            if (this.conf <= 0.15) {
+              this.lostHim();
+              break;
+            }
+            // the next place to look; out of places, somewhere else near where you were
+            this.goal = this.searchPts.shift() ?? this.nearby(this.lastSeen ?? { x: c.x, y: c.y }, 70);
+            this.t = 0;
           }
         }
+        this.mark?.setText('?').setVisible(true).setTint(0xffb040);
         break;
       }
       case 'chase': {
@@ -421,17 +486,20 @@ export class IndoorCop {
         if (v > 0) {
           this.lastSeen = { x: p.x, y: p.y };
           this.unseenT = 0;
+          // which way you are going, smoothed
+          if (this.prevP && dt > 0) {
+            const k = Math.min(1, dt * 6);
+            this.pv.x += ((p.x - this.prevP.x) / dt - this.pv.x) * k;
+            this.pv.y += ((p.y - this.prevP.y) / dt - this.pv.y) * k;
+          }
+          this.prevP = { x: p.x, y: p.y };
         } else this.unseenT += dt;
         const to = v > 0 ? { x: p.x, y: p.y } : this.lastSeen ?? { x: p.x, y: p.y };
         this.walkTo(to, PACE.chase, delta);
         if (Math.hypot(p.x - c.x, (this.host.side ? 0 : p.y - c.y)) <= REACH && p.sprite.visible && !this.host.safe?.()) return this.arrest();
-        // out of sight a while: where did they go?
-        if (this.unseenT > 2.5) {
-          this.state = 'search';
-          this.goal = this.lastSeen;
-          this.t = 0;
-          this.mark?.setText('?').setTint(0xffb040);
-        }
+        // out of sight a moment: where did you go?  (the place they last
+        // had you first, then on from there -- see beginSearch)
+        if (this.unseenT > 1.4) this.beginSearch(this.lastSeen ?? { x: p.x, y: p.y });
         break;
       }
       case 'question':
@@ -458,6 +526,15 @@ export class IndoorCop {
   private watch(dt: number): void {
     const v = this.sees();
     const p = this.host.player();
+    if (v > 0 && this.hunting && this.state === 'search') {
+      // they were after you a moment ago: no second look needed
+      this.lastSeen = { x: p.x, y: p.y };
+      this.say('"THERE HE IS!"');
+      audio.sfx('ui_blip', 0.8);
+      this.host.alarm?.();
+      this.startChase(0.15);
+      return;
+    }
     if (v > 0 && !store.get().disguised) {
       // the face on the poster: known at once
       this.lastSeen = { x: p.x, y: p.y };
@@ -473,7 +550,75 @@ export class IndoorCop {
     if (this.aware >= 1) this.ask();
   }
 
+  /**
+   * Lost you: search from `from` -- there, then where you were heading, then
+   * behind whatever tall cover stands near it (the far side from them), and
+   * then anywhere near.
+   */
+  private beginSearch(from: { x: number; y: number }): void {
+    this.state = 'search';
+    this.hunting = true;
+    this.conf = 1;
+    this.t = 0;
+    this.goal = from;
+    const pts: Array<{ x: number; y: number }> = [];
+    const sp = Math.hypot(this.pv.x, this.pv.y);
+    const b = this.host.bounds();
+    const clampIn = (q: { x: number; y: number }) => ({ x: Phaser.Math.Clamp(q.x, b.x + 6, b.right - 6), y: this.host.side ? b.y : Phaser.Math.Clamp(q.y, b.y + 4, b.bottom - 4) });
+    // where you were going (a second or so on)
+    const ahead = sp > 8 ? clampIn({ x: from.x + (this.pv.x / sp) * 40, y: from.y + (this.pv.y / sp) * 40 }) : null;
+    if (ahead) pts.push(ahead);
+    // behind the tall things near there: the side away from them
+    const me = this.cop ? { x: this.cop.x, y: this.cop.y } : from;
+    const near = ahead ?? from;
+    const hides = this.host
+      .covers()
+      .filter((c) => c.high)
+      .map((c) => ({ c, d: Math.hypot(c.x + c.w / 2 - near.x, c.y + c.h / 2 - near.y) }))
+      .filter((o) => o.d < 90)
+      .sort((a, b2) => a.d - b2.d)
+      .slice(0, 3);
+    for (const { c } of hides) {
+      const cx = c.x + c.w / 2;
+      const cy = c.y + c.h / 2;
+      const ux = cx - me.x;
+      const uy = cy - me.y;
+      const ul = Math.hypot(ux, uy) || 1;
+      const spot = clampIn({ x: cx + (ux / ul) * (c.w / 2 + 9), y: cy + (uy / ul) * (c.h / 2 + 9) });
+      if (this.host.side || findPath(me, spot, b, this.host.solids())) pts.push(spot);
+    }
+    this.searchPts = pts;
+    if (!this.host.side) this.say('"WHERE DID HE GO?"');
+    this.mark?.setText('?').setVisible(true).setTint(0xffb040);
+  }
+
+  /** A clear spot within `r` of `at` that they can get to. */
+  private nearby(at: { x: number; y: number }, r: number): { x: number; y: number } {
+    const b = this.host.bounds();
+    const from = this.cop ? { x: this.cop.x, y: this.cop.y } : at;
+    for (let i = 0; i < 20; i++) {
+      const x = Phaser.Math.Clamp(at.x + (Math.random() * 2 - 1) * r, b.x + 6, b.right - 6);
+      const y = this.host.side ? b.y : Phaser.Math.Clamp(at.y + (Math.random() * 2 - 1) * r, b.y + 4, b.bottom - 4);
+      const clear = this.host.solids().every((s2) => !(x > s2.x - 6 && x < s2.x + s2.w + 6 && y > s2.y - 4 && y < s2.y + s2.h + 5));
+      if (clear && (this.host.side || findPath(from, { x, y }, b, this.host.solids()))) return { x, y };
+    }
+    return this.freeSpot(20);
+  }
+
+  /** Searched it all and nothing: back on their round, still unsure of you. */
+  private lostHim(): void {
+    this.say('"...Lost him. Keep your eyes open."');
+    this.hunting = false;
+    this.aware = 0.6;
+    noteDoubt(0.6);
+    this.mark?.setText('?').setVisible(true).setTint(PALETTE.gold);
+    // a couple more stops round the room before they go
+    this.stops = Math.min(this.stops, 2);
+    this.nextStop();
+  }
+
   private startChase(wait: number): void {
+    this.hunting = true;
     this.state = 'chase';
     this.startT = wait;
     this.unseenT = 0;
@@ -536,7 +681,8 @@ export class IndoorCop {
       if (this.stuckTimes > 2) {
         this.stuckTimes = 0;
         if (this.state === 'walk') this.goal = this.freeSpot(30);
-        else if (this.state === 'search') this.goal = null;
+        // (can't get there: on to the next place to look)
+        else if (this.state === 'search') this.goal = this.searchPts.shift() ?? null;
       }
     }
   }

@@ -93,7 +93,23 @@ const ANSWER_S = 5;
 
 // ---- between streets (not saved: a reload is a fresh street)
 let nextPatrolAt = 0;
-let pursuit: { until: number; edge: 'left' | 'right'; alley: boolean; from?: Place; atX?: number } | null = null;
+/**
+ * A chase between places.  `lag` (user, 8 Nov): how many seconds behind you
+ * the officer really was when you went through -- their distance to the way
+ * you went, at a chase -- set at `at`.  The next place keeps them out of it
+ * until that is up: close behind, in on your heels; far behind, a long while
+ * later.  Never at the door the moment you are.
+ */
+let pursuit: { until: number; edge: 'left' | 'right'; alley: boolean; from?: Place; atX?: number; lag?: number; at?: number } | null = null;
+/** Seconds to cover `dist` px at a chase. */
+export const lagFor = (dist: number): number => Math.min(30, Math.max(0, dist) / (PLAYER_SPEED * PACE.chase));
+/** A pursuit `lag` seconds behind, kept long enough for them to get there. */
+const pursue = (p: { edge: 'left' | 'right'; alley: boolean; from?: Place; atX?: number }, lag: number): void => {
+  const now = performance.now();
+  pursuit = { ...p, lag, at: now, until: now + 8000 + lag * 1000 };
+};
+/** What is left of the pursuit's lag now. */
+const lagLeft = (p: { lag?: number; at?: number }): number => Math.max(0, (p.lag ?? 0) - (performance.now() - (p.at ?? performance.now())) / 1000);
 /**
  * ---- THEY DO NOT FORGET (user, 5 Nov).  Unsure of you on one street, and
  * you went somewhere: they are still unsure when you come back, and still
@@ -120,15 +136,19 @@ export const stealthPhase = (): boolean => patrolsOut() && !store.get().disguise
  * Out of a door with one of them after you, from inside (game/indoorPatrol):
  * they come out of it after you -- onto the street, or into the next room.
  */
-export function chaseOutOf(place: Place): void {
-  pursuit = { until: performance.now() + 8000, edge: 'left', alley: false, from: place };
+export function chaseOutOf(place: Place, lag = 1): void {
+  pursue({ edge: 'left', alley: false, from: place }, lag);
 }
 
-/** Coming into `place`: was one of them on your heels from the last room of it? */
-export function takeIndoorChase(place: Place): boolean {
-  if (!pursuit || pursuit.from !== place || performance.now() > pursuit.until) return false;
+/**
+ * Coming into `place`: was one of them on your heels from the last room of
+ * it?  The seconds until they reach its door (0: right behind you), or null.
+ */
+export function takeIndoorChase(place: Place): number | null {
+  if (!pursuit || pursuit.from !== place || performance.now() > pursuit.until) return null;
+  const left = lagLeft(pursuit);
   pursuit = null;
-  return true;
+  return left;
 }
 
 /** The lines officers have up, per scene: a second one goes above the first, not over it. */
@@ -391,7 +411,7 @@ const forced = (): boolean => {
   }
 };
 
-type State = 'waiting' | 'walk' | 'pause' | 'eye' | 'enter' | 'inside' | 'question' | 'chase' | 'leave' | 'arrest' | 'gone';
+type State = 'waiting' | 'walk' | 'pause' | 'eye' | 'enter' | 'inside' | 'question' | 'chase' | 'search' | 'leave' | 'arrest' | 'gone';
 
 /** What they say, having a look at the old man. */
 const EYE_LINES = ['"You. Seen anyone come past here?"', '"Keep it moving, old timer."', '"That face on the poster. Seen him?"', '"You again. Stay out of trouble."'];
@@ -431,6 +451,17 @@ class Unit {
   private door: { x: number; place: Place } | null = null;
   private insideT = 0;
   private doorCool = 0;
+  /** Still the other side of the door they are coming out of (see fromDoor). */
+  private behindDoor = false;
+  /** Where they last had you, and which way you were going then. */
+  private seenX = 0;
+  private seenDir = 0;
+  /**
+   * THE SEARCH (user, 8 Nov): lost you, they do not give it up -- along the
+   * way you were going, a look both ways at each stop, back the other way,
+   * surer of nothing as it goes; sight of you again and they are after you.
+   */
+  private search: { x: number; leg: number; look: number; conf: number } | null = null;
 
   constructor(
     private host: PatrolHost,
@@ -483,12 +514,17 @@ class Unit {
     return u;
   }
 
-  /** Out of the door at `x` after you, a beat behind. */
-  static fromDoor(host: PatrolHost, squad: { busy: (u: Unit) => boolean }, x: number): Unit {
+  /**
+   * Out of the door at `x` after you, as far behind as they really were:
+   * still inside (unseen) until they reach it, then out of it.
+   */
+  static fromDoor(host: PatrolHost, squad: { busy: (u: Unit) => boolean }, x: number, lag = 1.1): Unit {
     const u = new Unit(host, squad);
     u.spawn(x, 1);
     u.state = 'chase';
-    u.startT = 1.1;
+    u.startT = Math.max(0.5, lag);
+    u.behindDoor = true;
+    u.cop?.sprite.setAlpha(0);
     return u;
   }
 
@@ -502,6 +538,11 @@ class Unit {
 
   get chasing(): boolean {
     return this.state === 'chase';
+  }
+
+  /** Lost you, and looking (see `search`). */
+  get searching(): boolean {
+    return this.state === 'search';
   }
 
   get x(): number | null {
@@ -591,7 +632,12 @@ class Unit {
     const fade = c.sprite.alpha;
     this.auraR?.setPosition(c.x, c.y - 12).setAlpha(k * ph * fade).setDepth(c.sprite.depth - 0.001);
     this.auraB?.setPosition(c.x, c.y - 12).setAlpha(k * (1 - ph) * fade).setDepth(c.sprite.depth - 0.001);
-    if (this.sees() > 0) this.lastSeen = performance.now();
+    if (this.sees() > 0) {
+      this.lastSeen = performance.now();
+      const d = Math.sign(p.x - this.seenX);
+      if (d) this.seenDir = d;
+      this.seenX = p.x;
+    }
     this.drawCone();
 
     if (this.state === 'enter') return;
@@ -650,9 +696,19 @@ class Unit {
         this.startT -= dt;
         c.face(Math.sign(p.x - c.x) || 1);
         c.stand();
+        if (this.behindDoor) c.sprite.setAlpha(0);
         return;
       }
-      const dx = p.x - c.x;
+      if (this.behindDoor) {
+        // out of the door, now they have got to it
+        this.behindDoor = false;
+        audio.sfx('door_open', 0.4);
+        this.host.scene.tweens.add({ targets: c.sprite, alpha: 1, duration: 250 });
+        this.seenX = p.x;
+      }
+      // (in sight: at you; out of it, at where they last had you)
+      const seeing = this.sees() > 0 || Math.abs(p.x - c.x) < 40;
+      const dx = (seeing ? p.x : this.seenX) - c.x;
       c.move(Math.sign(dx), 0, delta * PACE.chase, bounds);
       // (caught as they reach you -- and never stepped clean through you on
       // a long frame: crossing over is a catch too)
@@ -661,9 +717,53 @@ class Unit {
         c.setPosition(p.x - Math.sign(dx) * 4, c.y);
         return this.arrest();
       }
-      // a long way ahead of them and out of sight: they give it up
-      this.lostT = Math.abs(dx) > 150 ? this.lostT + dt : 0;
-      if (this.lostT > 3) this.giveUp();
+      // out of sight a while, or a long way ahead: they look for you
+      this.lostT = !seeing || Math.abs(dx) > 150 ? this.lostT + dt : 0;
+      if (this.lostT > 2.2 || (!seeing && Math.abs(dx) < 4)) this.beginSearch();
+      return;
+    }
+
+    if (this.state === 'search') {
+      const sr = this.search!;
+      sr.conf -= dt / 20;
+      // sight of you again: after you at once
+      if (this.sees() > 0) {
+        this.search = null;
+        this.say('"THERE!"');
+        this.state = 'chase';
+        this.startT = 0.2;
+        this.lostT = 0;
+        this.mark?.setText('!').setVisible(true).setTint(0xff5050);
+        return;
+      }
+      if (sr.look > 0) {
+        // stopped: a look one way, the other, and back
+        sr.look -= dt;
+        const k = sr.look % 1.6;
+        c.face(k > 0.8 ? 1 : -1);
+        c.stand();
+      } else if (Math.abs(sr.x - c.x) > 3) {
+        c.move(Math.sign(sr.x - c.x), 0, delta * PACE.walk * (sr.leg === 0 ? 1.6 : 1.2), bounds);
+        if (Math.abs(sr.x - c.x) <= 3) sr.look = 1.6 + Math.random() * 1.2;
+      } else {
+        // on along the way you went; then back the other way past where they lost you
+        sr.leg++;
+        const lo2 = (this.host.minX ?? 0) + 10;
+        const hi2 = (this.host.maxX ?? this.host.worldW) - 10;
+        const step = (sr.leg % 2 === 1 ? this.seenDir || 1 : -(this.seenDir || 1)) * (50 + sr.leg * 20);
+        sr.x = Phaser.Math.Clamp(this.seenX + step, lo2, hi2);
+      }
+      this.mark?.setText('?').setVisible(true).setTint(0xffb040);
+      if (sr.conf <= 0.15) {
+        // gone: on their round again, still unsure of you
+        this.search = null;
+        this.say('"...Lost him."');
+        noteDoubt(0.6);
+        this.aware = 0.6;
+        this.state = 'walk';
+        this.nextPause = 1;
+        earnBadge('low_profile', this.host.scene);
+      }
       return;
     }
 
@@ -875,11 +975,12 @@ class Unit {
     takeIn(this.host.scene, (l) => this.say(l));
   }
 
-  private giveUp(): void {
-    this.state = 'leave';
-    this.aware = 0;
-    this.mark?.setVisible(false);
-    earnBadge('low_profile', this.host.scene);
+  /** Lost you: start where they last had you, the way you were going. */
+  private beginSearch(): void {
+    this.state = 'search';
+    this.search = { x: this.seenX, leg: 0, look: 0, conf: 1 };
+    this.lostT = 0;
+    this.mark?.setText('?').setVisible(true).setTint(0xffb040);
   }
 
   private remove(): void {
@@ -922,7 +1023,7 @@ export class Patrol {
     pursuit = null;
     if (host.alley) {
       // they saw you duck in here: in after you, from the street end
-      if (chased?.alley) this.units.push(Unit.chaser(host, squad, 'left'));
+      if (chased?.alley) this.units.push(Unit.chaser(host, squad, 'left', Math.max(1.6, lagLeft(chased))));
       return;
     }
     if (chased) {
@@ -930,7 +1031,8 @@ export class Patrol {
       // alley you came out of, or in off the end
       const door = chased.from ? host.doors?.find((d) => d.place === chased.from) : undefined;
       const at = door?.x ?? chased.atX;
-      this.units.push(at !== undefined ? Unit.fromDoor(host, squad, at) : Unit.chaser(host, squad, chased.edge));
+      const lag = lagLeft(chased);
+      this.units.push(at !== undefined ? Unit.fromDoor(host, squad, at, lag) : Unit.chaser(host, squad, chased.edge, Math.max(host.entryX !== undefined ? 1.6 : 1.4, lag)));
     }
     // ---- THEY WERE STILL THERE.  Back on a street you were on a moment
     // ago (down an alley and out, say): the officers walking it then are
@@ -1035,7 +1137,9 @@ export class Patrol {
    */
   inAt(place: Place): void {
     if (this.chasing) {
-      pursuit = { until: performance.now() + 8000, edge: 'left', alley: false, from: place };
+      // as far behind as the nearest of them is from that door
+      const door = this.host.doors?.find((d) => d.place === place)?.x ?? this.host.player().x;
+      pursue({ edge: 'left', alley: false, from: place }, lagFor(this.gap(door)));
       return;
     }
     if (this.units.some((u) => u.present && u.wary > 0.15 && u.witnessed())) copWentIn(place, LOOK_IN_MS);
@@ -1048,7 +1152,13 @@ export class Patrol {
 
   /** Out of the alley with one after you: he comes out after you, at that alley. */
   outOfAlley(streetX: number): void {
-    if (this.chasing) pursuit = { until: performance.now() + 8000, edge: 'left', alley: false, atX: streetX };
+    if (this.chasing) pursue({ edge: 'left', alley: false, atX: streetX }, lagFor(this.gap(this.host.entryX ?? 0)));
+  }
+
+  /** How far the nearest officer after you is from `x` (a door, the way out). */
+  private gap(x: number): number {
+    const xs = this.units.filter((u) => u.chasing || u.searching).map((u) => u.x).filter((v): v is number => v !== null);
+    return xs.length ? Math.min(...xs.map((v) => Math.abs(v - x))) : 0;
   }
 
   /**
@@ -1058,12 +1168,12 @@ export class Patrol {
   hideAway(): void {
     if (!this.chasing) return;
     const seen = this.units.some((u) => u.chasing && u.witnessed());
-    pursuit = { until: performance.now() + 8000, edge: 'left', alley: seen };
+    pursue({ edge: 'left', alley: seen }, lagFor(this.gap(this.host.player().x)));
   }
 
   /** Off the end of the street with them after you: they follow you on, in at `edge` of the next. */
   leaveBy(edge: 'left' | 'right'): void {
-    if (this.chasing) pursuit = { until: performance.now() + 8000, edge, alley: false };
+    if (this.chasing) pursue({ edge, alley: false }, lagFor(this.gap(edge === 'left' ? 0 : this.host.worldW)));
   }
 }
 
@@ -1071,4 +1181,6 @@ export class Patrol {
 export const patrolDev = {
   pursuit: () => (pursuit ? { ...pursuit } : null),
   chase: (edge: 'left' | 'right', alley: boolean) => (pursuit = { until: performance.now() + 8000, edge, alley }),
+  /** A chase out of `from`, the officer `lag` seconds behind. */
+  chaseFrom: (from: Place, lag: number) => pursue({ edge: 'left', alley: false, from }, lag),
 };
