@@ -306,6 +306,11 @@ interface Mine {
  * (x2, y2); a `ring` is a band at radius `r` (a shockwave); a `meteor` falls
  * from the sky onto a growing shadow.  `go` runs when it goes off.
  */
+/** A fighter in a mirror trap starts for the edge after a moment's reaction, sooner the sharper it is. */
+function h_escape(skill: number, since: number): boolean {
+  return since > 0.6 - skill * 0.45;
+}
+
 interface Hazard {
   kind: 'mark' | 'meteor' | 'line' | 'ring';
   x: number;
@@ -324,8 +329,8 @@ interface Hazard {
   owner?: Fighter;
   /** It drifts after its target at this speed (px/s) until it goes off. */
   seek?: number;
-  /** The sphinx's riddle: the one true answer (an eye), or a false one (a mirror). */
-  riddle?: 'true' | 'false';
+  /** The sphinx's mirror trap: a ring of mirrors round the enemy -- be out of it when it shatters. */
+  trap?: boolean;
 }
 
 /**
@@ -2767,33 +2772,39 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('crumble', 0.7);
         return true;
       case 'mirror_riddle': {
-        // ---- THE RIDDLE (user, 5 Nov: in place of the mirror copies).  Three
-        // glyphs ring the other one; only one is the truth -- the eye.  Be
-        // standing in it when the riddle closes, or answer for it: the hit,
-        // every move set back, and a moment frozen.  It moves them where the
-        // sphinx wants them -- usually straight down its pounce line.
-        const base = Math.random() * Math.PI * 2;
-        const truth = Math.floor(Math.random() * 3);
-        const T = 2.2;
-        const R = 11;
-        for (let k = 0; k < 3; k++) {
-          const px = cx(o.x + Math.cos(base + (k * Math.PI * 2) / 3) * 28);
-          const py = cy(o.y + Math.sin(base + (k * Math.PI * 2) / 3) * 22);
-          const right = k === truth;
-          this.hazards.push({ kind: 'mark', x: px, y: py, r: R, t: T, t0: T, dmg: 0, owner: f, riddle: right ? 'true' : 'false', go: right ? () => {
-            if (this.over || f.hp <= 0 || o.hp <= 0) return;
-            if (Math.hypot(o.x - px, o.y - py) <= R + 3) {
-              const n = centerText(this, o.x, o.y - 18, 'SOLVED', 0xfff4a0).setDepth(60);
-              this.tweens.add({ targets: n, y: n.y - 8, alpha: 0, duration: 700, onComplete: () => n.destroy() });
-              return;
-            }
-            this.hit(f, o, dmg, a);
-            for (let i = 0; i < 3; i++) o.cds[i] += SILENCE_S;
-            o.stun = Math.max(o.stun, 0.6);
-            this.fx.push({ kind: 'ring', x: o.x, y: o.y, r: 14, t: 0, life: 0.4, col: 0xfff4a0 });
-            audio.sfx('glass_crack', 0.6);
-          } : undefined });
+        // ---- MIRROR TRAP (user, 10 Nov: the riddle left players not knowing
+        // what to do).  One rule anyone gets at a glance: a ring of mirrors
+        // stands round the enemy, and in 2 s it shatters inward.  Out of the
+        // ring by then: nothing.  Still inside: the hit and a second frozen --
+        // usually right where the sphinx's pounce line is waiting.
+        const T = 2;
+        const R = 30;
+        const at = { x: o.x, y: o.y };
+        let warn: Phaser.GameObjects.BitmapText | null = null;
+        if (o === this.me) {
+          warn = centerText(this, o.x, o.y - 22, 'GET OUT!', 0xfff4a0).setDepth(60);
+          this.tweens.add({ targets: warn, alpha: 0.35, duration: 180, yoyo: true, repeat: -1 });
+          this.time.delayedCall(T * 1000, () => warn?.destroy());
         }
+        this.hazards.push({ kind: 'mark', x: at.x, y: at.y, r: R, t: T, t0: T, dmg: 0, owner: f, trap: true, go: () => {
+          warn?.destroy();
+          if (this.over || f.hp <= 0 || o.hp <= 0) return;
+          for (let k = 0; k < 10; k++) {
+            const ang = (k / 10) * Math.PI * 2;
+            this.fx.push({ kind: 'spark', x: at.x + Math.cos(ang) * R, y: at.y + Math.sin(ang) * R * 0.8, r: 2, t: 0, life: 0.35, col: 0xbfe8ff });
+          }
+          audio.sfx('glass_crack', 0.7);
+          if (o.st.air || Math.hypot(o.x - at.x, (o.y - at.y) / 0.8) > R + 2) {
+            const n = centerText(this, o.x, o.y - 18, 'ESCAPED', 0xbfe8ff).setDepth(60);
+            this.tweens.add({ targets: n, y: n.y - 8, alpha: 0, duration: 700, onComplete: () => n.destroy() });
+            return;
+          }
+          this.hit(f, o, dmg, a);
+          o.stun = Math.max(o.stun, 1);
+          const n = centerText(this, o.x, o.y - 18, 'TRAPPED', 0xff8a8a).setDepth(60);
+          this.tweens.add({ targets: n, y: n.y - 8, alpha: 0, duration: 800, onComplete: () => n.destroy() });
+          this.fx.push({ kind: 'ring', x: o.x, y: o.y, r: 14, t: 0, life: 0.4, col: 0xbfe8ff });
+        } });
         audio.sfx('chime', 0.6);
         return true;
       }
@@ -5500,7 +5511,15 @@ export class CreatureArena extends Phaser.Scene {
         break;
       }
     }
-    if (B.dodge.t > 0) {
+    // ---- CAUGHT IN A MIRROR TRAP: get out of the ring before it shatters
+    const trap = this.hazards.find((h) => h.trap && h.owner !== f && Math.hypot(f.x - h.x, (f.y - h.y) / 0.8) < h.r + 6);
+    if (trap && h_escape(sk, trap.t0 - trap.t)) {
+      const ex = f.x - trap.x || 0.01;
+      const ey = f.y - trap.y;
+      const el = Math.hypot(ex, ey) || 1;
+      vx = (ex / el) * spd * 1.2;
+      vy = (ey / el) * spd * 1.2;
+    } else if (B.dodge.t > 0) {
       B.dodge.t -= dt;
       vx = B.dodge.vx * spd * 1.3;
       vy = B.dodge.vy * spd * 1.3;
@@ -6068,7 +6087,7 @@ export class CreatureArena extends Phaser.Scene {
       const col = ELEMENTS[own.c.element].col;
       if (h.kind === 'line') this.fx.push({ kind: 'beam', x: h.x, y: h.y, x2: h.x2, y2: h.y2, r: h.r, t: 0, life: 0.25, col });
       else if (h.kind === 'ring') this.fx.push({ kind: 'ring', x: h.x, y: h.y, r: h.r, t: 0, life: 0.3, col });
-      else this.fx.push({ kind: 'boom', x: h.x, y: h.y, r: h.r, t: 0, life: h.kind === 'meteor' ? 0.5 : 0.3, col: h.kind === 'meteor' ? 0xffb040 : col });
+      else if (!h.trap) this.fx.push({ kind: 'boom', x: h.x, y: h.y, r: h.r, t: 0, life: h.kind === 'meteor' ? 0.5 : 0.3, col: h.kind === 'meteor' ? 0xffb040 : col });
       if (h.kind === 'meteor') audio.sfx('arcane_blast', 0.55);
       h.go?.();
       if (h.dmg > 0 && this.caught(h, tgt.x, tgt.y) && !tgt.st.air) {
@@ -6626,19 +6645,23 @@ export class CreatureArena extends Phaser.Scene {
         const sy = h.y - fall * 120;
         g.lineStyle(3, 0xffb040, 0.5).lineBetween(sx + 10, sy - 18, sx, sy);
         g.fillStyle(0xfff0a0, 1).fillCircle(sx, sy, 3 + k * 2);
-      } else if (h.riddle) {
-        // the riddle's glyphs: the true one an eye in gold, the false ones mirrors
-        const truth = h.riddle === 'true';
-        const c = truth ? 0xffd060 : 0xbfe8ff;
-        g.lineStyle(1, c, 0.9).strokeCircle(h.x, h.y, h.r);
-        g.lineStyle(1, c, 0.35).strokeCircle(h.x, h.y, h.r - 3);
-        g.fillStyle(c, 0.12 + k * 0.2).fillCircle(h.x, h.y, h.r * k);
-        if (truth) {
-          g.fillStyle(0xfff4c0, 1).fillEllipse(h.x, h.y, 9, 5);
-          g.fillStyle(0x2a1a10, 1).fillCircle(h.x, h.y, 1.6);
-        } else {
-          g.fillStyle(0xe8fcff, 0.8).fillTriangle(h.x - 3, h.y + 3, h.x + 3, h.y + 3, h.x, h.y - 4);
-          g.lineStyle(1, 0x6a8aa8, 0.9).lineBetween(h.x - 1, h.y - 1, h.x + 1, h.y + 2);
+      } else if (h.trap) {
+        // the mirror trap: a fixed ring (wider than tall, on the floor), a
+        // pale fill rising as it gets ready, and ten mirror shards circling
+        // on its edge; the edge turns red in the last half second
+        const late = h.t < 0.5;
+        const edge = late ? 0xff6a6a : 0xbfe8ff;
+        const rx = h.r;
+        const ry = h.r * 0.8;
+        g.fillStyle(0xbfe8ff, 0.06 + k * 0.16).fillEllipse(h.x, h.y, rx * 2, ry * 2);
+        g.lineStyle(2, edge, late ? 0.95 : 0.8).strokeEllipse(h.x, h.y, rx * 2, ry * 2);
+        const spin = this.time.now / 600;
+        for (let i = 0; i < 10; i++) {
+          const ang = spin + (i / 10) * Math.PI * 2;
+          const sx = h.x + Math.cos(ang) * rx;
+          const sy = h.y + Math.sin(ang) * ry;
+          g.fillStyle(0xe8fcff, 0.95).fillTriangle(sx - 2, sy + 3, sx + 2, sy + 3, sx, sy - 4);
+          g.fillStyle(0x6a8aa8, 0.9).fillRect(sx - 0.5, sy - 1, 1, 3);
         }
       } else {
         g.lineStyle(1, h.holds ? 0x8ae86a : 0xff3a3a, 0.9).strokeCircle(h.x, h.y, h.r);

@@ -383,7 +383,7 @@ export function paintOpening(
   const wallOuter = left ? 0 : GAME_W;
   const x0 = left ? wallOuter + 2 : mouth; // the cut, 12 px into the 14 px wall
   const w = 12;
-  const arch = 5; // how far the rounded head drops
+  const arch = 0; // (user, 10 Nov: a rounded head read as a stray handle -- square, flush)
 
   // the floor glow, a wedge out of the mouth, pulsing slowly
   const spill = scene.add.graphics().setDepth(0.4);
@@ -399,11 +399,9 @@ export function paintOpening(
   // a 1 px steel trim around the cut, on the wall face
   g.fillStyle(c(PALETTE.steel), 1);
   g.fillRect(x0 - 1, top + arch - 1, w + 2, h - arch + 2);
-  g.fillEllipse(x0 + w / 2, top + arch, w + 2, arch * 2 + 2);
   // the hole: dark, then the next room's light layered in toward the far side
   g.fillStyle(PALETTE.black, 1);
   g.fillRect(x0, top + arch, w, h - arch);
-  g.fillEllipse(x0 + w / 2, top + arch, w, arch * 2);
   const bands = night ? [0.1, 0.06, 0.03] : [0.7, 0.4, 0.18];
   bands.forEach((alpha, i) => {
     const bw = 4;
@@ -411,9 +409,6 @@ export function paintOpening(
     g.fillStyle(glow, alpha);
     g.fillRect(bx, top + arch + 1, bw, h - arch - 1);
   });
-  // the glow fills the arch head too, a touch dimmer
-  g.fillStyle(glow, night ? 0.05 : 0.35);
-  g.fillEllipse(x0 + w / 2, top + arch + 1, w - 2, arch * 2 - 2);
   // the floor running through: a threshold strip at the foot of the arch
   g.fillStyle(c(PALETTE.slate), 1).fillRect(x0, top + h - 2, w, 2);
   g.fillStyle(glow, night ? 0.1 : 0.5).fillRect(x0, top + h - 2, w, 1);
