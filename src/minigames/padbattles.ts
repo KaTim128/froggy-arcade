@@ -1,6 +1,12 @@
 /**
- * PAD BATTLES (log #98).  5 tokens in, 10 for a win, nothing for a loss --
+ * PAD BATTLES (log #98).  10 tokens in, 20 for a win, nothing for a loss --
  * the shell takes the price once and pays once.
+ *
+ * THREE ROUNDS, ON POINTS (user, 8 Nov): every round is placed 1st to 4th
+ * and scores 4, 3, 1 and 0; the most points after three rounds wins (level
+ * at the top is a draw, the stake back).  Fall in and the round goes on
+ * without you -- SKIP plays the rest of it out at once, by the same rules,
+ * and on to the next.
  *
  * Four frogs on a 7 x 5 grid of lily pads floating APART on deep water
  * (user, 28 Oct: "pads spaced apart so frogs must jump"): you (MOSS) and
@@ -184,6 +190,13 @@ let banner: Phaser.GameObjects.BitmapText | null = null;
 /** "YOU" over the player's own frog, so there is never any doubt which it is. */
 let youTag: Phaser.GameObjects.BitmapText | null = null;
 let nextPlace = 4;
+/** THE COMPETITION: three rounds, points by place (see the top of the file). */
+const ROUNDS = 3;
+const POINTS = [4, 3, 1, 0];
+let roundNo = 1;
+let totals = [0, 0, 0, 0];
+let skipBtn: Phaser.GameObjects.Container | null = null;
+let skipping = false;
 let objs: Phaser.GameObjects.GameObject[] = [];
 
 const player = (): Frog => frogs[0];
@@ -499,6 +512,36 @@ function think(f: Frog, dt: number): void {
 }
 
 // ------------------------------------------------------------------ stepping
+
+/** One step of the round: the waves, every frog, the pads, who is out. */
+function simStep(dt: number, mx: number, mz: number): void {
+  if (phase === 'play') {
+    clock += dt;
+    waveIn -= dt;
+    if (waveIn <= 0) {
+      wave();
+      waveIn = Math.max(1.4, 3.8 - clock / 30);
+    }
+  }
+  const me = player();
+  if (phase !== 'play') mx = mz = 0;
+  stepFrog(me, dt, mx, mz);
+  for (const f of frogs.slice(1)) {
+    const on = f.alive && phase === 'play';
+    if (on && !f.jump) {
+      think(f, dt);
+      if (f.brain.want) {
+        if (f.brain.want === 'jump' && f.brain.aim !== null) f.face = f.brain.aim;
+        act(f, f.brain.want);
+        f.brain.want = null;
+      }
+    }
+    stepFrog(f, dt, on ? f.brain.mx : 0, on ? f.brain.mz : 0);
+  }
+  separate();
+  stepPads(dt);
+  settle();
+}
 
 /** Into the water: over the edge (it slides on a moment) or straight in from a jump. */
 function fallIn(f: Frog, wet = false): void {
@@ -1189,16 +1232,6 @@ function drawChips(): void {
 
 const placeName = (n: number): string => ['1ST', '2ND', '3RD', '4TH'][n - 1] ?? `${n}TH`;
 
-function results(winner: Frog | null): void {
-  const s = sceneRef;
-  const api = apiRef;
-  if (!s || !api) return;
-  const order = [...frogs].sort((a, b) => a.place - b.place);
-  chips.push(s.add.rectangle(GAME_W / 2, api.area.y + 82, 150, 70, PALETTE.ink, 0.94).setStrokeStyle(1, PALETTE.gold).setDepth(50));
-  chips.push(centerText(s, GAME_W / 2, api.area.y + 54, winner ? `${winner.name} WINS!` : 'NOBODY IS LEFT!', winner === player() ? PALETTE.gold : PALETTE.cream).setDepth(51));
-  order.forEach((f, i) => chips.push(text(s, GAME_W / 2 - 40, api.area.y + 66 + i * 9, `${placeName(f.place)}  ${f.name}`, f === player() ? PALETTE.gold : PALETTE.ash).setDepth(51)));
-}
-
 /**
  * Someone went in.  Places count down from fourth.  Two at once share the
  * worse place between them; if the last two go in together, nobody wins.
@@ -1208,29 +1241,137 @@ function settle(): void {
   if (out.length) {
     for (const f of out) f.place = nextPlace - out.length + 1;
     nextPlace -= out.length;
-    for (const f of out) announce(f === player() ? `YOU'RE OUT! ${placeName(f.place)}` : `${f.name} IS OUT!`, f === player() ? PALETTE.blood : PALETTE.gold);
-    drawChips();
+    if (!skipping) for (const f of out) announce(f === player() ? `YOU'RE OUT! ${placeName(f.place)}` : `${f.name} IS OUT!`, f === player() ? PALETTE.blood : PALETTE.gold);
+    if (!skipping) drawChips();
   }
   if (phase !== 'play') return;
   const left = frogs.filter((f) => f.alive);
   const me = player();
-  if (left.length <= 1 || !me.alive) {
-    phase = 'over';
-    const winner = left.length === 1 ? left[0] : null;
-    if (winner) winner.place = 1;
-    const won = winner === me;
-    for (const f of left) if (f !== winner && !f.place) f.place = 2;
-    if (settled) return;
-    settled = true;
-    audio.sfx(won ? 'chime' : 'buzzer', 0.6);
-    if (won) {
-      announce('LAST FROG STANDING!', PALETTE.gold);
-      apiRef?.record(Math.round(clock * 10) / 10);
-      if (me.hitsTaken === 0) apiRef?.badge('m_pads');
-    }
-    sceneRef?.time.delayedCall(won ? 1600 : 1200, () => results(winner));
-    sceneRef?.time.delayedCall(won ? 3600 : 3000, () => (won ? apiRef?.win() : apiRef?.lose()));
+  // (out of it: the others play the round out; SKIP is there to not watch)
+  if (!me.alive && left.length > 1 && !skipBtn && !skipping) showSkip();
+  if (left.length > 1) return;
+  phase = 'over';
+  const winner = left.length === 1 ? left[0] : null;
+  if (winner) winner.place = 1;
+  for (const f of frogs) if (!f.place) f.place = 1;
+  skipBtn?.destroy();
+  skipBtn = null;
+  // the round's points, by place
+  frogs.forEach((f, i) => (totals[i] += POINTS[f.place - 1] ?? 0));
+  if (winner === me) {
+    announce('LAST FROG STANDING!', PALETTE.gold);
+    audio.sfx('chime', 0.6);
+    if (me.hitsTaken === 0) apiRef?.badge('m_pads');
+  } else audio.sfx('buzzer', 0.4);
+  drawChips();
+  sceneRef?.time.delayedCall(skipping ? 200 : 1300, () => roundResults(winner));
+}
+
+/** SKIP: the round run out at once, nobody watching, by the same rules. */
+function showSkip(): void {
+  const s = sceneRef;
+  const api = apiRef;
+  if (!s || !api) return;
+  const w = 74;
+  const h = 15;
+  const x = GAME_W / 2;
+  const y = api.area.y + api.area.h - 12;
+  const bg = s.add.rectangle(0, 0, w, h, PALETTE.plum).setStrokeStyle(1, PALETTE.gold).setInteractive({ useHandCursor: true });
+  const t = centerText(s, 0, 0, 'SKIP  >>', PALETTE.gold);
+  skipBtn = s.add.container(x, y, [bg, t]).setDepth(70);
+  objs.push(skipBtn);
+  s.tweens.add({ targets: bg, alpha: 0.75, duration: 500, yoyo: true, repeat: -1 });
+  bg.on('pointerdown', () => skipRound());
+  s.input.keyboard?.once('keydown-ENTER', () => skipRound());
+}
+
+function skipRound(): void {
+  if (phase !== 'play' || skipping) return;
+  skipping = true;
+  skipBtn?.destroy();
+  skipBtn = null;
+  // a minute and a half of the round at most, in thirtieths of a second
+  // (quietly: no splash or crumble for every pad that goes in the rush)
+  const sfx = audio.sfx;
+  audio.sfx = () => undefined;
+  try {
+    for (let i = 0; i < 2700 && phase === 'play'; i++) simStep(1 / 30, 0, 0);
+  } finally {
+    audio.sfx = sfx;
   }
+  bits = [];
+  if (phase === 'play') {
+    // (still going: whoever is left shares the top)
+    for (const f of frogs) if (f.alive) f.place = 1;
+    phase = 'over';
+    frogs.forEach((f, i) => (totals[i] += POINTS[f.place - 1] ?? 0));
+    drawChips();
+    sceneRef?.time.delayedCall(200, () => roundResults(null));
+  }
+  skipping = false;
+}
+
+/** The round over: its places, the points, the totals; then the next round, or the end. */
+function roundResults(winner: Frog | null): void {
+  const s = sceneRef;
+  const api = apiRef;
+  if (!s || !api) return;
+  const last = roundNo >= ROUNDS;
+  const panel: Phaser.GameObjects.GameObject[] = [];
+  const cy = api.area.y + api.area.h / 2;
+  panel.push(s.add.rectangle(GAME_W / 2, cy, 210, 84, PALETTE.ink, 0.95).setStrokeStyle(1, PALETTE.gold).setDepth(50));
+  panel.push(centerText(s, GAME_W / 2, cy - 33, last ? 'FINAL STANDINGS' : `ROUND ${roundNo} OF ${ROUNDS}`, PALETTE.gold).setDepth(51));
+  panel.push(centerText(s, GAME_W / 2, cy - 23, winner ? `${winner === player() ? 'YOU' : winner.name} WON THE ROUND` : 'NOBODY WON THE ROUND', PALETTE.cream).setDepth(51));
+  const order = frogs.map((f, i) => ({ f, i })).sort((a, b) => (last ? totals[b.i] - totals[a.i] || a.f.place - b.f.place : a.f.place - b.f.place));
+  order.forEach(({ f, i }, k) => {
+    const y = cy - 12 + k * 9;
+    const col = i === 0 ? PALETTE.gold : PALETTE.ash;
+    panel.push(text(s, GAME_W / 2 - 96, y, `${placeName(f.place)} ${i === 0 ? 'YOU' : f.name}`, col).setDepth(51));
+    panel.push(text(s, GAME_W / 2 + 6, y, `+${POINTS[f.place - 1] ?? 0}`, col).setDepth(51));
+    panel.push(text(s, GAME_W / 2 + 44, y, `${totals[i]} PTS`, col).setDepth(51));
+  });
+  objs.push(...panel);
+  if (!last) {
+    s.time.delayedCall(2800, () => {
+      for (const o of panel) o.destroy();
+      roundNo++;
+      newRound();
+    });
+    return;
+  }
+  // the competition: the most points wins; level at the top is a draw
+  const best = Math.max(...totals);
+  const top = totals.filter((t) => t === best).length;
+  const mine = totals[0];
+  if (settled) return;
+  settled = true;
+  if (mine === best && top === 1) apiRef?.record(mine);
+  s.time.delayedCall(3200, () => (mine === best && top === 1 ? apiRef?.win() : mine === best ? apiRef?.draw() : apiRef?.lose()));
+}
+
+/** A fresh pond for the next round: every pad back, every frog on its start pad. */
+function newRound(): void {
+  const starts: Array<[number, number]> = [
+    [1, 3],
+    [5, 1],
+    [5, 3],
+    [1, 1],
+  ];
+  for (const p of pads) Object.assign(p, { state: 'ok', t: 0, jx: 0, jy: 0, dip: 0 });
+  frogs.forEach((f, i) => {
+    const keep = { img: f.img, shadow: f.shadow };
+    Object.assign(f, makeFrog(i, starts[i][0], starts[i][1]), keep);
+    f.img?.setVisible(true).setAlpha(1).setAngle(0).clearTint();
+    f.shadow?.setVisible(true).setAlpha(1);
+  });
+  bits = [];
+  clock = 0;
+  waveIn = FIRST_WAVE;
+  nextPlace = 4;
+  phase = 'count';
+  countT = 2.2;
+  drawChips();
+  announce(`ROUND ${roundNo}`, PALETTE.cream);
 }
 
 // ------------------------------------------------------------------ the module
@@ -1243,13 +1384,13 @@ export const padBattles: MinigameModule = {
   tutorial: {
     pitch: 'FOUR FROGS, 35 LILY PADS, DEEP WATER BETWEEN THEM. BE THE LAST ONE DRY.',
     steps: [
-      { say: 'FOUR FROGS, EACH ON A LILY PAD, WITH WATER BETWEEN THE PADS. YOU ARE THE ONE MARKED YOU, IN GOLD. FALL IN AND YOU ARE OUT. LAST FROG STANDING WINS.', demo: 'pads.grid' },
+      { say: 'FOUR FROGS, EACH ON A LILY PAD, WITH WATER BETWEEN THE PADS. YOU ARE THE ONE MARKED YOU, IN GOLD. FALL IN AND YOU ARE OUT OF THE ROUND. THREE ROUNDS: 1ST SCORES 4, 2ND 3, 3RD 1, 4TH 0. MOST POINTS WINS. OUT EARLY? SKIP TO THE NEXT ROUND.', demo: 'pads.grid' },
       { say: 'YOU CAN WALK ABOUT ON YOUR OWN PAD. TO GET TO ANOTHER ONE, JUMP: SPACE JUMPS TO THE NEXT PAD THE WAY YOU FACE.', phone: 'YOU CAN WALK ABOUT ON YOUR OWN PAD. TO GET TO ANOTHER ONE, PRESS JUMP: IT JUMPS TO THE NEXT PAD THE WAY YOU FACE.', demo: 'pads.jump' },
       { say: 'A PAD ABOUT TO GO FLASHES, SHAKES AND CRACKS - THEN SINKS. JUMP OFF IT IN TIME. STAND ON ONE PAD TOO LONG AND IT GOES, TOO.', demo: 'pads.collapse' },
       { say: 'J WHIPS YOUR TONGUE OUT IN FRONT - EVEN ACROSS A GAP. WHOEVER IT CATCHES IS KNOCKED BACK, MAYBE INTO THE WATER.', phone: 'TONGUE WHIPS IT OUT IN FRONT - EVEN ACROSS A GAP. WHOEVER IT CATCHES IS KNOCKED BACK, MAYBE INTO THE WATER.', demo: 'pads.tongue' },
       { say: 'K IS A BODY BUMP: A SHORT CHARGE ACROSS YOUR PAD. AIM IT SO THEY GO OFF THE EDGE. FROGS ARE SOLID: YOU CAN SHOVE ONE OFF, TOO.', phone: 'BUMP IS A SHORT CHARGE ACROSS YOUR PAD. AIM IT SO THEY GO OFF THE EDGE. FROGS ARE SOLID: YOU CAN SHOVE ONE OFF, TOO.', demo: 'pads.bump' },
     ],
-    objective: ['KNOCK THE OTHER THREE FROGS INTO THE WATER.', 'JUMP PAD TO PAD - A MISSED JUMP IS A SPLASH.', 'PADS CRUMBLE AND SINK: GET OFF THEM IN TIME. DON\'T SIT ON ONE.', 'LAST FROG STANDING WINS.'],
+    objective: ['KNOCK THE OTHER THREE FROGS INTO THE WATER.', 'JUMP PAD TO PAD - A MISSED JUMP IS A SPLASH.', 'PADS CRUMBLE AND SINK: GET OFF THEM IN TIME. DON\'T SIT ON ONE.', 'THREE ROUNDS ON POINTS: 4, 3, 1, 0. MOST POINTS WINS.'],
     controls: [
       ['W A S D', 'WALK / TURN'],
       ['ARROWS', 'WALK / TURN'],
@@ -1269,7 +1410,7 @@ export const padBattles: MinigameModule = {
   },
 
   inPlay() {
-    return phase !== 'over';
+    return phase !== 'over' || roundNo < ROUNDS;
   },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
@@ -1284,6 +1425,10 @@ export const padBattles: MinigameModule = {
     countT = 2.6;
     settled = false;
     nextPlace = 4;
+    roundNo = 1;
+    totals = [0, 0, 0, 0];
+    skipBtn = null;
+    skipping = false;
     CX = GAME_W / 2;
     CY = api.area.y + 14 + (api.area.h - 14) / 2 + 2;
     paintPond(scene, api.area.y, api.area.h);
@@ -1341,7 +1486,7 @@ export const padBattles: MinigameModule = {
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => delete (window as unknown as Record<string, unknown>).__pads);
     }
-    announce('READY...', PALETTE.cream);
+    announce(`ROUND 1 OF ${ROUNDS}`, PALETTE.cream);
   },
 
   update(time: number, delta: number) {
@@ -1356,15 +1501,6 @@ export const padBattles: MinigameModule = {
         audio.sfx('bell_ding', 0.5);
       }
     } else {
-      if (phase === 'play') {
-        clock += dt;
-        waveIn -= dt;
-        if (waveIn <= 0) {
-          wave();
-          waveIn = Math.max(1.4, 3.8 - clock / 30);
-        }
-      }
-      const me = player();
       let mx = 0;
       let mz = 0;
       if (keys.left.some((k) => k.isDown)) mx -= 1;
@@ -1372,23 +1508,7 @@ export const padBattles: MinigameModule = {
       if (keys.up.some((k) => k.isDown)) mz -= 1;
       if (keys.down.some((k) => k.isDown)) mz += 1;
       const m = Math.hypot(mx, mz) || 1;
-      if (phase !== 'play') mx = mz = 0;
-      stepFrog(me, dt, mx / m, mz / m);
-      for (const f of frogs.slice(1)) {
-        const on = f.alive && phase === 'play';
-        if (on && !f.jump) {
-          think(f, dt);
-          if (f.brain.want) {
-            if (f.brain.want === 'jump' && f.brain.aim !== null) f.face = f.brain.aim;
-            act(f, f.brain.want);
-            f.brain.want = null;
-          }
-        }
-        stepFrog(f, dt, on ? f.brain.mx : 0, on ? f.brain.mz : 0);
-      }
-      separate();
-      stepPads(dt);
-      settle();
+      simStep(dt, mx / m, mz / m);
     }
     stepBits(dt);
     draw(t);
