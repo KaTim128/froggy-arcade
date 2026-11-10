@@ -314,8 +314,10 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     // Towering at first, his head well above yours; bending down to your
     // eye line as he comes.  (Or, already in front of you, from wherever his
     // face was.)
-    const yFrom = farD < far ? basePos.y + startOff.y : basePos.y + headSize * 0.45;
-    const yTo = basePos.y + headSize * 0.1;
+    // (user, 10 Nov: a sneaky hunter, not a stick) he does not tower: he is
+    // down in a crouch, his head a little BELOW yours, and rises into you
+    const yFrom = farD < far ? basePos.y + startOff.y : basePos.y - headSize * 0.35;
+    const yTo = basePos.y + headSize * 0.05;
 
     // ---- THE HANDS.  The arms are drawn out long and the hands come for
     // you: from beside his head on the hold, round either side of it on the
@@ -334,11 +336,13 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
         .copy(basePos)
         .addScaledVector(fwd, besideDepth)
         .addScaledVector(right, side * headSize * 0.95)
-        .add(up.clone().multiplyScalar(yFrom - basePos.y - headSize * 0.25));
+        .add(up.clone().multiplyScalar(yFrom - basePos.y - headSize * 0.8));
       // at the edge of the frame, in front of his face, creeping closer
       const depth = Math.min(d * 0.55, (0.5 - 0.14 * closeK) * s);
-      const lat = (0.86 - 0.1 * closeK) * depth * tanV * aspect;
-      const vert = (side < 0 ? 0.12 : -0.02) * depth * tanV + Math.sin(t / 90 + side) * 0.012 * s;
+      // low and in, up from below the frame like something rising off all
+      // fours, elbows bent -- not two rods held out straight to the sides
+      const lat = (0.62 - 0.08 * closeK) * depth * tanV * aspect;
+      const vert = (side < 0 ? -0.55 : -0.62) * depth * tanV + Math.sin(t / 90 + side) * 0.012 * s;
       const edge = new THREE.Vector3()
         .copy(basePos)
         .addScaledVector(fwd, depth)
@@ -366,7 +370,7 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     target.x += startOff.x * (1 - rush);
     target.z += startOff.z * (1 - rush);
     // a sway across the line while he is still, and none once he is on you
-    target.addScaledVector(right, t < HOLD_MS ? Math.sin(t / 260) * 0.04 * s : 0);
+    target.addScaledVector(right, Math.sin(t / 140) * 0.05 * s * (1 - closeK * 0.7));
     // and never down through the floor
     target.y = Math.max(target.y, minY);
     // Put him there BEFORE he is posed, on last frame's head, so the hands
@@ -400,7 +404,8 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
       climb: 0,
       lunge: reaching,
       // the arms drawn out long, the hands coming for you
-      pounce: t < HOLD_MS ? 0.6 : 1,
+      // the arms held bent and ready, not drawn out into long poles
+      pounce: t < HOLD_MS ? 0.15 : 0.3,
       hands: [
         { at: handAt(-1), weight: handW, grip: hook },
         { at: handAt(1), weight: handW, grip: hook + 0.1 },
@@ -455,7 +460,9 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     // and a slow tilt underneath the snaps, like something curious
     monster.headObject.rotateX(jit.x * still + Math.sin(t / 400) * 0.03);
     monster.headObject.rotateY(jit.y * still);
-    monster.headObject.rotateZ(jit.z * still + Math.sin(t / 650) * 0.1 * closeK);
+    // cocked to one side the whole time, the way a hunter tilts its head at
+    // something it has found -- easing a little straighter as he lands
+    monster.headObject.rotateZ(jit.z * still + 0.22 - 0.1 * closeK + Math.sin(t / 650) * 0.1 * closeK);
     monster.lookAt(basePos);
     monster.updateEyes(dt);
 

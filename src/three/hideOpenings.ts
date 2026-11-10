@@ -62,6 +62,12 @@ interface Plan {
   edge: number;
   /** No floor panel: under a bed or a table the floor is the room's own. */
   openFloor?: boolean;
+  /**
+   * Open all round below this height (user, 10 Nov: under a bed you look
+   * out on every side, not at a box): the back and the sides are only the
+   * hanging skirt above it, so the head can turn the whole way round.
+   */
+  skirt?: number;
 }
 
 /** Where the eye sits, in the spot's own space, for each kind of place. */
@@ -193,7 +199,7 @@ function plan(kind: SpotKind, skin: SpotSkin | undefined, eye: HideEye): Plan {
   // A bed: its whole long side is open under the blanket where it hangs
   // over the edge, between the legs.
   return {
-    x0: -1.14, x1: 1.14, y0: 0, y1: 0.47, z0: -0.5, face: 0.5, fy1: 0.62, openFloor: true,
+    x0: -1.14, x1: 1.14, y0: 0, y1: 0.47, z0: -0.5, face: 0.5, fy1: 0.62, openFloor: true, skirt: 0.33,
     holes: [{ x0: -1.08, x1: 1.08, y0: 0.003, y1: 0.33 }],
     color: 0x16130f, edge: 0x5a5244,
   };
@@ -281,9 +287,22 @@ export function buildOpening(kind: SpotKind, skin: SpotSkin | undefined, eye: Hi
   const cx = (p.x0 + p.x1) / 2;
   const cy = (p.y0 + p.y1) / 2;
   const cz = (p.face + p.z0) / 2;
-  panel(g, wall, wx, hy, cx, cy, p.z0, 0);
-  panel(g, wall, dz, hy, p.x0, cy, cz, Math.PI / 2);
-  panel(g, wall, dz, hy, p.x1, cy, cz, -Math.PI / 2);
+  if (p.skirt !== undefined) {
+    // only the skirt hangs at the back and the ends; below it, the room
+    const sh = p.y1 - p.skirt;
+    const sy = (p.y1 + p.skirt) / 2;
+    panel(g, wall, wx, sh, cx, sy, p.z0, 0);
+    panel(g, wall, dz, sh, p.x0, sy, cz, Math.PI / 2);
+    panel(g, wall, dz, sh, p.x1, sy, cz, -Math.PI / 2);
+    // and its lit hem, all round
+    panel(g, edge, wx, 0.004, cx, p.skirt + 0.002, p.z0 + 0.002, 0);
+    panel(g, edge, dz, 0.004, p.x0 + 0.002, p.skirt + 0.002, cz, Math.PI / 2);
+    panel(g, edge, dz, 0.004, p.x1 - 0.002, p.skirt + 0.002, cz, -Math.PI / 2);
+  } else {
+    panel(g, wall, wx, hy, cx, cy, p.z0, 0);
+    panel(g, wall, dz, hy, p.x0, cy, cz, Math.PI / 2);
+    panel(g, wall, dz, hy, p.x1, cy, cz, -Math.PI / 2);
+  }
   panel(g, wall, wx, dz, cx, p.y1, cz, 0, Math.PI / 2);
   if (!p.openFloor) panel(g, wall, wx, dz, cx, p.y0, cz, 0, -Math.PI / 2);
   g.visible = false;

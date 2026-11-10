@@ -627,22 +627,26 @@ function stairDoor(g: Ctx, cx: number): void {
   const w = 18;
   const x = cx - w / 2;
   const y = FLOOR_Y - DOOR_H;
-  rect(g, x - 2, y - 2, w + 4, DOOR_H + 2, HP.woodDark);
-  rect(g, x - 2, y - 2, w + 4, 1, HP.woodHi);
-  rect(g, x - 1, y - 1, w + 2, DOOR_H + 1, HP.woodDeep);
-  rect(g, x, y, w, DOOR_H, '#7a5a3a');
-  rect(g, x + 1, y + 1, w - 2, 1, '#9a7a52');
-  // panels
-  rect(g, x + 2, y + 13, w - 4, 8, '#6a4a2e');
-  rect(g, x + 2, y + 24, w - 4, 7, '#6a4a2e');
+  // (user, 10 Nov) the same door as the 3D lobby's (hotelLobby texStairDoor):
+  // green-grey steel in a near-black frame, a dark wired-glass slot, the red
+  // STAIRS plate, the push bar and a steel kick plate
+  rect(g, x - 2, y - 2, w + 4, DOOR_H + 2, '#16181a');
+  rect(g, x - 2, y - 2, w + 4, 1, '#2e3236');
+  rect(g, x, y, w, DOOR_H, '#8a9088');
+  rect(g, x + 1, y + 1, w - 2, 1, '#a2a8a0');
+  rect(g, x, y, 1, DOOR_H, '#6e746c');
+  for (let k = 0; k < 6; k++) rect(g, x + 2 + ((k * 7) % (w - 4)), y + 4 + ((k * 11) % (DOOR_H - 8)), 2, 1, '#1e221e', 0.12);
   // the narrow wired-glass window
-  rect(g, x + 6, y + 3, 6, 8, HP.goldDark);
-  rect(g, x + 7, y + 4, 4, 6, '#2a3440');
-  for (let k = 0; k < 6; k += 2) rect(g, x + 7, y + 4 + k, 4, 1, '#4a5868', 0.7);
+  rect(g, x + 6, y + 3, 6, 10, '#5a605a');
+  rect(g, x + 7, y + 4, 4, 8, '#1e2630');
+  for (let k = 0; k < 8; k += 2) rect(g, x + 7, y + 4 + k, 4, 1, '#4a5868', 0.6);
+  // the red STAIRS plate
+  rect(g, x + 5, y + 16, 8, 3, '#a0201c');
+  rect(g, x + 6, y + 17, 6, 1, '#e8c8c0', 0.7);
   // push bar and kick plate
-  rect(g, x + 1, y + 17, w - 2, 1, '#c8c8c0');
-  rect(g, x + 1, y + 18, w - 2, 1, '#8a8a84');
-  rect(g, x + 1, FLOOR_Y - 3, w - 2, 2, HP.gold);
+  rect(g, x + 1, y + 21, w - 2, 1, '#c8c8c0');
+  rect(g, x + 1, y + 22, w - 2, 1, '#7a7e78');
+  rect(g, x + 1, FLOOR_Y - 3, w - 2, 2, '#6a7078');
   // the exit sign over it, glowing green
   rect(g, cx - 6, y - 8, 12, 5, '#0e5a2e');
   rect(g, cx - 5, y - 7, 10, 3, '#2ec466');
