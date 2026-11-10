@@ -347,10 +347,10 @@ export class ArcadeDark extends Phaser.Scene {
     const x = ROOM.right + 1;
     const w = GAME_W - ROOM.right - 2;
     this.add.rectangle(x, top, w, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.56);
-    this.sideLeaf = this.add.rectangle(x, top, w, HIDDEN_DOOR.h, 0x2e2218).setOrigin(0, 0).setDepth(0.57);
+    this.sideLeaf = this.add.rectangle(x, top, w, HIDDEN_DOOR.h, 0x2a2e36).setOrigin(0, 0).setDepth(0.57);
     this.add.rectangle(x, top, 1, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.55);
     this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.55);
-    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 1, 3, 0x5a4a38).setOrigin(0, 0).setDepth(0.58).setAlpha(0.7);
+    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 3, 1, 0x6a727c).setOrigin(0, 0).setDepth(0.58).setAlpha(0.7);
     // in from the alley: it stands open behind you, then swings shut
     if (this.fromAlley) {
       const leaf = this.sideLeaf;

@@ -1677,13 +1677,16 @@ export class ArcadeHub extends Phaser.Scene {
     const x = ROOM.right + 1;
     const w = GAME_W - ROOM.right - 2;
     const wall = Phaser.Display.Color.IntegerToColor(PALETTE.ink);
-    const warm = Phaser.Display.Color.IntegerToColor(PALETTE.brown);
-    // (user, 8 Nov: barely visible -- a tenth of the way from the wall to brown)
-    const mix = Phaser.Display.Color.Interpolate.ColorWithColor(wall, warm, 100, 9);
+    // (user, 8 Nov: steel, not wood -- and barely visible: a tenth of the
+    // way from the wall's colour to a cold grey, a faint sheen and rivets)
+    const warm = Phaser.Display.Color.IntegerToColor(0x8a929c);
+    const mix = Phaser.Display.Color.Interpolate.ColorWithColor(wall, warm, 100, 12);
     this.add.rectangle(x, top, w, HIDDEN_DOOR.h, Phaser.Display.Color.GetColor(mix.r, mix.g, mix.b)).setOrigin(0, 0).setDepth(0.57);
     this.add.rectangle(x, top, 1, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
     this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
-    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 1, 3, PALETTE.amberDark).setOrigin(0, 0).setDepth(0.58).setAlpha(0.08);
+    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 3, 1, 0xc8d0d8).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
+    for (const ry of [top + 3, top + HIDDEN_DOOR.h - 4]) this.add.rectangle(x + w - 3, ry, 1, 1, 0xc8d0d8).setOrigin(0, 0).setDepth(0.58).setAlpha(0.1);
+    this.add.rectangle(x + 1, top + 1, w - 2, 1, 0xffffff).setOrigin(0, 0).setDepth(0.58).setAlpha(0.04);
   }
 
   /** Into CREATURE CLASH.  Nothing is paid here: the packs and the battles inside ask. */

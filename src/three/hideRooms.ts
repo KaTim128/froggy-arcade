@@ -138,6 +138,12 @@ export interface RoomDef {
    * out, which is the lit arcade's).
    */
   wallOpenings?: WallOpening[];
+  /**
+   * Shut doors flush in a side wall (user, 8 Nov: the front room's hidden
+   * door, in steel).  Scenery: nothing behind them, the wall's collision
+   * unbroken.  `z` its middle along the wall, `w` its width, `h` its height.
+   */
+  wallDoors?: Array<{ side: 'left' | 'right'; z: number; w: number; h: number }>;
   /** Where he goes once he has finished with the door.  Kept off the furniture. */
   froggyStart: { x: number; z: number };
   /**
@@ -748,12 +754,12 @@ const ARCADE_BASE: RoomDef = {
     // room has them and it is the way a player standing at the doors sees
     // them: you come over the desk into a row of lit fronts, and the backs are
     // what the wall gets.
-    { x: -8.29, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xff7a3d, prop: 'cabinet', face: Math.PI },
-    { x: -5.5, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x6fbb6a, prop: 'cabinet', face: Math.PI },
-    { x: -2.85, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x5a8a3a, prop: 'cabinet', face: Math.PI },
-    { x: 2.71, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: Math.PI },
-    { x: 5.5, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: Math.PI },
-    { x: 9.19, z: 8.8, w: 1.6, d: 1.2, h: 2.3, color: 0x4a4258, prop: 'change', face: Math.PI },
+    { x: -8.28, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xff7a3d, prop: 'cabinet', face: Math.PI },
+    { x: -6.02, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x6fbb6a, prop: 'cabinet', face: Math.PI },
+    { x: -3.77, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x5a8a3a, prop: 'cabinet', face: Math.PI },
+    { x: 3.77, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: Math.PI },
+    { x: 6.02, z: 8.7, w: 1.8, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: Math.PI },
+    { x: 9.04, z: 8.8, w: 1.6, d: 1.2, h: 2.3, color: 0x4a4258, prop: 'change', face: Math.PI },
   ],
   // ---- NOTHING TO HIDE IN, and nothing that is not in the lit room either.
   // The bin and the plant that used to be by the doors are gone with the
@@ -801,8 +807,10 @@ const ARCADE_BASE: RoomDef = {
   // dark recess and the same bricked-up nothing behind it.
   wallOpenings: [
     { side: 'left', z: 2.5, w: 3.4, h: 2.8 },
-    // (the fourth room's doorway in the right wall is gone: its hidden door
-    // is flush with the wall and closed, so there is nothing to draw)
+  ],
+  // the hidden door, where the lit room has it (y 118): steel, shut, flush
+  wallDoors: [
+    { side: 'right', z: 2.3, w: 1.3, h: 2.3 },
   ],
 };
 
