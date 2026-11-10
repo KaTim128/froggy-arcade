@@ -13,6 +13,16 @@ import { depthFor } from './player';
 import { centerText } from '../core/ui';
 
 export type CraneKind = 'plush' | 'oddity';
+/**
+ * Where the claw machines and CREATURE CLASH stand (user, 8 Nov: in the
+ * front room now -- the cranes in its top-left corner, left of the counter,
+ * and CLASH in the top-right, right of it).  Feet on `y`.
+ */
+export const CRANE_SPOTS: ReadonlyArray<{ kind: CraneKind; x: number; y: number; title: string }> = [
+  { kind: 'plush', x: 44, y: 78, title: 'PLUSH CRANE' },
+  { kind: 'oddity', x: 82, y: 78, title: 'ODDITY CRANE' },
+];
+export const CLASH_SPOT = { x: 284, y: 90 };
 export const CRANE_W = 30;
 /** A little over 2 m against the 26-pixel man, marquee and all. */
 export const CRANE_H = 36;

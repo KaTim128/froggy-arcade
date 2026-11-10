@@ -45,7 +45,6 @@ import { ProfileModal } from '../scenes2d/ProfileModal';
 import { ArcadeHub } from '../scenes2d/ArcadeHub';
 import { ArcadeAnnex } from '../scenes2d/ArcadeAnnex';
 import { ArcadeCasino } from '../scenes2d/ArcadeCasino';
-import { ArcadeLounge } from '../scenes2d/ArcadeLounge';
 import { CraneGame } from '../scenes2d/CraneGame';
 import { IntroCutscene } from '../scenes2d/IntroCutscene';
 import { PrizeCounter } from '../scenes2d/PrizeCounter';
@@ -109,7 +108,6 @@ export function bootGame(): void {
       ArcadeHub,
       ArcadeAnnex,
       ArcadeCasino,
-      ArcadeLounge,
       CraneGame,
       PrizeCounter,
       PrizeExchange,

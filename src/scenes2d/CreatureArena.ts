@@ -486,7 +486,7 @@ export class CreatureArena extends Phaser.Scene {
    * battle -- the clock is off, and QUIT never goes away.
    */
   private training = false;
-  private from = 'ArcadeLounge';
+  private from = 'ArcadeHub';
   private me!: Fighter;
   private foe!: Fighter;
   private shots: Shot[] = [];
@@ -590,7 +590,7 @@ export class CreatureArena extends Phaser.Scene {
     this.meV = { x: 0, y: 0 };
     this.dodge = { vx: 0, vy: 0, t: 0 };
     this.seenShots = new WeakSet<Shot>();
-    this.from = data.from ?? 'ArcadeLounge';
+    this.from = data.from === 'ArcadeLounge' || !data.from ? 'ArcadeHub' : data.from;
     this.shots = [];
     this.fx = [];
     this.mines = [];

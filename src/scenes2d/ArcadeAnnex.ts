@@ -92,7 +92,7 @@ export class ArcadeAnnex extends Phaser.Scene {
       // both; a doorway you have to be told is a doorway is worth more than a
       // pot plant.  The bin goes up against the back wall on the right, well
       // away from either way out, and that is the lot.
-      props: [{ x: 268, y: 62, kind: 'bin' }],
+      props: [{ x: 296, y: 66, kind: 'bin' }],
       // Clear of the poster at 187-205 and the WIN sign at 245-279.
       vents: [24, 210],
     });

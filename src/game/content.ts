@@ -75,7 +75,8 @@ export interface CabinetDef {
    * into the annex, which exists so the floor can grow without the hub turning
    * into a wall of cabinets.  Defaults to the hub.
    */
-  room?: 'hub' | 'annex' | 'casino' | 'lounge';
+  /** 'none': not stood in any room (Froggy plays MINI DUELS himself, from the counter). */
+  room?: 'hub' | 'annex' | 'casino' | 'none';
 }
 
 /**
@@ -126,26 +127,12 @@ export const STANDARD_REWARD: Record<number, number> = { 1: 2, 3: 6, 5: 10, 7: 1
  * wall, which the player stands at around x 272, y 62 and which must not have a
  * cabinet's click zone over it.
  */
-/**
- * ROOM 4's BOTTOM ROW, kept empty for now (user, 28 Oct: "keep it as
- * nothing for now but remember the placement").  The five orange spots
- * along the bottom of docs/refs/room4-marks.jpg, in game pixels -- x the
- * cabinet's centre, y its foot, as a CABINETS entry takes them.  A machine
- * for one of them is a CABINETS line with `room: 'lounge'` at that x, y.
- */
-export const LOUNGE_FREE_SPOTS: ReadonlyArray<{ x: number; y: number }> = [
-  { x: 66, y: 152 },
-  { x: 117, y: 152 },
-  { x: 169, y: 152 },
-  { x: 221, y: 152 },
-  { x: 270, y: 152 },
-];
 
 export const CABINETS: CabinetDef[] = [
   // ---- the front room: everything that costs one to three tokens
   // A token in, two out: you win one.  Three out was a 3x on the cheapest
   // games in the building and the only positive-EV corner of the floor.
-  { id: 'tictactoe', title: 'MINI DUELS', tier: 'easy', cost: 1, reward: 2, x: 52, y: 88, color: 0xff4fa3, symbol: 'VS', motif: 'grid' },
+  { id: 'tictactoe', title: 'MINI DUELS', tier: 'easy', cost: 1, reward: 2, room: 'none', x: 52, y: 88, color: 0xff4fa3, symbol: 'VS', motif: 'grid' },
   // The bottom row: two either side of the front door, in line with the two
   // above.  Nothing sits under the change machine on the right wall, because a
   // cabinet's click zone up there swallows every attempt to use it.
@@ -158,19 +145,19 @@ export const CABINETS: CabinetDef[] = [
   // been at 48 for the same reason.
   // Five in, ten out: the standard table's five-token rung, moved up off the
   // three-token one.
-  { id: 'hoops', title: 'CHUBBY CHOMP', tier: 'medium', cost: 5, reward: 10, x: 52, y: 164, color: 0xff7a3d, symbol: 'CC', motif: 'chomp' },
-  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
-  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 222, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
+  { id: 'hoops', title: 'CHUBBY CHOMP', tier: 'medium', cost: 5, reward: 10, x: 50, y: 164, color: 0xff7a3d, symbol: 'CC', motif: 'chomp' },
+  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 87, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
+  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 196, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
   // Ten in, twenty out: a hunt takes a while and asks you to think.
   // (user, 5 Nov: 5 in, 10 for a win)
-  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 5, reward: 10, x: 268, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
+  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 5, reward: 10, x: 233, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
 
   // ---- the back room: five to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 10, reward: 20, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
   // Every seven-token cabinet pays fifteen: eight tokens of profit for the
   // longest games in the building, which is the top of the standard table.
-  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 10, reward: 20, x: 112, y: 96, color: 0xd9822b, room: 'annex', symbol: 'BC', motif: 'ladder' },
-  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 10, reward: 20, x: 176, y: 96, color: 0xffd45e, room: 'annex', symbol: 'AH', motif: 'ball' },
+  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 10, reward: 20, x: 104, y: 96, color: 0xd9822b, room: 'annex', symbol: 'BC', motif: 'ladder' },
+  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 10, reward: 20, x: 160, y: 96, color: 0xffd45e, room: 'annex', symbol: 'AH', motif: 'ball' },
   // THE FLOOD lives back here now, in the slot Chomp-Man stood in.  It belongs
   // with the long games rather than in the front room with the one-token
   // board: it is a minute of climbing and it takes seven to start.  The id is
@@ -179,7 +166,7 @@ export const CABINETS: CabinetDef[] = [
   // every save in existence to gain nothing but a tidier string.
   // Ten to start and ten for getting out: paid once, by the shell, on
   // reaching the hatch.
-  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 10, reward: 10, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
+  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 10, reward: 10, x: 216, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.
@@ -187,22 +174,25 @@ export const CABINETS: CabinetDef[] = [
   // lose by being out of time rather than out of lives, and the only one played
   // to a beat.
   { id: 'danceoff', title: 'DANCE OFF', tier: 'hard', cost: 10, reward: 20, x: 48, y: 162, color: 0xff4fa3, room: 'annex', symbol: 'DO', motif: 'steps' },
-  { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 10, reward: 20, x: 112, y: 162, color: 0x6fbb6a, room: 'annex', symbol: 'FC', motif: 'road' },
-  { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 10, reward: 20, x: 176, y: 162, color: 0x46a0e0, room: 'annex', symbol: 'CC', motif: 'car' },
+  { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 10, reward: 20, x: 104, y: 162, color: 0x6fbb6a, room: 'annex', symbol: 'FC', motif: 'road' },
+  { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 10, reward: 20, x: 160, y: 162, color: 0x46a0e0, room: 'annex', symbol: 'CC', motif: 'car' },
   // Ten on a five, like every other five-token cabinet on the floor.
   // (user, 5 Nov: 10 in, 20 for a win -- 10 up)
-  { id: 'frogvslizard', title: 'FENCE WARS', tier: 'hard', cost: 10, reward: 20, x: 240, y: 162, color: 0xa8c23f, room: 'annex', symbol: 'FL', motif: 'throw' },
+  { id: 'frogvslizard', title: 'FENCE WARS', tier: 'hard', cost: 10, reward: 20, x: 216, y: 162, color: 0xa8c23f, room: 'annex', symbol: 'FL', motif: 'throw' },
 
   // ---- the game corner (the fourth room), on the back wall beside the oddity
   // crane -- with a little more room on its left than a cabinet usually gets,
   // so the two machines read as two -- under the sign.  Five in, ten out.
   // (moved right, away from the cranes, into the first of the marked spots: log #70, docs/refs/room4-marks.jpg)
-  { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 160, y: 74, color: 0x5a8a3a, room: 'lounge', symbol: 'BB', motif: 'bog' },
+  // (user, 8 Nov: the fourth room is gone; BOG BALL stands in the front room's
+  // bottom row, left of the doors, and CROAKED and PAD BATTLES finish room
+  // two's two rows of five)
+  { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 124, y: 164, color: 0x5a8a3a, symbol: 'BB', motif: 'bog' },
   // CROAKED, beside it in the second marked spot: a cabinet of its own colours, pond-teal and gold
-  // PAD BATTLES (log #98): the first of room 4's bottom spots (LOUNGE_FREE_SPOTS[0]), lily pink
-  { id: 'padbattles', title: 'PAD BATTLES', tier: 'hard', cost: 10, reward: 20, x: 202, y: 74, color: 0xd85a9a, room: 'lounge', symbol: 'PB', motif: 'pads' },
+  // PAD BATTLES (log #98), lily pink: room two's bottom row, right-hand end
+  { id: 'padbattles', title: 'PAD BATTLES', tier: 'hard', cost: 10, reward: 20, x: 272, y: 162, color: 0xd85a9a, room: 'annex', symbol: 'PB', motif: 'pads' },
   // (user, 5 Nov: CROAKED and PAD BATTLES swapped places; Croaked 10 in, 20 to win, no timer)
-  { id: 'croaked', title: 'CROAKED', tier: 'medium', cost: 10, reward: 20, x: 66, y: 152, color: 0x1f8a8a, room: 'lounge', symbol: 'CR', motif: 'maze' },
+  { id: 'croaked', title: 'CROAKED', tier: 'medium', cost: 10, reward: 20, x: 272, y: 96, color: 0x1f8a8a, room: 'annex', symbol: 'CR', motif: 'maze' },
 
   // ---- and the room at the back, where none of it is a game
   // Three tokens a spin, every spin raised through the shell as it is pulled
@@ -294,7 +284,7 @@ export const CABINETS: CabinetDef[] = [
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */
-export function cabinetsIn(room: 'hub' | 'annex' | 'casino' | 'lounge'): CabinetDef[] {
+export function cabinetsIn(room: 'hub' | 'annex' | 'casino'): CabinetDef[] {
   return CABINETS.filter((c) => (c.room ?? 'hub') === room);
 }
 
@@ -309,7 +299,15 @@ export const CASINO_DOOR = { x: 20, y: 118, w: 14, h: 40 };
  * where the two left-hand ones are mirrored to, clear of it.  x is the middle
  * of the doorway, 20 in from the right edge of the 320-wide room.
  */
-export const LOUNGE_DOOR = { x: 300, y: 118, w: 14, h: 46 };
+/**
+ * THE HIDDEN DOOR (user, 8 Nov: moved from the fourth room, which is gone).
+ * In the front room's right-hand wall, flush with the panelling: by day a
+ * door-shaped seam a shade off the wall; after closing it is the door that
+ * stood ajar in the alley, and the way in for the break-in.
+ */
+export const HIDDEN_DOOR = { x: 300, y: 118, w: 14, h: 40 };
+/** The cash exchange machine, standing on the floor in the front room's bottom-right corner. */
+export const CHANGE_MACHINE = { x: 282, y: 164 };
 
 export function cabinetById(id: GameId): CabinetDef {
   const c = CABINETS.find((x) => x.id === id);

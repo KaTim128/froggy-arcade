@@ -1027,7 +1027,7 @@ export class CraneGame extends Phaser.Scene {
     if (!paid) audio.sfx('coin_drop');
     // ---- THE GO, IN THE SAVE (log #87): a reload before it is over comes
     // back to this machine with it still paid for.
-    store.setGame({ id: 'crane' as GameId, from: 'ArcadeLounge', stake: CRANE_COST[this.kind], paid: 0, practicing: false, scene: 'CraneGame', data: { kind: this.kind }, at: Date.now() }, true);
+    store.setGame({ id: 'crane' as GameId, from: 'ArcadeHub', stake: CRANE_COST[this.kind], paid: 0, practicing: false, scene: 'CraneGame', data: { kind: this.kind }, at: Date.now() }, true);
     this.phase = 'aim';
     // shut while it is being lined up: it opens when it is sent down
     this.drawClaw(false);
@@ -1832,6 +1832,6 @@ export class CraneGame extends Phaser.Scene {
   private leave(force = false): void {
     if (!force && this.phase !== 'aim' && this.phase !== 'result') return;
     if (store.get().game?.scene === 'CraneGame') store.setGame(null, true);
-    fadeToScene(this, 'ArcadeLounge', { atProp: this.kind });
+    fadeToScene(this, 'ArcadeHub', { atProp: this.kind });
   }
 }

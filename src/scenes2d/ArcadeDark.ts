@@ -19,7 +19,7 @@ import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
-import { paintChangeMachine, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
+import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Cabinet, CAB_W, CAB_FOOT } from '../art/cabinet';
 import { Player } from '../art/player';
 import {
@@ -27,16 +27,19 @@ import {
   COUNTER,
   COUNTER_CLIMB,
   COUNTER_DEPTH,
-  LOUNGE_DOOR,
+  HIDDEN_DOOR,
+  CHANGE_MACHINE,
   PRIZE_CASE,
   prizesForWave,
   STAFF_DOOR,
 } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
+import { paintClashCabinet, paintCrane, CLASH_SPOT, CLASH_W, CRANE_SPOTS, CRANE_W } from '../art/loungeProps';
+import { audio as sfxBus } from '../core/audio';
 import { GAME_W } from '../render/pixelScaler';
 import { fitPrompt, SUBTITLE_Y } from '../ui/plate';
 
-type Spot = 'door' | 'case' | 'counter' | 'staff' | 'lounge' | null;
+type Spot = 'door' | 'case' | 'counter' | 'staff' | 'side' | null;
 
 export class ArcadeDark extends Phaser.Scene {
   private solids: { x: number; y: number; w: number; h: number }[] = [];
@@ -50,15 +53,16 @@ export class ArcadeDark extends Phaser.Scene {
   private locked = false;
   private staffDoor!: Phaser.GameObjects.Rectangle;
 
-  /** In from the new room, through the doorway in the right-hand wall. */
-  private fromLounge = false;
+  /** In from the alley, through the hidden door in the right-hand wall. */
+  private fromAlley = false;
+  private sideLeaf: Phaser.GameObjects.Rectangle | null = null;
 
   constructor() {
     super('ArcadeDark');
   }
 
-  init(data: { fromLounge?: boolean } = {}): void {
-    this.fromLounge = data.fromLounge === true;
+  init(data: { fromAlley?: boolean } = {}): void {
+    this.fromAlley = data.fromAlley === true;
   }
 
   create(): void {
@@ -74,11 +78,14 @@ export class ArcadeDark extends Phaser.Scene {
     audio.setScene(SILENCE);
 
     paintHubRoom(this, { night: true });
-    paintChangeMachine(this, true);
-    // THE DOORWAY IN THE RIGHT-HAND WALL, where the lit hub has it: through
-    // to the new room, which is the way in from the side door.  Its pink is
-    // out with everything else; only a ghost of it is left on the frame.
-    paintOpening(this, { side: 'right', y: LOUNGE_DOOR.y, glow: PALETTE.neon, night: true });
+    paintChangeMachine(this, true, CHANGE_MACHINE);
+    // THE HIDDEN DOOR in the right-hand wall (user, 8 Nov: moved here from
+    // the fourth room, which is gone): after closing it is a dim brown door,
+    // the one that stood ajar in the alley.  It does not open from this side.
+    this.paintSideDoor();
+    // the claw machines and CREATURE CLASH, where the lit room has them, dark
+    for (const cr of CRANE_SPOTS) paintCrane(this, cr.x, cr.y, cr.kind, true);
+    paintClashCabinet(this, CLASH_SPOT.x, CLASH_SPOT.y, true);
     // THE HUB'S OWN CABINETS, AND ONLY THOSE.  This drew every machine in the
     // building -- the back room's and the casino's on top of the front room's
     // -- which put ten cabinets in a room that has six and made the dark
@@ -86,7 +93,12 @@ export class ArcadeDark extends Phaser.Scene {
     // night or it is nothing: same six machines, same places.
     for (const def of cabinetsIn('hub')) new Cabinet(this, def, true);
     // the machines are as solid in the dark as they were in the day
-    this.solids = cabinetsIn('hub').map((def) => machineSpot(def.x, def.y, CAB_W, CAB_FOOT).solid!);
+    this.solids = [
+      ...cabinetsIn('hub').map((def) => machineSpot(def.x, def.y, CAB_W, CAB_FOOT).solid!),
+      ...CRANE_SPOTS.map((cr) => machineSpot(cr.x, cr.y, CRANE_W, 10).solid!),
+      machineSpot(CLASH_SPOT.x, CLASH_SPOT.y, CLASH_W, 10).solid!,
+      machineSpot(CHANGE_MACHINE.x, CHANGE_MACHINE.y, 24, CAB_FOOT).solid!,
+    ];
 
     // the STAFF door, on the wall behind the counter's right-hand end
     this.staffDoor = this.add
@@ -123,8 +135,8 @@ export class ArcadeDark extends Phaser.Scene {
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, COUNTER.h, PALETTE.ink).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 2, PALETTE.slate).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
 
-    this.player = this.fromLounge
-      ? new Player(this, ROOM.right - 26, LOUNGE_DOOR.y + 8, true)
+    this.player = this.fromAlley
+      ? new Player(this, ROOM.right - 22, HIDDEN_DOOR.y + 8, true)
       : new Player(this, GAME_W / 2, ROOM.bottom - 14, true);
     // Dark or not, it is the same carpeted floor as the lit arcade.
     this.player.setSurface('carpet');
@@ -180,11 +192,10 @@ export class ArcadeDark extends Phaser.Scene {
         this.climbOver();
         break;
 
-      case 'lounge':
-        // back through to the new room (its side door stays locked)
-        this.locked = true;
-        audio.sfx('footstep_carpet');
-        fadeToScene(this, 'ArcadeLounge');
+      case 'side':
+        // the door you came in by: locked from the outside
+        audio.sfx('door_rattle', 0.7);
+        this.say('The door is locked from the outside.');
         break;
 
       case 'staff': {
@@ -299,8 +310,8 @@ export class ArcadeDark extends Phaser.Scene {
       this.spot = Math.abs(px - (STAFF_DOOR.x + 11)) < 18 ? 'staff' : null;
     } else if (py > ROOM.bottom - 24 && Math.abs(px - GAME_W / 2) < 26) {
       this.spot = 'door';
-    } else if (px > ROOM.right - 30 && Math.abs(py - LOUNGE_DOOR.y) < 26) {
-      this.spot = 'lounge';
+    } else if (px > ROOM.right - 30 && Math.abs(py - HIDDEN_DOOR.y) < 26) {
+      this.spot = 'side';
     } else if (py < COUNTER.y + 30 && px > PRIZE_CASE.x && px < PRIZE_CASE.x + PRIZE_CASE.w) {
       this.spot = 'case';
     } else if (py < COUNTER.y + 32 && px >= COUNTER_CLIMB.from && px <= COUNTER_CLIMB.to) {
@@ -318,8 +329,8 @@ export class ArcadeDark extends Phaser.Scene {
     const label =
       this.spot === 'door'
         ? '[E] FRONT DOOR'
-        : this.spot === 'lounge'
-          ? '[E] NEW ROOM'
+        : this.spot === 'side'
+          ? '[E] DOOR'
         : this.spot === 'case'
           ? '[E] PRIZE CASE'
           : this.spot === 'counter'
@@ -328,5 +339,36 @@ export class ArcadeDark extends Phaser.Scene {
     const x = Phaser.Math.Clamp(px, 50, GAME_W - 50);
     this.prompt.setText(label).setPosition(x, py - 32).setVisible(true);
     fitPrompt(this.promptPlate, this.prompt);
+  }
+
+  /** The hidden door: a dim brown leaf in the wall's band, with its seams. */
+  private paintSideDoor(): void {
+    const top = HIDDEN_DOOR.y - HIDDEN_DOOR.h / 2;
+    const x = ROOM.right + 1;
+    const w = GAME_W - ROOM.right - 2;
+    this.add.rectangle(x, top, w, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.56);
+    this.sideLeaf = this.add.rectangle(x, top, w, HIDDEN_DOOR.h, 0x2e2218).setOrigin(0, 0).setDepth(0.57);
+    this.add.rectangle(x, top, 1, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.55);
+    this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.55);
+    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 1, 3, 0x5a4a38).setOrigin(0, 0).setDepth(0.58).setAlpha(0.7);
+    // in from the alley: it stands open behind you, then swings shut
+    if (this.fromAlley) {
+      const leaf = this.sideLeaf;
+      this.locked = true;
+      leaf.setScale(0.15, 1);
+      this.time.delayedCall(650, () =>
+        this.tweens.add({
+          targets: leaf,
+          scaleX: 1,
+          duration: 260,
+          ease: 'Quad.easeIn',
+          onComplete: () => {
+            sfxBus.sfx('door_shut', 0.7);
+            this.cameras.main.shake(90, 0.003);
+            this.locked = false;
+          },
+        }),
+      );
+    }
   }
 }

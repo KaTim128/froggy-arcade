@@ -11,7 +11,7 @@ import { DAY_SECONDS, refreshGoals, tick } from './life';
 
 /** Where the clock runs. */
 export const LIFE_SCENES = new Set([
-  'ArcadeHub', 'ArcadeAnnex', 'ArcadeCasino', 'ArcadeLounge', 'CraneGame', 'PrizeCounter', 'PrizeExchange', 'ChangeMachine',
+  'ArcadeHub', 'ArcadeAnnex', 'ArcadeCasino', 'CraneGame', 'PrizeCounter', 'PrizeExchange', 'ChangeMachine',
   'ExteriorDay', 'StreetWest', 'StreetEast', 'Condo', 'FurnitureStore', 'ClothesStore', 'BarberShop', 'Shop', 'Goals', 'Minigame', 'Hotel', 'CreatureHub', 'CreatureArena', 'InventoryModal',
 ]);
 

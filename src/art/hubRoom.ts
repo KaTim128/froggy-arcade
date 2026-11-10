@@ -405,19 +405,48 @@ export function paintOpening(
 }
 
 /** The change machine, decorative in Act I and dead at night. */
-export function paintChangeMachine(scene: Phaser.Scene, night: boolean): void {
+export function paintChangeMachine(scene: Phaser.Scene, night: boolean, at: { x: number; y: number } = { x: 282, y: 164 }): void {
+  // ---- THE CASH EXCHANGE (user, 8 Nov): a machine of its own on the floor,
+  // not a panel on the wall -- an upright with a lit marquee, a screen that
+  // says what it does, a slot for notes and a tray the tokens drop into.
+  // Feet on `at.y`, y-sorted with the player like every other machine.
   const c = (col: number) => (night ? nightify(col) : col);
-  const g = scene.add.graphics();
-  g.fillStyle(c(0x0c0a10), 1).fillRect(261, 9, 22, 34);
-  g.fillStyle(c(PALETTE.steel), 1).fillRect(262, 10, 20, 32);
-  grain(g, 263, 11, 18, 30, c(PALETTE.steel), 262, 0.08, 0.12);
-  bevel(g, 262, 10, 20, 32, c(PALETTE.steel));
-  g.fillStyle(c(PALETTE.ink), 1).fillRect(264, 14, 16, 12);
-  g.fillStyle(night ? PALETTE.black : PALETTE.gold, 1).fillRect(265, 15, 14, 10);
-  if (!night) g.fillStyle(0xffffff, 0.3).fillTriangle(265, 15, 271, 15, 265, 20);
-  g.fillStyle(c(PALETTE.ink), 1).fillRect(266, 32, 12, 3);
-  g.fillStyle(c(tone(PALETTE.steel, 1.3)), 1).fillRect(266, 35, 12, 1);
-  g.fillStyle(night ? 0x1a1010 : PALETTE.ember, 1).fillRect(270, 28, 4, 2);
+  const W = 24;
+  const H = 38;
+  const x0 = Math.round(at.x - W / 2);
+  const y0 = at.y - H;
+  const g = scene.add.graphics().setDepth(depthFor(at.y));
+  // its shadow on the carpet
+  g.fillStyle(0x000000, 0.35).fillEllipse(at.x, at.y + 1, W + 6, 5);
+  // the cabinet: a dark outline, steel sides, a lighter face set into them
+  g.fillStyle(c(0x0c0a10), 1).fillRect(x0 - 1, y0 - 1, W + 2, H + 2);
+  g.fillStyle(c(tone(PALETTE.steel, 0.75)), 1).fillRect(x0, y0, W, H);
+  g.fillStyle(c(PALETTE.steel), 1).fillRect(x0 + 2, y0 + 2, W - 4, H - 3);
+  grain(g, x0 + 3, y0 + 3, W - 6, H - 6, c(PALETTE.steel), at.x, 0.08, 0.12);
+  bevel(g, x0 + 2, y0 + 2, W - 4, H - 3, c(PALETTE.steel));
+  // the marquee along the top, lit gold
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 2, y0 + 2, W - 4, 7);
+  g.fillStyle(night ? 0x2a2210 : PALETTE.gold, 1).fillRect(x0 + 3, y0 + 3, W - 6, 5);
+  // the screen: cash in, tokens out
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 4, y0 + 11, W - 8, 10);
+  g.fillStyle(night ? 0x0a1410 : 0x123a2a, 1).fillRect(x0 + 5, y0 + 12, W - 10, 8);
+  if (!night) {
+    g.fillStyle(0x6ad86a, 1).fillRect(x0 + 6, y0 + 14, 3, 4); // the $ note
+    g.fillStyle(0x6ad86a, 1).fillTriangle(x0 + 10, y0 + 15, x0 + 10, y0 + 17, x0 + 12, y0 + 16); // the arrow
+    g.fillStyle(PALETTE.gold, 1).fillCircle(x0 + 15.5, y0 + 16, 2); // a token
+    g.fillStyle(0xffffff, 0.25).fillTriangle(x0 + 5, y0 + 12, x0 + 10, y0 + 12, x0 + 5, y0 + 16);
+  }
+  // the note slot, its green lip, and the coin slot beside it
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 5, y0 + 24, 9, 2);
+  g.fillStyle(night ? 0x1a2a1a : 0x4ac85a, 1).fillRect(x0 + 5, y0 + 26, 9, 1);
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 17, y0 + 23, 2, 4);
+  // the tray at the bottom, with a token in it
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(x0 + 5, y0 + 30, W - 10, 5);
+  g.fillStyle(c(tone(PALETTE.steel, 1.3)), 1).fillRect(x0 + 5, y0 + 35, W - 10, 1);
+  if (!night) g.fillStyle(PALETTE.gold, 1).fillCircle(x0 + 9, y0 + 33, 1.5);
+  // the light on top, and the word on the marquee
+  g.fillStyle(night ? 0x1a1010 : PALETTE.ember, 1).fillRect(at.x - 1, y0 - 3, 3, 2);
+  centerText(scene, at.x, y0 + 5, '$', night ? 0x4a4030 : PALETTE.ink).setDepth(depthFor(at.y) + 0.0001);
 }
 
 /**

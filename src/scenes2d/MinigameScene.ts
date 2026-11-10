@@ -124,7 +124,7 @@ export class MinigameScene extends Phaser.Scene {
   private copT: number | null = null;
   private copBanner: Phaser.GameObjects.Container | null = null;
 
-  private static readonly ARCADE_ROOMS = ['ArcadeHub', 'ArcadeAnnex', 'ArcadeLounge', 'ArcadeCasino'];
+  private static readonly ARCADE_ROOMS = ['ArcadeHub', 'ArcadeAnnex', 'ArcadeCasino'];
 
   /** The game has started: is an officer in the arcade, or might one come in? */
   private armPolice(): void {

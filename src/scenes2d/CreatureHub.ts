@@ -127,7 +127,7 @@ export class CreatureHub extends Phaser.Scene {
   /** The stop picked on the world's trail. */
   private trailSel = 0;
   private msg = '';
-  private from = 'ArcadeLounge';
+  private from = 'ArcadeHub';
   private biome = BIOMES[0].id;
   /** The card just turned over, and whether the other eight are showing yet. */
   private picked: { index: number; cards: string[]; all: boolean } | null = null;
@@ -141,7 +141,7 @@ export class CreatureHub extends Phaser.Scene {
   private want: Screen | null = null;
 
   init(data: { from?: string; msg?: string; screen?: string; world?: number }): void {
-    this.from = data.from ?? 'ArcadeLounge';
+    this.from = data.from === 'ArcadeLounge' || !data.from ? 'ArcadeHub' : data.from;
     // (back from a story fight: on the world it was in)
     if (typeof data.world === 'number' && WORLD_AT[data.world]) {
       this.storyW = data.world;
