@@ -34,7 +34,7 @@ import { fitPrompt } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
 
 /** The way back, on this room's right wall. */
-const BACK_DOOR = { x: GAME_W - 20, y: 118 };
+const BACK_DOOR = { x: GAME_W - 20, y: 106 };
 
 type Target = { kind: 'cabinet'; cab: Cabinet } | { kind: 'back' } | { kind: 'casino' } | null;
 
@@ -182,7 +182,7 @@ export class ArcadeAnnex extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () =>
         this.walkTo(
-          doorSpot({ x: this.bounds.right, y: BACK_DOOR.y }, (px, py) => px > BACK_DOOR.x - 22 && Math.abs(py - BACK_DOOR.y) < 28),
+          doorSpot({ x: this.bounds.right, y: BACK_DOOR.y }, (px, py) => px > BACK_DOOR.x - 26 && Math.abs(py - BACK_DOOR.y) < 30),
           () => this.toHub(),
         ),
       );
@@ -200,7 +200,7 @@ export class ArcadeAnnex extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () =>
         this.walkTo(
-          doorSpot({ x: this.bounds.x, y: CASINO_DOOR.y }, (px, py) => px < CASINO_DOOR.x + 20 && Math.abs(py - CASINO_DOOR.y) < 28),
+          doorSpot({ x: this.bounds.x, y: CASINO_DOOR.y }, (px, py) => px < CASINO_DOOR.x + 24 && Math.abs(py - CASINO_DOOR.y) < 30),
           () => this.toCasino(),
         ),
       );
@@ -341,8 +341,8 @@ export class ArcadeAnnex extends Phaser.Scene {
     }
     if (best) return { kind: 'cabinet', cab: best };
 
-    if (px > BACK_DOOR.x - 22 && Math.abs(py - BACK_DOOR.y) < 28) return { kind: 'back' };
-    if (px < CASINO_DOOR.x + 20 && Math.abs(py - CASINO_DOOR.y) < 28) return { kind: 'casino' };
+    if (px > BACK_DOOR.x - 26 && Math.abs(py - BACK_DOOR.y) < 30) return { kind: 'back' };
+    if (px < CASINO_DOOR.x + 24 && Math.abs(py - CASINO_DOOR.y) < 30) return { kind: 'casino' };
     return null;
   }
 

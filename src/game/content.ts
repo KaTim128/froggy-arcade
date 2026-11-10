@@ -289,9 +289,9 @@ export function cabinetsIn(room: 'hub' | 'annex' | 'casino'): CabinetDef[] {
 }
 
 /** The doorway between the two rooms, on the hub's left wall. */
-export const ANNEX_DOOR = { x: 20, y: 118, w: 14, h: 40 };
+export const ANNEX_DOOR = { x: 20, y: 106, w: 14, h: 40 };
 /** And on through the annex's left wall, into the machines that take money. */
-export const CASINO_DOOR = { x: 20, y: 118, w: 14, h: 40 };
+export const CASINO_DOOR = { x: 20, y: 106, w: 14, h: 40 };
 /**
  * The doorway in the hub's RIGHT wall, through to the room kept for the next
  * games: the mirror of the annex doorway on the left -- the same height up

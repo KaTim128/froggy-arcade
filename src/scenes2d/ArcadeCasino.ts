@@ -56,7 +56,7 @@ const TABLE_STAND = 14;
 /** How far behind the felt the table stops being walkable. */
 const TABLE_BACK = TABLE_H + 4;
 /** The way back, on this room's right wall. */
-const BACK_DOOR = { x: GAME_W - 20, y: 118 };
+const BACK_DOOR = { x: GAME_W - 20, y: 106 };
 
 /** Anything you can walk up to and play.  The table is not a cabinet. */
 type Fixture = Cabinet | BlackjackTable | PrizeWheel | RouletteTable;
@@ -310,7 +310,7 @@ export class ArcadeCasino extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () =>
         this.walkTo(
-          doorSpot({ x: this.bounds.right, y: BACK_DOOR.y }, (px, py) => px > BACK_DOOR.x - 22 && Math.abs(py - BACK_DOOR.y) < 28),
+          doorSpot({ x: this.bounds.right, y: BACK_DOOR.y }, (px, py) => px > BACK_DOOR.x - 26 && Math.abs(py - BACK_DOOR.y) < 30),
           () => this.toAnnex(),
         ),
       );
@@ -585,6 +585,10 @@ export class ArcadeCasino extends Phaser.Scene {
     const px = this.player.x;
     const py = this.player.y;
 
+    // Standing in the opening itself, the opening wins over the card table
+    // whose playing spot reaches across to it (the doorway moved up, 10 Nov).
+    if (px > BACK_DOOR.x - 18 && Math.abs(py - BACK_DOOR.y) < 30) return { kind: 'back' };
+
     let best: Fixture | null = null;
     let bestD = Infinity;
     for (const c of this.cabinets) {
@@ -598,7 +602,7 @@ export class ArcadeCasino extends Phaser.Scene {
     }
     if (best) return { kind: 'cabinet', cab: best };
 
-    if (px > BACK_DOOR.x - 22 && Math.abs(py - BACK_DOOR.y) < 28) return { kind: 'back' };
+    if (px > BACK_DOOR.x - 26 && Math.abs(py - BACK_DOOR.y) < 30) return { kind: 'back' };
     return null;
   }
 

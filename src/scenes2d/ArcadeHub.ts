@@ -1654,7 +1654,7 @@ export class ArcadeHub extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () =>
         this.walkTo(
-          doorSpot({ x: this.bounds.x, y: ANNEX_DOOR.y }, (px, py) => px < ANNEX_DOOR.x + 20 && Math.abs(py - ANNEX_DOOR.y) < 28),
+          doorSpot({ x: this.bounds.x, y: ANNEX_DOOR.y }, (px, py) => px < ANNEX_DOOR.x + 24 && Math.abs(py - ANNEX_DOOR.y) < 30),
           () => this.toAnnex(),
         ),
       );
@@ -2013,7 +2013,7 @@ export class ArcadeHub extends Phaser.Scene {
     if (this.spots.get(CLASH_SPOT)?.at(px, py)) return { kind: 'clash' };
     if (this.spots.get(CHANGE_MACHINE)?.at(px, py)) return { kind: 'change' };
 
-    if (px < ANNEX_DOOR.x + 20 && Math.abs(py - ANNEX_DOOR.y) < 28) return { kind: 'annex' };
+    if (px < ANNEX_DOOR.x + 24 && Math.abs(py - ANNEX_DOOR.y) < 30) return { kind: 'annex' };
     if (Phaser.Math.Distance.Between(px, py, BELL.x, BELL.y) < INTERACT_RANGE) return { kind: 'bell' };
     // ---- HOW FAR OUT THE COUNTER STILL ANSWERS.
     //
