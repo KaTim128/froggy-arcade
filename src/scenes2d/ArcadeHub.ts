@@ -21,7 +21,6 @@ import { store, type GameId } from '../core/state';
 import { KEY_ITEM, ensureKeyInPocket, holdingKey } from '../game/inventory';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
-import { isTouch } from '../core/device';
 import { closeAndShowOut, showOutAtNight } from '../game/closingPull';
 import { closingTime, evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
@@ -864,7 +863,8 @@ export class ArcadeHub extends Phaser.Scene {
    */
   private showFrogLine(): void {
     this.hideFrogLine();
-    const LINE = isTouch() ? '"FANCY A GAME? PRESS INTERACT - OR TAKE A LOOK AT THE PRIZES!"' : '"FANCY A GAME? PRESS E - OR TAKE A LOOK AT THE PRIZES!"';
+    // (user, 10 Nov) in his own voice, not the game's: no keys, no buttons
+    const LINE = '"FANCY A GAME? ONE TOKEN, YOU AND ME. OR HAVE A LOOK AT THE PRIZES!"';
     const PAD = 7;
     const HEAD = 11;
     const body = text(this, 22, 0, LINE, PALETTE.cream).setMaxWidth(GAME_W - 46);
@@ -2068,7 +2068,8 @@ export class ArcadeHub extends Phaser.Scene {
     } else if (t.kind === 'clash') {
       msg = '[E] CREATURE CLASH';
     } else if (t.kind === 'froggy') {
-      msg = '[E] PLAY WITH FROGGY - 1 TOKEN';
+      // ([E] reads PLAY on a phone: 'PLAY PLAY WITH FROGGY' said it twice)
+      msg = '[E] A GAME WITH FROGGY - 1 TOKEN';
       color = ledger.balance() >= 1 ? PALETTE.gold : PALETTE.ash;
     } else if (t.kind === 'crane') {
       const cost = CRANE_COST[t.crane.kind];
