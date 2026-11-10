@@ -22,14 +22,13 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { button, centerText, smallText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
-import { DOZENS, OUTSIDE, RED_NUMBERS, WHEEL_ORDER, colourOf, settle, spinPocket, spotLabel, type BetSpot } from '../game/roulette';
+import { DOZENS, OUTSIDE, RED_NUMBERS, TABLE_MAX, WHEEL_ORDER, betProblem, colourOf, round, spinPocket, spotLabel, type BetSpot } from '../game/roulette';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'roulettetable' as const;
 const MINIMUM = 1;
 const CHIPS = [1, 5, 10, 25] as const;
 /** The most that may ride on one spin, all bets together. */
-const TABLE_MAX = 500;
 
 const FELT = 0x1d5c2d;
 const FELT_DARK = 0x123b1e;
@@ -160,6 +159,17 @@ function place(i: number): void {
     return;
   }
   const s = boxes[i].s;
+  // (the table's rules, checked on the bets as they would stand: no more
+  // than five numbers a spin, no more than 25 on one)
+  const next = new Map(bets);
+  next.set(s, (next.get(s) ?? 0) + add);
+  const why = betProblem(next);
+  if (why) {
+    audio.sfx('buzzer');
+    setStatus(why, PALETTE.blood);
+    render();
+    return;
+  }
   bets.set(s, (bets.get(s) ?? 0) + add);
   audio.sfx('coin_drop', 0.4);
   setStatus(`${add} ON ${spotLabel(s)}`);
@@ -211,6 +221,12 @@ function moveCursor(dx: number, dy: number): void {
 function spin(): void {
   if (spinning || !apiRef || !sceneRef || !wheel) return;
   const stake = total();
+  const why = betProblem(bets);
+  if (why) {
+    audio.sfx('buzzer');
+    setStatus(why, PALETTE.blood);
+    return;
+  }
   if (stake < MINIMUM) {
     audio.sfx('buzzer');
     setStatus('PUT A CHIP ON THE FELT FIRST', PALETTE.blood);
@@ -224,7 +240,8 @@ function spin(): void {
   // drawn, and paid, before the wheel moves
   const n = import.meta.env?.DEV && forced !== null ? forced : spinPocket();
   forced = null;
-  const pay = settle(bets, n);
+  // the whole round at once: every bet down, the winners back, the net
+  const { pay, net } = round(bets, n);
   if (pay > 0) apiRef.payout(pay);
   spins++;
   spinning = true;
@@ -255,10 +272,9 @@ function spin(): void {
       shownBalance += pay;
       const c = colourOf(n);
       resultText?.setText(`${n}`).setTint(c === 'red' ? 0xff6a6a : c === 'black' ? PALETTE.cream : 0x6aff8a);
-      const net = pay - stake;
       if (pay > 0) {
         audio.sfx('bell_ding', 0.7);
-        setStatus(`${n} ${c.toUpperCase()} - PAYS ${pay}${net > 0 ? ` (+${net})` : ''}`, PALETTE.gold);
+        setStatus(`${n} ${c.toUpperCase()} - BET ${stake}, BACK ${pay}, ${net >= 0 ? `UP ${net}` : `DOWN ${-net}`}`, net >= 0 ? PALETTE.gold : PALETTE.ash);
       } else {
         audio.sfx('buzzer', 0.5);
         setStatus(`${n} ${c.toUpperCase()} - NOTHING ON IT`, PALETTE.ash);
@@ -347,7 +363,7 @@ export const rouletteTable: MinigameModule = {
     steps: [
       { say: 'CLICK A SPOT ON THE FELT TO PUT A CHIP ON IT. F CHANGES THE CHIP.', phone: 'TAP A SPOT ON THE FELT TO PUT A CHIP ON IT. CHIP CHANGES THE CHIP.', demo: 'rt.chips' },
       { say: 'ENTER SPINS: EVERY BET ON THE FELT IS PAID FOR AT ONCE.', phone: 'SPIN SPINS: EVERY BET ON THE FELT IS PAID FOR AT ONCE.', demo: 'rt.spin' },
-      { say: 'A NUMBER PAYS 36X, A DOZEN 3X, THE REST 2X. ON THE ZERO THEY ALL LOSE.', demo: 'rt.pays' },
+      { say: 'A NUMBER PAYS 36X, A DOZEN 3X, THE REST 2X. ON THE ZERO THEY ALL LOSE. AT MOST 5 NUMBERS A SPIN, 25 ON EACH.', demo: 'rt.pays' },
     ],
     objective: [
       'CHIPS ON THE FELT, THEN SPIN.',

@@ -22,6 +22,7 @@ import { paintFloor } from '../art/arenaFloors';
 import { isTouch } from '../core/device';
 import { capLabel, codeFor } from '../core/keymap';
 import Phaser from 'phaser';
+import { closingTime } from '../core/broke';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
@@ -44,7 +45,7 @@ import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, CREATURES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, recruitChosen, canChooseRecruit, release, releaseAll, retreat, setActive, startLadder } from '../game/creatureClash';
+import { abandonLadder, ladderFoeLevel, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, recruitChosen, canChooseRecruit, release, releaseAll, retreat, setActive, startLadder } from '../game/creatureClash';
 
 type Screen = 'home' | 'recruit' | 'choose' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick' | 'minimenu' | 'minihow';
 const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls', 'minis'];
@@ -196,6 +197,18 @@ export class CreatureHub extends Phaser.Scene {
       else if (e.code === 'ArrowRight' || e.code === 'ArrowUp') this.pickStop(Math.min(best, this.trailSel + 1));
       else if (e.code === 'Enter' || e.code === 'Space') this.trailFight();
     });
+    // CLOSING TIME (user, 8 Nov): a fight already on is finished first; back
+    // here afterwards -- or here when the hour comes -- you are walked out to
+    // the room, which shows the closing notice.  No new fight starts.
+    const shut = (): boolean => {
+      if (!closingTime() || this.closingOut) return false;
+      this.closingOut = true;
+      this.leave();
+      return true;
+    };
+    this.closingOut = false;
+    this.time.addEvent({ delay: 1000, loop: true, callback: shut });
+    if (shut()) return;
     this.cameras.main.fadeIn(250, 0, 0, 0);
     this.draw();
   }
@@ -866,6 +879,8 @@ export class CreatureHub extends Phaser.Scene {
 
   /** Which page of the team is showing (it is unlimited). */
   private teamPage = 0;
+  /** Walking out at closing time (once). */
+  private closingOut = false;
   private miniKind: MiniKind = 'melee';
   private miniPool: string[] = [];
   private miniPicks: string[] = [];
@@ -1567,7 +1582,7 @@ export class CreatureHub extends Phaser.Scene {
       const next = !!run && run.level === lv;
       const edge = done ? PALETTE.mossLight : next ? PALETTE.gold : 0x2a3050;
       L.add(this.add.rectangle(8, y, 180, 19, next ? 0x2a2a18 : 0x161a2c).setOrigin(0, 0).setStrokeStyle(next ? 2 : 1, edge));
-      L.add(text(this, 13, y + 6, boss ? 'BOSS' : `LV ${lv}`, boss ? PALETTE.gold : PALETTE.cream));
+      L.add(text(this, 13, y + 6, boss ? `BOSS LV ${ladderFoeLevel(lv)}` : `LV ${ladderFoeLevel(lv)}`, boss ? PALETTE.gold : PALETTE.cream));
       // who: met ones and the next by name; the rest stay a surprise
       let who = '???';
       if (run && (done || next)) {
@@ -1589,7 +1604,7 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, px + 4, 80, `TOKENS: ${ledger.balance()}`, PALETTE.cream));
     if (run) {
       L.add(text(this, px + 4, 94, LADDER_WIN ? `THIS RUN: +${run.earned}` : `BOSS PAYS ${LADDER_BOSS_WIN}`, PALETTE.gold));
-      L.add(button(this, px + 59, 134, run.level > LADDER_LEVELS ? 'FIGHT THE BOSS' : `CONTINUE - LV ${run.level}`, () => this.ladderFight(), { width: 108, height: 13, disabled: !activeOwned() }));
+      L.add(button(this, px + 59, 134, run.level > LADDER_LEVELS ? 'FIGHT THE BOSS' : `CONTINUE - LV ${ladderFoeLevel(run.level)}`, () => this.ladderFight(), { width: 108, height: 13, disabled: !activeOwned() }));
       L.add(button(this, px + 59, 151, 'ABANDON RUN', () => this.confirmAbandon(), { width: 108, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     } else {
       const unlocked = c.story.cleared >= WORLDS.length;

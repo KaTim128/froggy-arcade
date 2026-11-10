@@ -687,6 +687,7 @@ export class CreatureArena extends Phaser.Scene {
       this.level = step.level;
       this.boss = step.boss;
       wild = step.foe;
+      this.foeLevel = step.foeLevel;
       this.skill = step.boss ? 1 : 0.3 + ((step.level - 1) / (LADDER_LEVELS - 1)) * 0.6;
     } else {
       // a zone's wild one is matched to yours: your level, give or take one

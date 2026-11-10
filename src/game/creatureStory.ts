@@ -66,11 +66,14 @@ export const STAGES = 4;
 
 /** What a battle of world `w` (0-based) costs and pays: first time through, or as a replay. */
 export function storyPrice(w: number, replay: boolean): { cost: number; win: number } {
-  const n = w + 1;
+  // (user, 8 Nov: one token in and five for a win, every fight in every
+  // world, first time or replayed -- no longer climbing world by world)
+  void w;
+  void replay;
   // (scaled by the admin's STORY PRICES %, core/gameConfig)
   const k = cfgPct('clash.storyPay');
   const at = (v: number): number => Math.max(0, Math.round(v * k));
-  return replay ? { cost: at(n), win: at(2 * n) } : { cost: at(2 * n), win: at(4 * n) };
+  return { cost: at(1), win: at(5) };
 }
 
 /** The level of stage `s` (0..3 the battles, 4 the boss) of world `w`. */

@@ -327,13 +327,22 @@ export function startStory(w: number, node?: number): Result {
 // -------------------------------------------------------------------- ladder
 
 /** What the ladder's next step is, if a run is on: its opponent, place and whether it is the boss. */
-export function ladderStep(c = C()): { level: number; foe: Creature; biome: string; boss: boolean } | null {
+export function ladderStep(c = C()): { level: number; foe: Creature; foeLevel: number; biome: string; boss: boolean } | null {
   const L = c.ladder;
   if (!L) return null;
   const boss = L.level > LADDER_LEVELS;
   const foe = boss ? bossById(L.boss) : creatureById(L.foes[L.level - 1]);
   if (!foe) return null;
-  return { level: L.level, foe, biome: L.places[Math.min(L.level, LADDER_LEVELS + 1) - 1], boss };
+  const foeLevel = ladderFoeLevel(L.level);
+  return { level: L.level, foe: withLevel(foe, foeLevel), foeLevel, biome: L.places[Math.min(L.level, LADDER_LEVELS + 1) - 1], boss };
+}
+
+/**
+ * The level the ladder's opponent fights at (user, 8 Nov): always 15, 16,
+ * 17, 18 and 19 up the five rungs, and the boss at 20.
+ */
+export function ladderFoeLevel(step: number): number {
+  return step > LADDER_LEVELS ? MAX_LEVEL : Math.min(MAX_LEVEL - 1, 14 + step);
 }
 
 /**
@@ -357,7 +366,7 @@ export function startLadder(rng: () => number = Math.random): Result {
     s.ladderRuns += 1;
   });
   store.flush();
-  return ok(`PAID ${LADDER_COST} TOKENS. LEVEL 1 OF ${LADDER_LEVELS}.`);
+  return ok(`PAID ${LADDER_COST} TOKENS. FIGHT 1 OF ${LADDER_LEVELS}, LV ${ladderFoeLevel(1)}.`);
 }
 
 /** The bell for the run's next fight.  No stake: the run is paid for. */
@@ -370,7 +379,7 @@ export function startLadderBattle(): Result {
   if (why) return no(why);
   edit((s) => (s.battle = { mode: 'ladder', biome: step.biome, level: step.level }));
   store.flush();
-  return ok(step.boss ? 'THE FINAL BOSS!' : `LEVEL ${step.level} OF ${LADDER_LEVELS}!`);
+  return ok(step.boss ? `THE FINAL BOSS, LV ${step.foeLevel}!` : `FIGHT ${step.level} OF ${LADDER_LEVELS}, LV ${step.foeLevel}!`);
 }
 
 /** Walk away from a run: it is over, nothing is refunded, nothing is paid twice. */
