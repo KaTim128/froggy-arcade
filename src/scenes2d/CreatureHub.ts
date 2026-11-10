@@ -38,7 +38,7 @@ import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { battleXp, levelOf, xpProgress } from '../game/creatureLevel';
 import { traitsOf } from '../game/creatureTraits';
 import { loreOf } from '../game/creatureLore';
-import { MINI_INFO, MINI_MIN_COST, MINI_PRICE, TEAM_SIZE, drawPool, paidTeamPool, payForTeamPool, roleOf, startMini, type MiniKind } from '../game/creatureMinis';
+import { MINI_INFO, MINI_MIN_COST, MINI_PRICE, TEAM_SIZE, paidPool, payForPool, roleOf, startMini, type MiniKind } from '../game/creatureMinis';
 import { paintTrailScenery } from '../art/trailScenery';
 import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
@@ -46,7 +46,7 @@ import {
 } from '../game/creatures';
 import { abandonLadder, packPrice, activeCreature, activeOwned, nodeState, storyBest, trailNode, worldOpen, ownedCreature, needsRecovery, restLeft, openPack, pickCard, recruitChosen, canChooseRecruit, release, releaseAll, retreat, setActive, startLadder } from '../game/creatureClash';
 
-type Screen = 'home' | 'recruit' | 'choose' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick';
+type Screen = 'home' | 'recruit' | 'choose' | 'pack' | 'map' | 'story' | 'trail' | 'ladder' | 'controls' | 'minis' | 'minipick' | 'minimenu' | 'minihow';
 const SCREENS: Screen[] = ['home', 'story', 'trail', 'ladder', 'recruit', 'controls', 'minis'];
 
 interface Shown {
@@ -232,7 +232,11 @@ export class CreatureHub extends Phaser.Scene {
 
   /** BACK: a world's trail goes back to the map of worlds; everything else to the team. */
   private back(): void {
-    if (this.screen === 'minipick') {
+    if (this.screen === 'minipick' || this.screen === 'minihow') {
+      this.go('minimenu');
+      return;
+    }
+    if (this.screen === 'minimenu') {
       this.go('minis');
       return;
     }
@@ -282,7 +286,7 @@ export class CreatureHub extends Phaser.Scene {
     if (top) {
       // (LEAVE is in the pause menu: Esc on a keyboard, the gear on a phone)
     } else if (!(this.screen === 'pack' && this.picked)) L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.back(), { width: 44, height: 11 }));
-    ({ home: () => this.home(), recruit: () => this.recruit(), choose: () => this.chooseAny(), pack: () => this.pack(), map: () => this.map(), story: () => this.story(), trail: () => this.trail(), ladder: () => this.ladder(), controls: () => this.controls(), minis: () => this.minis(), minipick: () => this.miniPick() })[this.screen]();
+    ({ home: () => this.home(), recruit: () => this.recruit(), choose: () => this.chooseAny(), pack: () => this.pack(), map: () => this.map(), story: () => this.story(), trail: () => this.trail(), ladder: () => this.ladder(), controls: () => this.controls(), minis: () => this.minis(), minipick: () => this.miniPick(), minimenu: () => this.miniMenu(), minihow: () => this.miniHow() })[this.screen]();
     // (on the pack screen the line keeps to the right-hand column, clear of
     // the cards; once one is picked its own panel says who joined)
     const packMsg = this.screen === 'pack';
@@ -872,24 +876,21 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, 8, 20, 'MINI GAMES', PALETTE.gold));
     L.add(smallText(this, 8, 30, 'THE STAKE IS TAKEN ONCE, THE PRIZE PAID ON A WIN. NOTHING FOR A LOSS.', PALETTE.fog));
     L.add(smallText(this, 8, 37, 'YOU FIGHT WITH THE CREATURES ON OFFER, ALL AT THE SAME LEVEL. NO XP.', PALETTE.fog));
-    const kinds: Array<[MiniKind, number, string, (g: Phaser.GameObjects.Graphics, x: number, y: number, col: number) => void]> = [
-      ['melee', 0xff5a6a, 'PICK 1 OF 3 - UP CLOSE', (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col)],
-      ['ranged', 0x6ad8f0, 'PICK 1 OF 3 - AT RANGE', (g, x, y, col) => drawAttackIcon(g, 'bolt', x, y, col)],
-      ['team', PALETTE.gold, 'PAY, SEE 10, PICK 5', (g, x, y, col) => {
+    // (user, 8 Nov: no faded second line -- the game's own menu says it all)
+    const kinds: Array<[MiniKind, number, (g: Phaser.GameObjects.Graphics, x: number, y: number, col: number) => void]> = [
+      ['melee', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col)],
+      ['ranged', 0x6ad8f0, (g, x, y, col) => drawAttackIcon(g, 'bolt', x, y, col)],
+      ['team', PALETTE.gold, (g, x, y, col) => {
         g.fillStyle(col, 1).fillCircle(x - 5, y + 2, 3).fillCircle(x, y - 2, 3).fillCircle(x + 5, y + 2, 3);
       }],
     ];
-    kinds.forEach(([k, col, sub, icon], i) => {
+    kinds.forEach(([k, col, icon], i) => {
       const y = 48 + i * 34;
-      const pr = MINI_PRICE[k];
-      this.tile(16, y, GAME_W - 32, 28, MINI_INFO[k].title, `${sub}  -  ${pr.cost} IN, ${pr.win} TO WIN`, col, icon, () => {
+      this.tile(16, y, GAME_W - 32, 28, MINI_INFO[k].title, '', col, icon, () => {
         this.miniKind = k;
-        // (5v5: the pool is only drawn once it is paid for -- and a pool
-        // already paid for comes back as it was)
-        this.miniPool = k === 'team' ? paidTeamPool() ?? [] : drawPool(k);
-        this.miniPicks = [];
-        this.go('minipick');
-      }, ledger.balance() < pr.cost && !(k === 'team' && paidTeamPool()));
+        this.howStep = 0;
+        this.go('minimenu');
+      });
     });
     if (ledger.balance() < MINI_MIN_COST) L.add(centerSmall(this, GAME_W / 2, 152, `YOU NEED ${MINI_MIN_COST} TOKENS TO PLAY.`, 0xff9a9a));
   }
@@ -909,29 +910,14 @@ export class CreatureHub extends Phaser.Scene {
     // (two short lines, never one that wraps into the cards)
     L.add(smallText(this, 8, 30, MINI_INFO[kind].rules.join(' '), PALETTE.fog));
     const team = kind === 'team';
-    // ---- 5V5: PAY FIRST, THEN SEE THE TEN (user, 5 Nov).  Before paying
-    // nothing is shown and nothing is spent: LEAVE walks away for free.
-    if (team && !paidTeamPool()) {
-      L.add(smallText(this, 8, 37, `${pr.cost} TOKENS IN, ${pr.win} FOR A WIN.`, PALETTE.gold));
-      L.add(this.add.rectangle(GAME_W / 2, 90, 230, 28, 0x181c36).setStrokeStyle(1, PALETTE.gold));
-      L.add(centerText(this, GAME_W / 2, 90, `PAY ${pr.cost} TOKENS TO SEE THE POOL`, PALETTE.cream));
-      const can = ledger.balance() >= pr.cost;
-      L.add(button(this, GAME_W / 2 - 60, GAME_H - 30, can ? `PLAY - ${pr.cost} TOKENS` : `NEED ${pr.cost}`, () => {
-        const r = payForTeamPool();
-        if (!r.ok) {
-          this.say(r);
-          this.draw();
-          return;
-        }
-        audio.sfx('cha_ching', 0.5);
-        this.miniPool = paidTeamPool() ?? [];
-        this.miniPicks = [];
-        this.draw();
-      }, { width: 110, height: 15, disabled: !can }));
-      L.add(button(this, GAME_W / 2 + 60, GAME_H - 30, 'LEAVE', () => this.go('minis'), { width: 110, height: 15, fill: 0x1c2142 }));
+    // (every mode is paid for before its pool is seen -- see miniMenu)
+    const pool = paidPool(kind);
+    if (!pool) {
+      this.go('minimenu');
       return;
     }
-    L.add(smallText(this, 8, 37, team ? `PAID. ${pr.win} FOR A WIN.` : `${pr.cost} TOKENS IN, ${pr.win} FOR A WIN.`, PALETTE.gold));
+    this.miniPool = pool;
+    L.add(smallText(this, 8, 37, `PAID. ${pr.win} TOKENS FOR A WIN.`, PALETTE.gold));
     // (5v5: twelve on offer, four across in three rows -- six across left a
     // card too narrow for the longest name to sit inside its outline)
     const cols = team ? 4 : 3;
@@ -980,7 +966,7 @@ export class CreatureHub extends Phaser.Scene {
       });
     });
     const ready = this.miniPicks.length === want;
-    const label = ready ? (team ? 'FIGHT' : `FIGHT - ${pr.cost} TOKENS`) : team ? `PICK ${want - this.miniPicks.length} MORE` : 'PICK ONE';
+    const label = ready ? 'FIGHT' : team ? `PICK ${want - this.miniPicks.length} MORE` : 'PICK ONE';
     L.add(button(this, GAME_W / 2, GAME_H - 9, label, () => {
       if (!ready) return;
       const r = startMini(kind, this.miniPicks);
@@ -992,6 +978,68 @@ export class CreatureHub extends Phaser.Scene {
       audio.sfx('cha_ching', 0.5);
       this.scene.start('CreatureArena', { mode: 'mini', from: this.from, biome: BIOMES[Phaser.Math.Between(0, BIOMES.length - 1)].id });
     }, { width: 120, height: 13, disabled: !ready }));
+  }
+
+  /**
+   * ---- EACH MINI GAME'S OWN MENU (user, 8 Nov): like a cabinet's card --
+   * what it is, PLAY with its price on it, HOW TO PLAY and LEAVE.  PLAY
+   * takes the stake and shows the pool; a pool already paid for is back
+   * for free.
+   */
+  private miniMenu(): void {
+    const L = this.layer;
+    const kind = this.miniKind;
+    const pr = MINI_PRICE[kind];
+    const info = MINI_INFO[kind];
+    const paid = !!paidPool(kind);
+    L.add(this.add.rectangle(GAME_W / 2, 98, 260, 128, 0x141834).setStrokeStyle(1, PALETTE.gold));
+    L.add(centerText(this, GAME_W / 2, 42, info.title, PALETTE.gold));
+    L.add(centerSmall(this, GAME_W / 2, 54, `WIN: +${pr.win} TOKENS`, PALETTE.tealLight));
+    info.rules.forEach((r, i) => L.add(centerSmall(this, GAME_W / 2, 66 + i * 8, r, PALETTE.cream)));
+    L.add(centerSmall(this, GAME_W / 2, 84, 'ALL AT THE SAME LEVEL. NO XP. NOTHING BACK FOR A LOSS.', PALETTE.fog));
+    const can = paid || ledger.balance() >= pr.cost;
+    L.add(button(this, GAME_W / 2, 104, paid ? 'CONTINUE - PAID' : can ? `PLAY - ${pr.cost} TOKENS` : `NEED ${pr.cost} TOKENS`, () => {
+      const r = payForPool(kind);
+      if (!r.ok) {
+        this.say(r);
+        this.draw();
+        return;
+      }
+      if (!paid) audio.sfx('cha_ching', 0.5);
+      this.miniPicks = [];
+      this.go('minipick');
+    }, { width: 150, height: 16, disabled: !can }));
+    L.add(button(this, GAME_W / 2 - 52, 136, 'HOW TO PLAY', () => {
+      this.howStep = 0;
+      this.go('minihow');
+    }, { width: 96, height: 14, fill: 0x1f4a5a }));
+    L.add(button(this, GAME_W / 2 + 52, 136, 'LEAVE', () => this.go('minis'), { width: 96, height: 14, fill: 0x1c2142 }));
+  }
+
+  /** A mini game's HOW TO PLAY, a step at a time, each with its picture. */
+  private miniHow(): void {
+    const kind = this.miniKind;
+    const pr = MINI_PRICE[kind];
+    const key = (k: string): string => capLabel(codeFor(`creatureclash:${k}`));
+    const keys = isTouch()
+      ? 'THE STICK MOVES. EACH MOVE BUTTON FIRES ITS MOVE STRAIGHT AT THE FOE, AND THE BIG ONE IS THE ULTIMATE ONCE IT IS READY.'
+      : `W A S D MOVES. ${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} FIRE YOUR THREE MOVES AT THE FOE, ${key('KeyI')} THE ULTIMATE ONCE IT IS READY. SPACE FIRES THE ONE PICKED.`;
+    const pick =
+      kind === 'team'
+        ? `PAY ${pr.cost} TOKENS TO SEE 10 CREATURES DRAWN AT RANDOM. TAP FIVE TO PICK YOUR TEAM - THE ORDER YOU TAP IS THE ORDER THEY FIGHT IN.`
+        : `PAY ${pr.cost} TOKENS TO SEE 3 ${kind === 'melee' ? 'MELEE FIGHTERS' : 'SHOOTERS'} DRAWN AT RANDOM. TAP STATS TO READ ONE IN FULL, THEN TAP A CARD TO PICK IT.`;
+    const fight =
+      kind === 'team'
+        ? 'ONE AT A TIME: WHEN ONE FAINTS, THE NEXT GOES IN. A WINNER STAYS IN WITH THE HEALTH AND COOLDOWNS IT HAD LEFT.'
+        : kind === 'melee'
+          ? 'YOUR FOE FIGHTS UP CLOSE TOO. GET IN, HIT, AND STEP OUT BEFORE IT HITS BACK.'
+          : 'YOUR FOE SHOOTS TOO. KEEP MOVING, AND USE THE ROCKS AND WALLS AS COVER.';
+    this.howTo(`HOW TO PLAY - ${MINI_INFO[kind].title}`, [
+      { demo: 'clash.stats', say: pick },
+      { demo: 'clash.move', say: `${fight} EVERY CREATURE FIGHTS AT LEVEL 8, SO THE PICK IS WHAT COUNTS.` },
+      { demo: 'clash.keys', say: keys },
+      { demo: 'clash.moves', say: `WIN AND YOU GET ${pr.win} TOKENS. LOSE AND NOTHING MORE IS TAKEN. NO XP IS EARNED IN A MINI GAME.` },
+    ]);
   }
 
   /** THE PACK: one price, nine different creatures face down, every one as likely as any other. */
@@ -1602,7 +1650,6 @@ export class CreatureHub extends Phaser.Scene {
    * controls, as this device works them.
    */
   private controls(): void {
-    const L = this.layer;
     const key = (k: string): string => capLabel(codeFor(`creatureclash:${k}`));
     const touch = isTouch();
     const steps: Array<{ demo: string; say: string }> = [
@@ -1621,9 +1668,15 @@ export class CreatureHub extends Phaser.Scene {
           : `${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} (OR 1 2 3) FIRE MOVES 1, 2 AND 3 STRAIGHT AT THE FOE. SPACE FIRES THE ONE PICKED. W A S D MOVES. ${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} CAN BE MOVED IN THE SETTINGS, UNDER CHANGE KEYS.`,
       },
     ];
+    this.howTo('HOW TO PLAY', steps);
+  }
+
+  /** HOW TO PLAY's pages: a picture and its words, a step at a time (Clash's and the mini games'). */
+  private howTo(title: string, steps: Array<{ demo: string; say: string }>): void {
+    const L = this.layer;
     this.howStep = Phaser.Math.Clamp(this.howStep, 0, steps.length - 1);
     const st = steps[this.howStep];
-    L.add(centerText(this, GAME_W / 2, 24, 'HOW TO PLAY', PALETTE.gold));
+    L.add(centerText(this, GAME_W / 2, 24, title, PALETTE.gold));
     // the picture, in its box, clipped to it
     const DX = 12;
     const DY = 38;
@@ -1658,7 +1711,7 @@ export class CreatureHub extends Phaser.Scene {
   /** HOW TO PLAY's picture, this frame (see `controls`). */
   private drawDemo(time: number): void {
     const d = this.demo;
-    if (!d || this.screen !== 'controls') return;
+    if (!d || (this.screen !== 'controls' && this.screen !== 'minihow')) return;
     d.g.clear();
     let used = 0;
     const lbl = (x: number, y: number, str: string, col: number = PALETTE.cream): void => {

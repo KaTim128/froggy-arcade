@@ -140,32 +140,28 @@ let run: MiniRun | null = null;
 export const currentMini = (): MiniRun | null => run;
 
 /**
- * ---- 5V5: PAY, THEN SEE (user, 5 Nov).  The five tokens buy the look at
- * ten creatures drawn at random; before paying you may walk away for
- * nothing.  Paid once: the pool stays yours, unchanged, until a battle is
- * started from it -- leaving the pick and coming back never charges again.
+ * ---- PAY, THEN SEE (user, 5 Nov: 5v5; 8 Nov: every mode).  The stake buys
+ * the look at the pool, drawn at random; before paying you may walk away
+ * for nothing.  Paid once: the pool stays yours, unchanged, until a fight
+ * is started from it -- leaving the pick and coming back never charges again.
  */
-let paidPool: string[] | null = null;
-export const paidTeamPool = (): string[] | null => paidPool;
-export function payForTeamPool(): { ok: boolean; msg: string } {
-  if (paidPool) return { ok: true, msg: '' };
-  const cost = MINI_PRICE.team.cost;
-  if (!ledger.debit(cost, 'creature')) return { ok: false, msg: `5V5 COSTS ${cost} TOKENS.` };
-  paidPool = drawPool('team');
+const paidPools: Partial<Record<MiniKind, string[]>> = {};
+export const paidPool = (kind: MiniKind): string[] | null => paidPools[kind] ?? null;
+export function payForPool(kind: MiniKind): { ok: boolean; msg: string } {
+  if (paidPools[kind]) return { ok: true, msg: '' };
+  const cost = MINI_PRICE[kind].cost;
+  if (!ledger.debit(cost, 'creature')) return { ok: false, msg: `${MINI_INFO[kind].title} COSTS ${cost} TOKENS.` };
+  paidPools[kind] = drawPool(kind);
   return { ok: true, msg: '' };
 }
 
-/** Confirm a pick: the run is on (a duel's two tokens go now; 5v5 paid at the pool). */
+/** Confirm a pick from a paid pool: the run is on (the stake went at the pool). */
 export function startMini(kind: MiniKind, picks: string[]): { ok: boolean; msg: string; run?: MiniRun } {
   const want = kind === 'team' ? TEAM_SIZE : 1;
   if (picks.length !== want || picks.some((p) => !creatureById(p))) return { ok: false, msg: kind === 'team' ? `PICK ${TEAM_SIZE}.` : 'PICK ONE.' };
-  if (kind === 'team') {
-    if (!paidPool || picks.some((p) => !paidPool!.includes(p))) return { ok: false, msg: 'PAY TO SEE THE POOL FIRST.' };
-    paidPool = null;
-  } else {
-    const cost = MINI_PRICE[kind].cost;
-    if (!ledger.debit(cost, 'creature')) return { ok: false, msg: `THIS MINI GAME COSTS ${cost} TOKENS.` };
-  }
+  const pool = paidPools[kind];
+  if (!pool || picks.some((p) => !pool.includes(p))) return { ok: false, msg: 'PAY TO SEE THE POOL FIRST.' };
+  delete paidPools[kind];
   run = { kind, me: picks.slice(), foe: drawFoes(kind, picks), bout: 0, done: false };
   return { ok: true, msg: 'FIGHT!', run };
 }
