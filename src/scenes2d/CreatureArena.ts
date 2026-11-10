@@ -31,7 +31,7 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { button, centerText, confirmDialog, forfeitLines, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { drawCreature } from '../art/creatureArt';
+import { drawCreature, gaitOf } from '../art/creatureArt';
 import { plainWords, TILE_PX } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
@@ -2992,15 +2992,50 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   /** Where the body is drawn, off its true spot, for its step and its lunge. */
-  private bodyMotion(f: Fighter): { ox: number; oy: number; k: number } {
+  private bodyMotion(f: Fighter): { ox: number; oy: number; k: number; hover: number } {
     let ox = 0;
     let oy = 0;
     let k = 1;
-    if (f.moving && !f.atk) {
+    let hover = 0;
+    const now = this.time.now / 1000;
+    const seed = (f === this.me ? 0 : 1.7);
+    const gait = gaitOf(f.c.body);
+    if (gait === 'fly') {
+      // off the ground over its shadow, bobbing with each wingbeat; moving,
+      // tipped forward into the way it is going
+      hover = (6 + Math.sin(now * 5 + seed) * 1.6) * f.scale;
+      if (f.moving && !f.atk) {
+        ox += f.face * 1.2 * f.scale;
+        oy += Math.sin(now * 10 + seed) * 0.6 * f.scale;
+      }
+    } else if (gait === 'swim') {
+      // gliding through the air as through water: a slow rise and fall, and
+      // moving, an undulating sway
+      hover = (3 + Math.sin(now * 2.2 + seed) * 1.2) * f.scale;
+      if (f.moving && !f.atk) {
+        oy += Math.sin(now * 6 + seed) * 1.1 * f.scale;
+        ox += f.face * 0.8 * f.scale;
+        k *= 1 + Math.sin(now * 6 + seed) * 0.03;
+      }
+    } else if (gait === 'float') {
+      hover = (4 + Math.sin(now * 1.5 + seed) * 2) * f.scale;
+      if (f.moving && !f.atk) ox += f.face * 0.8 * f.scale;
+    } else if (gait === 'slither') {
+      // low along the ground, never bouncing: a ripple down its length
+      if (f.moving && !f.atk) {
+        ox += Math.sin(f.stride * Math.PI * 2) * 0.9 * f.scale;
+        k *= 1 + Math.sin(f.stride * Math.PI * 4) * 0.035;
+      }
+    } else if (f.moving && !f.atk) {
       const ph = f.stride;
-      // up on each step (two a stride), leaning into the way it is going
+      // up on each step (two a stride), leaning into the way it is going,
+      // and the body settling a touch each time a foot comes down
       oy -= Math.abs(Math.sin(ph * Math.PI)) * 1.4 * f.scale;
       ox += f.face * 0.6 * f.scale;
+      k *= 1 - (1 - Math.abs(Math.sin(ph * Math.PI))) * 0.03;
+    } else if (!f.atk) {
+      // standing: breathing
+      k *= 1 + Math.sin(now * 2.4 + seed) * 0.012;
     }
     if (f.atk > 0) {
       const p = 1 - f.atk / ATK_T; // 0 -> 1 over the lunge
@@ -3022,7 +3057,7 @@ export class CreatureArena extends Phaser.Scene {
       oy -= 5 * Math.min(1, f.st.u_rear / 0.25) * f.scale;
       k *= 1.12;
     }
-    return { ox: Math.round(ox), oy: Math.round(oy), k };
+    return { ox: Math.round(ox), oy: Math.round(oy), k, hover: Math.round(hover) };
   }
 
   /** The step and lunge clocks, and the dust each footfall kicks up. */
@@ -6637,7 +6672,7 @@ export class CreatureArena extends Phaser.Scene {
       // ground each time a foot comes down.  Attacking, it lunges: it draws
       // back for a beat, throws itself at the aim, and settles -- and it
       // swells a touch at the moment of the blow, so a hit reads as effort.
-      const { ox, oy: oy0, k: k0 } = this.bodyMotion(f);
+      const { ox, oy: oy0, k: k0, hover } = this.bodyMotion(f);
       let oy = oy0;
       let k = k0;
       if (this.boss && f === this.foe && f.hp > 0) {
@@ -6666,7 +6701,11 @@ export class CreatureArena extends Phaser.Scene {
         for (let q = 0; q < 5; q++) g.fillStyle(0xffffff, 1).fillCircle(f.x - 5 + q * 2.5, f.y - 4 + (q % 2), 2.5);
         g.fillStyle(0x2a2a2a, 1).fillEllipse(f.x + f.face * 7, f.y - 2, 5, 4).fillRect(f.x - 4, f.y + 4, 1.5, 3).fillRect(f.x + 3, f.y + 4, 1.5, 3);
       } else {
-        drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate || f.st.u_ice ? 0 : f.moving ? t * 1.8 : t);
+        // its own clock: a walker's legs only stride while it walks, at its
+        // pace (stood still, barely a shift); wings and fins never stop
+        const gt = gaitOf(f.c.body);
+        const pace = f.moving ? 0.8 + f.c.speed / 50 : gt === 'walk' || gt === 'slither' ? 0.3 : 1;
+        drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate || f.st.u_ice ? 0 : t * pace, hover);
       }
       if ((f.st.hail ?? 0) > 0) for (let q = 0; q < (f.st.n_hail ?? 0); q++) g.fillStyle(0xe8fcff, 1).fillCircle(f.x + Math.cos(t * 3 + (q * Math.PI) / 3) * 14 * f.scale, f.y + Math.sin(t * 3 + (q * Math.PI) / 3) * 10 * f.scale, 1.6);
       if (f.st.u_ice) g.fillStyle(0xbfe8ff, 0.5).fillRect(f.x - 9 * f.scale, f.y - 11 * f.scale, 18 * f.scale, 18 * f.scale).lineStyle(1, 0xffffff, 0.9).strokeRect(f.x - 9 * f.scale, f.y - 11 * f.scale, 18 * f.scale, 18 * f.scale);
