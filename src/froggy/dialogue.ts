@@ -68,6 +68,8 @@ export class DialogueBox {
   private container: Phaser.GameObjects.Container;
   private label: Phaser.GameObjects.BitmapText;
   private prompt: Phaser.GameObjects.BitmapText;
+  private panel: Phaser.GameObjects.Rectangle;
+  private who: Phaser.GameObjects.BitmapText;
   private highlight: Phaser.GameObjects.Rectangle;
 
   private lines: DialogueLine[] = [];
@@ -94,6 +96,8 @@ export class DialogueBox {
     const portraitWell = scene.add.rectangle(WELL.x, BOX_Y + 3, WELL.w, WELL.h, PALETTE.plum, 0.85).setOrigin(0, 0);
     portraitWell.setStrokeStyle(1, PALETTE.neon, 0.6);
     const who = text(scene, 52, BOX_Y + 4, 'FROGGY', PALETTE.neon);
+    this.panel = panel;
+    this.who = who;
 
     this.label = text(scene, 52, BOX_Y + 13, '', PALETTE.cream).setMaxWidth(GAME_W - 66);
     this.prompt = text(scene, GAME_W - 14, BOX_Y + BOX_H - 11, '>', PALETTE.gold).setVisible(false);
@@ -139,6 +143,24 @@ export class DialogueBox {
     });
   }
 
+  /**
+   * (user, 10 Nov) A line longer than two rows used to be pushed up the
+   * screen by keepOnScreen until it ran over his name.  The box grows UP to
+   * fit the whole line instead: the name stays over the words, the words
+   * stay in the box, and the bottom edge stays where it was.
+   */
+  private fitBox(full: string): void {
+    this.label.setText(full);
+    const need = Math.ceil(this.label.height);
+    const room = BOX_H - 15;
+    const extra = Math.max(0, need - room + 2);
+    const top = BOX_Y - extra;
+    this.panel.setY(top).setSize(GAME_W, BOX_H + extra);
+    this.panel.setStrokeStyle(1, PALETTE.neon);
+    this.who.setY(top + 4);
+    this.label.setY(top + 13);
+  }
+
   isActive(): boolean {
     return this.state !== 'idle';
   }
@@ -155,6 +177,7 @@ export class DialogueBox {
     }
     this.revealed = 0;
     this.acc = 0;
+    this.fitBox(stripMarkup(line.text));
     this.label.setText('');
     this.prompt.setVisible(false);
 

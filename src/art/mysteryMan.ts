@@ -18,6 +18,7 @@ import { LOOKS, Player } from './player';
 export class MysteryMan {
   readonly root: Phaser.GameObjects.Container;
   private breath: Phaser.Tweens.Tween;
+  private body: Player;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     const parts: Phaser.GameObjects.GameObject[] = [];
@@ -36,6 +37,7 @@ export class MysteryMan {
     body.stride(-1, 0);
     body.stand();
     add(body.sprite);
+    this.body = body;
 
     this.root = scene.add.container(x, y, parts as Phaser.GameObjects.GameObject[]);
     this.root.setDepth(60);
@@ -54,6 +56,11 @@ export class MysteryMan {
 
   get x(): number {
     return this.root.x;
+  }
+
+  /** Turn to look one way or the other (1 right, -1 left), on the spot. */
+  face(dir: number): void {
+    this.body.face(dir);
   }
 
   destroy(): void {

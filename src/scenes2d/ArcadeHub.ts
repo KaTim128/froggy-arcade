@@ -21,7 +21,6 @@ import { store, type GameId } from '../core/state';
 import { KEY_ITEM, ensureKeyInPocket, holdingKey } from '../game/inventory';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
-import { isTouch } from '../core/device';
 import { closeAndShowOut, showOutAtNight } from '../game/closingPull';
 import { closingTime, evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
@@ -864,7 +863,8 @@ export class ArcadeHub extends Phaser.Scene {
    */
   private showFrogLine(): void {
     this.hideFrogLine();
-    const LINE = isTouch() ? '"FANCY A GAME? PRESS INTERACT - OR TAKE A LOOK AT THE PRIZES!"' : '"FANCY A GAME? PRESS E - OR TAKE A LOOK AT THE PRIZES!"';
+    // (user, 10 Nov) in his own voice, not the game's: no keys, no buttons
+    const LINE = '"FANCY A GAME? ONE TOKEN, YOU AND ME. OR HAVE A LOOK AT THE PRIZES!"';
     const PAD = 7;
     const HEAD = 11;
     const body = text(this, 22, 0, LINE, PALETTE.cream).setMaxWidth(GAME_W - 46);
@@ -1678,16 +1678,16 @@ export class ArcadeHub extends Phaser.Scene {
     const x = ROOM.right + 1;
     const w = GAME_W - ROOM.right - 2;
     const wall = Phaser.Display.Color.IntegerToColor(PALETTE.ink);
-    // (user, 8 Nov: steel, not wood -- and barely visible: a tenth of the
-    // way from the wall's colour to a cold grey, a faint sheen and rivets)
+    // (user, 8 Nov: steel, not wood -- and barely visible; 10 Nov: fainter
+    // still -- a twentieth of the way to a cold grey, seams and rivets ghosts)
     const warm = Phaser.Display.Color.IntegerToColor(0x8a929c);
-    const mix = Phaser.Display.Color.Interpolate.ColorWithColor(wall, warm, 100, 12);
+    const mix = Phaser.Display.Color.Interpolate.ColorWithColor(wall, warm, 100, 5);
     this.add.rectangle(x, top, w, HIDDEN_DOOR.h, Phaser.Display.Color.GetColor(mix.r, mix.g, mix.b)).setOrigin(0, 0).setDepth(0.57);
-    this.add.rectangle(x, top, 1, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
-    this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
-    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 3, 1, 0xc8d0d8).setOrigin(0, 0).setDepth(0.58).setAlpha(0.12);
-    for (const ry of [top + 3, top + HIDDEN_DOOR.h - 4]) this.add.rectangle(x + w - 3, ry, 1, 1, 0xc8d0d8).setOrigin(0, 0).setDepth(0.58).setAlpha(0.1);
-    this.add.rectangle(x + 1, top + 1, w - 2, 1, 0xffffff).setOrigin(0, 0).setDepth(0.58).setAlpha(0.04);
+    this.add.rectangle(x, top, 1, HIDDEN_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.06);
+    this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(0.06);
+    this.add.rectangle(x + 2, HIDDEN_DOOR.y + 2, 3, 1, 0xc8d0d8).setOrigin(0, 0).setDepth(0.58).setAlpha(0.06);
+    for (const ry of [top + 3, top + HIDDEN_DOOR.h - 4]) this.add.rectangle(x + w - 3, ry, 1, 1, 0xc8d0d8).setOrigin(0, 0).setDepth(0.58).setAlpha(0.05);
+    this.add.rectangle(x + 1, top + 1, w - 2, 1, 0xffffff).setOrigin(0, 0).setDepth(0.58).setAlpha(0.02);
   }
 
   /** Into CREATURE CLASH.  Nothing is paid here: the packs and the battles inside ask. */
@@ -2068,7 +2068,8 @@ export class ArcadeHub extends Phaser.Scene {
     } else if (t.kind === 'clash') {
       msg = '[E] CREATURE CLASH';
     } else if (t.kind === 'froggy') {
-      msg = '[E] PLAY WITH FROGGY - 1 TOKEN';
+      // ([E] reads PLAY on a phone: 'PLAY PLAY WITH FROGGY' said it twice)
+      msg = '[E] A GAME WITH FROGGY - 1 TOKEN';
       color = ledger.balance() >= 1 ? PALETTE.gold : PALETTE.ash;
     } else if (t.kind === 'crane') {
       const cost = CRANE_COST[t.crane.kind];

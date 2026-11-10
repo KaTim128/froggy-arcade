@@ -76,7 +76,10 @@ export class BackAlley extends Phaser.Scene {
     else {
       // the back door — ajar, and behind it nothing but black
       // a door the drifter's size: 32 high, about 2.1 m, where it was 50
-      this.add.rectangle(DOOR_X + 4, 118, 22, 32, PALETTE.brown).setOrigin(0, 0);
+      // (user, 10 Nov) a steel door, like the hidden one inside
+      this.add.rectangle(DOOR_X + 2, 116, 26, 34, 0x1a1e24).setOrigin(0, 0);
+      this.add.rectangle(DOOR_X + 4, 118, 22, 32, 0x4a525c).setOrigin(0, 0);
+      this.add.rectangle(DOOR_X + 4, 118, 22, 1, 0x7a848e).setOrigin(0, 0);
       this.add.rectangle(DOOR_X + 18, 118, 8, 32, PALETTE.black).setOrigin(0, 0);
       this.add.rectangle(DOOR_X + 17, 118, 1, 32, PALETTE.moon).setOrigin(0, 0).setAlpha(0.25);
     }
@@ -114,11 +117,19 @@ export class BackAlley extends Phaser.Scene {
   private paintChainedDoor(c: (n: number) => number): void {
     // Sized to the drifter: 22 wide and 32 high, a standard door's 0.9 by
     // 2.1 m, where it used to be 50 high.
-    this.add.rectangle(DOOR_X + 2, 116, 26, 34, c(0x2a2018)).setOrigin(0, 0);
-    this.add.rectangle(DOOR_X + 4, 118, 22, 32, c(PALETTE.brown)).setOrigin(0, 0);
-    this.add.rectangle(DOOR_X + 6, 121, 18, 11, c(0x5a3c24)).setOrigin(0, 0).setAlpha(0.6);
-    this.add.rectangle(DOOR_X + 6, 135, 18, 12, c(0x5a3c24)).setOrigin(0, 0).setAlpha(0.6);
-    this.add.rectangle(DOOR_X + 22, 134, 2, 2, c(PALETTE.steel)).setOrigin(0, 0);
+    // (user, 10 Nov) steel, not wood: a grey sheet-steel leaf in a dark steel
+    // frame, two pressed panels, a seam, rivets and a kick plate
+    this.add.rectangle(DOOR_X + 2, 116, 26, 34, c(0x1a1e24)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 4, 118, 22, 32, c(0x5a636c)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 4, 118, 22, 1, c(0x8a949e)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 4, 118, 1, 32, c(0x48505a)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 6, 121, 18, 11, c(0x4a525c)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 6, 121, 18, 1, c(0x7a848e)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 6, 135, 18, 10, c(0x4a525c)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 6, 135, 18, 1, c(0x7a848e)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 4, 146, 22, 3, c(0x6a7480)).setOrigin(0, 0);
+    for (const [rx, ry] of [[DOOR_X + 5, 119], [DOOR_X + 24, 119], [DOOR_X + 5, 147], [DOOR_X + 24, 147]]) this.add.rectangle(rx, ry, 1, 1, c(0xb8c0c8)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 22, 134, 2, 2, c(0xb8c0c8)).setOrigin(0, 0);
     // the chains: links laid along two diagonals, alternately face-on and edge-on
     const g = this.add.graphics();
     const steel = c(0x9aa4ae);
@@ -230,19 +241,21 @@ function paintAlley(scene: Phaser.Scene, key: string, c: (n: number) => number, 
   let seed = 7;
   const R = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
-  // the back wall: bricks
-  g.fillStyle = col(0x3c2a30);
+  // the back wall: bricks -- (user, 10 Nov) the arcade's own side, so the
+  // arcade front's slate-grey brick (art/exterior), not red: the same slate
+  // with ink mortar, the odd brick a shade lighter toward steel
+  g.fillStyle = col(0x202a36);
   g.fillRect(0, 0, GAME_W, 152);
   for (let row = 0; row * 6 < 152; row++) {
     const off = row % 2 ? 6 : 0;
     for (let x = -off; x < GAME_W; x += 12) {
-      const tone = [0x6a3a34, 0x5e3430, 0x74423a, 0x583030][Math.floor(R() * 4)];
+      const tone = [0x34404f, 0x384656, 0x303c4c, 0x404c5c][Math.floor(R() * 4)];
       g.fillStyle = col(tone);
       g.fillRect(x + 1, row * 6 + 1, 10, 4);
-      g.fillStyle = col(0x8a5446);
+      g.fillStyle = col(0x4a586a);
       g.fillRect(x + 1, row * 6 + 1, 10, 1);
       if (R() < 0.04) {
-        g.fillStyle = col(0x2a1c20);
+        g.fillStyle = col(0x141a24);
         g.fillRect(x + 3, row * 6 + 2, 4, 2);
       }
     }
@@ -250,7 +263,7 @@ function paintAlley(scene: Phaser.Scene, key: string, c: (n: number) => number, 
   // grime running down from the top, darker toward the ground
   const grime = g.createLinearGradient(0, 0, 0, 152);
   grime.addColorStop(0, 'rgba(0,0,0,0.05)');
-  grime.addColorStop(1, 'rgba(10,6,10,0.4)');
+  grime.addColorStop(1, 'rgba(10,6,10,0.28)');
   g.fillStyle = grime;
   g.fillRect(0, 0, GAME_W, 152);
   if (sky === 'night') {
@@ -276,10 +289,10 @@ function paintAlley(scene: Phaser.Scene, key: string, c: (n: number) => number, 
   }
   // the side walls, in shadow, with their own brick edges
   for (const [x, w] of [[0, 40], [GAME_W - 26, 26]]) {
-    g.fillStyle = col(0x1c1418);
+    g.fillStyle = col(0x10151d);
     g.fillRect(x, 0, w, GAME_H);
     for (let y = 0; y < GAME_H; y += 6) {
-      g.fillStyle = col(0x2a1e22);
+      g.fillStyle = col(0x1a222e);
       g.fillRect(x + ((y / 6) % 2 ? 2 : 6), y + 1, w - 8, 4);
     }
   }

@@ -237,6 +237,9 @@ export class IntroCutscene extends Phaser.Scene {
     // He walks in from the left and stops over you.  No music sting; he is a
     // man on a pavement, and the game is careful not to say otherwise.
     const man = new MysteryMan(this, -20, KERB_Y + 4);
+    // (user, 10 Nov) he looks at you: walking in, talking, and handing the
+    // tokens over -- you are sat to his right
+    man.face(1);
     this.tweens.add({
       targets: man.root,
       x: MAN_X,
