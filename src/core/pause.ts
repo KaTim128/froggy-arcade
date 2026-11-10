@@ -256,8 +256,10 @@ function countsIn(sc: Phaser.Scene): boolean {
   const key = sc.scene.key;
   if (!IN_GAME.has(key)) return false;
   if (key !== 'Minigame') return true;
-  const m = sc as unknown as { started?: boolean; gameId?: string };
-  return !!m.started && !NO_COUNT.has(m.gameId ?? '');
+  const m = sc as unknown as { started?: boolean; gameId?: string; mod?: { inPlay?: () => boolean } };
+  // (user, 8 Nov: only real play counts in -- never a game's own picking,
+  // like Croaked's PICK YOUR SIDE, where nothing is moving yet)
+  return !!m.started && !NO_COUNT.has(m.gameId ?? '') && (m.mod?.inPlay?.() ?? true);
 }
 
 /**

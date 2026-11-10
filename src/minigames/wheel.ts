@@ -183,7 +183,7 @@ const S_MID = 2;
 const S_HIGH = 0.8;
 const S_RESPIN = 3;
 const S_BONUS = 2.5;
-const S_BLANK = (100 - 38 - 18 - 8 - 2.4 - 0.4 - 0.08 - 0.02 - 0.002 - S_RESPIN - S_BONUS) / 2;
+const S_BLANK = (100 - 38 - 18 - 8 - 2.4 - 0.4 - 0.08 - 0.02 - 0.001 - S_RESPIN - S_BONUS) / 2;
 export const FACES: Array<{ pays: number; share: number }> = [
   { pays: 1, share: S_SMALL },
   { pays: 40, share: S_MID },
@@ -195,7 +195,7 @@ export const FACES: Array<{ pays: number; share: number }> = [
   { pays: 20, share: S_EVEN },
   { pays: 50, share: S_MID },
   { pays: 3, share: S_SMALL },
-  { pays: 5000, share: 0.002 },
+  { pays: 5000, share: 0.001 }, // (user, 8 Nov: one in a hundred thousand -- 0.001%)
   { pays: 25, share: S_EVEN },
   { pays: 5, share: S_SMALL },
   { pays: BONUS, share: S_BONUS },
@@ -330,6 +330,8 @@ function build(): void {
 /** Total share of the rim across a set of payout values, formatted as a percent. */
 function pctOf(pays: number[]): string {
   const total = FACES.filter((f) => pays.includes(f.pays)).reduce((sum, f) => sum + f.share, 0);
+  // (user, 8 Nov: the 5000 is 0.001%, never shown as 0.00%)
+  if (total > 0 && total < 0.01) return `${parseFloat(total.toFixed(3)) || 0.001}%`;
   if (total > 0 && total < 0.1) return `${total.toFixed(2)}%`;
   const rounded = Math.round(total * 10) / 10;
   return `${rounded % 1 === 0 ? rounded : rounded.toFixed(1)}%`;

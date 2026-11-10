@@ -80,24 +80,37 @@ export class RouletteTable {
     g.fillStyle(0x3a2616, 1).fillEllipse(wx, wy + 1.5, 21, 13);
     g.fillStyle(BRASS, 1).fillEllipse(wx, wy, 19, 11);
     g.fillStyle(0x5e3c22, 1).fillEllipse(wx, wy, 16.5, 9);
-    const ring = scene.add.graphics().setDepth(d + 0.0001).setPosition(wx, wy).setScale(1, 0.55);
+    // (user, 8 Nov: the ring was a flattened circle turned as a whole, so
+    // the flat oval itself spun round.  The oval stays put and the pockets
+    // turn inside it: redrawn each frame on the tilted ellipse.)
+    const ring = scene.add.graphics().setDepth(d + 0.0001).setPosition(wx, wy);
     const N = WHEEL_ORDER.length;
-    for (let i = 0; i < N; i++) {
-      const n = WHEEL_ORDER[i];
-      ring.fillStyle(n === 0 ? ZERO : RED_NUMBERS.has(n) ? RED : BLACK, 1);
-      ring.slice(0, 0, 7.6, (i / N) * Math.PI * 2, ((i + 1) / N) * Math.PI * 2, false).fillPath();
-    }
-    ring.fillStyle(0x7a5232, 1).fillCircle(0, 0, 4.2);
-    ring.fillStyle(BRASS, 1).fillCircle(0, 0, 1.8);
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2;
-      ring.lineStyle(0.8, BRASS, 1).lineBetween(0, 0, Math.cos(a) * 3.6, Math.sin(a) * 3.6);
-    }
-    scene.tweens.add({ targets: ring, rotation: Math.PI * 2, duration: 9000, repeat: -1 });
+    const RX = 7.6;
+    const RY = 7.6 * 0.55;
+    const paint = (turn: number): void => {
+      ring.clear();
+      for (let i = 0; i < N; i++) {
+        const n = WHEEL_ORDER[i];
+        const a0 = turn + (i / N) * Math.PI * 2;
+        const a1 = turn + ((i + 1) / N) * Math.PI * 2;
+        ring.fillStyle(n === 0 ? ZERO : RED_NUMBERS.has(n) ? RED : BLACK, 1);
+        ring.fillTriangle(0, 0, Math.cos(a0) * RX, Math.sin(a0) * RY, Math.cos(a1) * RX, Math.sin(a1) * RY);
+      }
+      ring.fillStyle(0x7a5232, 1).fillEllipse(0, 0, 8.4, 8.4 * 0.55);
+      ring.fillStyle(BRASS, 1).fillEllipse(0, 0, 3.6, 3.6 * 0.55);
+      for (let i = 0; i < 4; i++) {
+        const k = turn + (i / 4) * Math.PI * 2;
+        ring.lineStyle(0.8, BRASS, 1).lineBetween(0, 0, Math.cos(k) * 3.6, Math.sin(k) * 3.6 * 0.55);
+      }
+    };
+    let turn = 0;
+    paint(0);
     // the ball, riding the track the other way
     const ball = scene.add.circle(wx, wy, 0.9, 0xffffff).setDepth(d + 0.0002);
     let a = 0;
     scene.events.on(Phaser.Scenes.Events.UPDATE, (_t: number, dt: number) => {
+      turn += dt * ((Math.PI * 2) / 9000);
+      paint(turn);
       a -= dt * 0.0016;
       ball.setPosition(wx + Math.cos(a) * 8.2, wy + Math.sin(a) * 4.4);
     });
