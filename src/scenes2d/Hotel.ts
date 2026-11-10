@@ -507,12 +507,13 @@ export class Hotel extends Phaser.Scene {
       const ly = 154;
       // its shadow, then the door itself, foreshortened flat on the marble
       g.fillStyle(0x000000, 0.35).fillPoints([{ x: lx - 13, y: ly + 2 }, { x: lx + 22, y: ly }, { x: lx + 25, y: ly + 7 }, { x: lx - 10, y: ly + 9 }], true);
-      g.fillStyle(0x6a6e74, 1).fillPoints([{ x: lx - 14, y: ly }, { x: lx + 21, y: ly - 2 }, { x: lx + 24, y: ly + 5 }, { x: lx - 11, y: ly + 7 }], true);
-      g.fillStyle(0xa8acb0, 1).fillPoints([{ x: lx - 14, y: ly }, { x: lx + 21, y: ly - 2 }, { x: lx + 21, y: ly - 1 }, { x: lx - 14, y: ly + 1 }], true);
+      g.fillStyle(0x8a9088, 1).fillPoints([{ x: lx - 14, y: ly }, { x: lx + 21, y: ly - 2 }, { x: lx + 24, y: ly + 5 }, { x: lx - 11, y: ly + 7 }], true);
+      g.fillStyle(0xa2a8a0, 1).fillPoints([{ x: lx - 14, y: ly }, { x: lx + 21, y: ly - 2 }, { x: lx + 21, y: ly - 1 }, { x: lx - 14, y: ly + 1 }], true);
       // its two pressed panels, the push bar across it, the kick plate
-      g.fillStyle(0x5a5e64, 1).fillRect(lx - 6, ly + 1, 9, 4).fillRect(lx + 6, ly, 8, 4);
+      g.fillStyle(0x1e2630, 1).fillRect(lx - 9, ly + 1, 7, 3);
+      g.fillStyle(0xa0201c, 1).fillRect(lx + 7, ly + 1, 4, 3);
       g.fillStyle(0xc8c8c0, 1).fillRect(lx + 4, ly - 1, 1, 6);
-      g.fillStyle(0xb8963e, 1).fillRect(lx + 18, ly - 1, 2, 6);
+      g.fillStyle(0x6a7078, 1).fillRect(lx + 18, ly - 1, 2, 6);
       // a dent where it was hit, and a hinge still bolted to it
       g.fillStyle(0x3a3e44, 1).fillRect(lx - 2, ly + 2, 3, 2);
       g.fillStyle(0x9a9ea4, 1).fillRect(lx - 13, ly + 1, 2, 2).fillRect(lx - 12, ly + 5, 2, 2);
