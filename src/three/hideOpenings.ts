@@ -38,6 +38,8 @@ interface Hole {
   x1: number;
   y0: number;
   y1: number;
+  /** A round hole inscribed in the box (a peephole), not a slot. */
+  round?: boolean;
 }
 
 /** The box round the eye, in the spot's own space, and the face you look out of. */
@@ -155,13 +157,13 @@ function plan(kind: SpotKind, skin: SpotSkin | undefined, eye: HideEye): Plan {
   }
   if (kind === 'chest') {
     const base = { x0: -0.5, x1: 0.5, y0: 0.1, y1: 0.74, z0: -0.35, face: 0.4 };
-    if (skin === 'crate') {
-      // the gaps between the boards
-      return { ...base, ...wood, holes: [{ x0: -0.48, x1: 0.48, y0: 0.46, y1: 0.505 }, { x0: -0.48, x1: 0.48, y0: 0.55, y1: 0.6 }] };
-    }
+    // (user, 10 Nov) a box you are really shut in: one small round hole to
+    // see out of at eye height, not a slot the width of it -- a slot made it
+    // feel like you were not hidden at all
+    const R = 0.032;
+    const peep: Hole = { x0: -R, x1: R, y0: eye.y - R, y1: eye.y + R, round: true };
     const tint = skin === 'prize' ? { color: 0x221620, edge: 0x7a5064 } : skin === 'toybox' ? { color: 0x101a2a, edge: 0x4a6488 } : wood;
-    // the lid held up off the rim on your fingers
-    return { ...base, ...tint, holes: [{ x0: -0.46, x1: 0.46, y0: 0.62, y1: 0.72 }] };
+    return { ...base, ...tint, holes: [peep] };
   }
   // ---- under something
   if (skin === 'tunnel') {
@@ -232,6 +234,11 @@ export function buildOpening(kind: SpotKind, skin: SpotSkin | undefined, eye: Hi
   shape.closePath();
   for (const h of p.holes) {
     const hole = new THREE.Path();
+    if (h.round) {
+      hole.absarc(-(h.x0 + h.x1) / 2, (h.y0 + h.y1) / 2, (h.x1 - h.x0) / 2, 0, Math.PI * 2, true);
+      shape.holes.push(hole);
+      continue;
+    }
     hole.moveTo(-h.x1, h.y0);
     hole.lineTo(-h.x1, h.y1);
     hole.lineTo(-h.x0, h.y1);
@@ -247,6 +254,15 @@ export function buildOpening(kind: SpotKind, skin: SpotSkin | undefined, eye: Hi
   const t = 0.003;
   for (const h of p.holes) {
     const z = p.face - 0.005;
+    if (h.round) {
+      // a ragged pale rim round the hole: the cut edge of the board
+      const r = (h.x1 - h.x0) / 2;
+      const rim = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.006, 24), edge);
+      rim.rotation.y = Math.PI;
+      rim.position.set((h.x0 + h.x1) / 2, (h.y0 + h.y1) / 2, z);
+      g.add(rim);
+      continue;
+    }
     const w = h.x1 - h.x0;
     const hh = h.y1 - h.y0;
     panel(g, edge, w, t, (h.x0 + h.x1) / 2, h.y1 - t / 2, z, Math.PI);
