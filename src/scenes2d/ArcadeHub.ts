@@ -21,6 +21,7 @@ import { store, type GameId } from '../core/state';
 import { KEY_ITEM, ensureKeyInPocket, holdingKey } from '../game/inventory';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
+import { isTouch } from '../core/device';
 import { closeAndShowOut, showOutAtNight } from '../game/closingPull';
 import { closingTime, evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
@@ -69,6 +70,7 @@ type Target =
   | { kind: 'annex' }
   | { kind: 'crane'; crane: (typeof CRANE_SPOTS)[number] }
   | { kind: 'clash' }
+  | { kind: 'froggy' }
   | null;
 
 /** The cash exchange machine, on the floor in the bottom-right corner. */
@@ -691,6 +693,16 @@ export class ArcadeHub extends Phaser.Scene {
       this.frogOnCounter = true;
       x = FROG_POST.x;
       half = FROGGY_DESIGN.halfW * FROG_SCALE * 0.8;
+      // (user, 8 Nov) a click on Froggy is a game with him, not the prizes
+      this.add
+        .zone(FROG_POST.x, FROG_CUT - 12, 26, 24)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () =>
+          this.walkTo(
+            doorSpot({ x: FROG_POST.x, y: COUNTER_STAND + 2 }, (px, py) => py < COUNTER_REACH && Math.abs(px - FROG_POST.x) < POST_RANGE),
+            () => this.playFroggy(),
+          ),
+        );
     }
     // And where he meets the counter, the top of it is in his shade: a soft
     // dark band along its back edge, the width of him, so the counter reads
@@ -825,7 +837,9 @@ export class ArcadeHub extends Phaser.Scene {
     const gone = dx > 24 || out > 16;
     if (near && !this.frogSpoke && !this.busy()) {
       this.frogSpoke = true;
-      this.showFrogLine();
+      // (user, 8 Nov) the first time you come up to him, he asks you to play
+      if (!store.get().froggyDuelOffered) this.offerFroggyDuel();
+      else this.showFrogLine();
     } else if (gone) {
       // He says it EVERY TIME you come over.  The gap between the two numbers
       // is only there to stop a player stood exactly on the line setting him
@@ -849,7 +863,7 @@ export class ArcadeHub extends Phaser.Scene {
    */
   private showFrogLine(): void {
     this.hideFrogLine();
-    const LINE = '"FEEL FREE TO TAKE A LOOK AT THE PRIZES AVAILABLE!"';
+    const LINE = isTouch() ? '"FANCY A GAME? PRESS INTERACT - OR TAKE A LOOK AT THE PRIZES!"' : '"FANCY A GAME? PRESS E - OR TAKE A LOOK AT THE PRIZES!"';
     const PAD = 7;
     const HEAD = 11;
     const body = text(this, 22, 0, LINE, PALETTE.cream).setMaxWidth(GAME_W - 46);
@@ -860,6 +874,45 @@ export class ArcadeHub extends Phaser.Scene {
     panel.setStrokeStyle(1, PALETTE.mossLight);
     const who = text(this, 22, y + PAD, 'FROGGY', PALETTE.mossLight);
     this.frogSays = this.add.container(0, 0, [panel, who, body]).setDepth(880);
+  }
+
+  /**
+   * ---- A GAME WITH FROGGY (user, 8 Nov): MINI DUELS has no machine now --
+   * Froggy is it.  The first time you come up to him he asks, once; ACCEPT
+   * opens the duels, DECLINE walks away from it.  After that, E at him (or a
+   * click on him) is a game whenever you like: one token in, two for a win,
+   * nothing for a loss, as the machine was.
+   */
+  private offerFroggyDuel(): void {
+    store.patch({ froggyDuelOffered: true });
+    store.flush();
+    this.hideFrogLine();
+    this.walker.cancel();
+    this.talk = openTalkPanel(this, {
+      who: 'FROGGY',
+      color: PALETTE.mossLight,
+      line: "\"I'M GETTING KINDA BORED... WANNA PLAY A RANDOM GAME WITH ME? IF YOU WIN, I'LL GIVE YOU A TOKEN! BUT IF YOU LOSE... I'LL BE TAKING YOURS INSTEAD. DEAL?\"",
+      options: [
+        { label: 'DEAL!', fn: () => (this.closeTalk(), this.playFroggy()) },
+        { label: 'NO THANKS', fn: () => this.closeTalk() },
+      ],
+    });
+  }
+
+  /** A game of MINI DUELS with Froggy: its card, with what it costs. */
+  private playFroggy(): void {
+    if (this.busy()) return;
+    if (!store.get().froggyDuelOffered) {
+      this.offerFroggyDuel();
+      return;
+    }
+    if (!canEnter('Minigame', store.get(), {})) {
+      audio.sfx('buzzer');
+      return;
+    }
+    this.locked = true;
+    this.hideFrogLine();
+    fadeToScene(this, 'Minigame', { id: 'tictactoe', from: 'ArcadeHub' });
   }
 
   private hideFrogLine(): void {
@@ -1543,6 +1596,8 @@ export class ArcadeHub extends Phaser.Scene {
   private spawnPoint(fallback: { x: number; y: number }): { x: number; y: number } {
     // Back through the right-hand doorway: stood just inside it, a step clear
     // of its interact zone so a stray click does not walk you back out.
+    // back from a game with Froggy: stood at the counter in front of him
+    if (this.returnTo === 'tictactoe') return { x: FROG_POST.x, y: COUNTER_STAND + 4 };
     // back from a claw machine or from CREATURE CLASH: stood in front of it
     const crane = CRANE_SPOTS.find((c) => c.kind === this.atProp);
     if (crane) return { x: crane.x, y: crane.y + 12 };
@@ -1757,6 +1812,10 @@ export class ArcadeHub extends Phaser.Scene {
       this.useClash();
       return;
     }
+    if (t.kind === 'froggy') {
+      this.playFroggy();
+      return;
+    }
 
     if (t.kind === 'bell') {
       // PRD EC-7: fifty rings, fifty nothings.  No counter, no easter egg.
@@ -1959,6 +2018,9 @@ export class ArcadeHub extends Phaser.Scene {
     // it has to be up.  Forty-four is past everywhere you are allowed to stand
     // in front of it and still nowhere near the machines, which are eighty
     // pixels further down the room and answer first anyway.
+    // FROGGY FIRST: stood at him you are playing him, anywhere else along
+    // the counter you are looking at the prizes
+    if (this.frogOnCounter && py < COUNTER_REACH && Math.abs(px - FROG_POST.x) < POST_RANGE) return { kind: 'froggy' };
     if (py < COUNTER_REACH && px > COUNTER.x && px < COUNTER.x + COUNTER.w) {
       // The right-hand end of the counter is a PERSON, not a shelf: stood
       // there you are talking to whoever is on it, and anywhere else along it
@@ -2000,6 +2062,9 @@ export class ArcadeHub extends Phaser.Scene {
       msg = '[E] BACK ROOM';
     } else if (t.kind === 'clash') {
       msg = '[E] CREATURE CLASH';
+    } else if (t.kind === 'froggy') {
+      msg = '[E] PLAY WITH FROGGY - 1 TOKEN';
+      color = ledger.balance() >= 1 ? PALETTE.gold : PALETTE.ash;
     } else if (t.kind === 'crane') {
       const cost = CRANE_COST[t.crane.kind];
       msg = `[E] ${t.crane.title} - ${cost} TOKENS`;
@@ -2023,7 +2088,7 @@ export class ArcadeHub extends Phaser.Scene {
     // on the prize case or on the machine itself -- covering the very thing it
     // is naming.  For those two it goes on the carpet in front of him instead,
     // which is empty floor in both cases.
-    const below = t.kind === 'counter' || t.kind === 'staff';
+    const below = t.kind === 'counter' || t.kind === 'staff' || t.kind === 'froggy';
     const y = below ? this.player.y + 15 : this.player.y - 34;
     this.prompt.setPosition(x, y).setVisible(true);
     fitPrompt(this.promptPlate, this.prompt);

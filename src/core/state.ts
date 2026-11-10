@@ -153,6 +153,8 @@ export interface GameState {
    * to the key, and the dealer goes back to dealing.
    */
   staffAskedFroggy: boolean;
+  /** Froggy has asked you to play him (MINI DUELS) -- once; after that E at him plays. */
+  froggyDuelOffered: boolean;
   dealerAskedFroggy: boolean;
   /**
    * Seconds this profile has been played, with the game open and in front of
@@ -412,6 +414,7 @@ function defaultState(): GameState {
     keyRewardClaimed: false,
     sawApparition: false,
     staffAskedFroggy: false,
+    froggyDuelOffered: false,
     dealerAskedFroggy: false,
     playSeconds: 0,
     items: [],
