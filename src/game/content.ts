@@ -195,10 +195,10 @@ export const CABINETS: CabinetDef[] = [
   { id: 'croaked', title: 'CROAKED', tier: 'medium', cost: 10, reward: 20, x: 272, y: 96, color: 0x1f8a8a, room: 'annex', symbol: 'CR', motif: 'maze' },
 
   // ---- and the room at the back, where none of it is a game
-  // Three tokens a spin, every spin raised through the shell as it is pulled
+  // Two tokens a spin (SPIN_COST), every spin raised through the shell as it is pulled
   // -- the first one too, so walking up, reading the machine and walking off
   // again costs nothing.  The wins are paid the same way.  See slots.ts.
-  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 3, reward: 10, x: 66, y: 162, color: 0xff4fa3, room: 'casino', symbol: 'FS', motif: 'reels', freeToEnter: true },
+  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 2, reward: 10, x: 66, y: 162, color: 0xff4fa3, room: 'casino', symbol: 'FS', motif: 'reels', freeToEnter: true },
   // The table takes a minimum, not a price: `cost` is the ante Froggy will not
   // deal under, and `reward` is what that ante pays back at 2x.  Anything above
   // it is raised at the table through the shell (MinigameApi.raise).
