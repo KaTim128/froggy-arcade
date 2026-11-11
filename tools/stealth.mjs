@@ -375,7 +375,56 @@ try {
     const low = Object.entries(r).filter(([, v]) => !v.high);
     const high = Object.entries(r).filter(([, v]) => v.high);
     check('low furniture does not hide you', low.length > 0 && low.every(([, v]) => v.sees > 0), JSON.stringify(low.slice(0, 4)));
-    check('tall furniture does', high.length === 0 || high.every(([, v]) => v.sees === 0), JSON.stringify(high));
+    check('tall furniture on the floor today hides you', high.every(([, v]) => v.sees === 0), JSON.stringify(high));
+    // The day's rotation may have nothing tall out, so stand a wardrobe and a
+    // tall bookcase on the floor (their real sizes) and check from behind each.
+    const tall = await page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('FurnitureStore');
+      const pol = s.police;
+      const own = s.covers.bind(s);
+      const x = Math.round((s.bounds.left + s.bounds.right) / 2), y = Math.round(s.bounds.top + 34);
+      const out = {};
+      for (const [id, w, h] of [['fur_wardrobe', 24, 32], ['fur_bookcase_tall', 22, 38], ['fur_sofa_new', 30, 18]]) {
+        const depth = Math.min(8, Math.max(4, Math.round(h / 3)));
+        const high = h >= 24 && !id.includes('sofa');
+        const c = high ? { x: x - w / 2, y: y - depth - 6, w, h: depth + 6, high: true } : { x: x - w / 2, y: y - depth, w, h: depth, high: false };
+        s.covers = () => [c];
+        pol.devPut(x, Math.min(s.bounds.bottom, y + 40), -Math.PI / 2);
+        s.player.setPosition(x, c.y + 2);
+        out[id] = pol.sees();
+      }
+      s.covers = own;
+      return out;
+    });
+    check('a wardrobe or a tall bookcase between you and them hides you', tall.fur_wardrobe === 0 && tall.fur_bookcase_tall === 0, JSON.stringify(tall));
+    check('in the same spot behind a sofa, they see you', tall.fur_sofa_new > 0, JSON.stringify(tall));
+    await page.close();
+  }
+  // the other two arcade rooms: their machines hide you too
+  for (const room of ['ArcadeAnnex', 'ArcadeCasino']) {
+    const page = await newPage(`?intro=1&charity=1&key=1&scene=${room}`);
+    await hunt(page, { disguised: true });
+    await page.evaluate(() => window.__froggy.stealth.visits.put('arcade', 60000));
+    await start(page, room, {});
+    const present = await until(page, (k) => window.__froggy.game().scene.getScene(k).police?.present, 8000, room);
+    const cov = present && (await page.evaluate((k) => {
+      const s = window.__froggy.game().scene.getScene(k);
+      const pol = s.police;
+      const res = [];
+      for (const b of s.solids) {
+        const cx = b.x + b.w / 2, base = b.y + b.h;
+        if (base + 40 > s.bounds.bottom) continue;
+        pol.devPut(cx, base + 40, -Math.PI / 2);
+        s.player.setPosition(cx, b.y - 4);
+        const behind = pol.sees();
+        s.player.setPosition(cx + b.w / 2 + 3, base + 10);
+        res.push({ behind, open: pol.sees() });
+        if (res.length >= 3) break;
+      }
+      return res;
+    }, room));
+    check(`${room}: an officer comes in and looks round`, !!present);
+    check(`${room}: behind a machine, out of sight; beside it, seen`, !!cov && cov.length > 0 && cov.every((c) => c.behind === 0) && cov.some((c) => c.open > 0), JSON.stringify(cov));
     await page.close();
   }
   {

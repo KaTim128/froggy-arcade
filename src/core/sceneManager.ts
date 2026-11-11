@@ -156,6 +156,21 @@ export function bootGame(): void {
   // before it decides how big the picture can be.  On anything without a touch
   // screen both of these do nothing at all.
   touchControls.mount();
+  // The floating arrow pad asks first whether a thumb landed on something in
+  // the game that is there to be tapped; if it did, the tap is the game's.
+  const pg = game;
+  touchControls.setTapTargets((cx, cy) => {
+    const r = pg.canvas.getBoundingClientRect();
+    if (!r.width || cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) return false;
+    const pointer = { x: ((cx - r.left) * pg.scale.width) / r.width, y: ((cy - r.top) * pg.scale.height) / r.height } as Phaser.Input.Pointer;
+    for (const s of pg.scene.getScenes(true)) {
+      const input = s.input as Phaser.Input.InputPlugin & { _list?: Phaser.GameObjects.GameObject[] };
+      if (!input?.enabled) continue;
+      const list = (input._list ?? []).filter((o) => o.input?.enabled);
+      if (list.length && pg.input.hitTest(pointer, list, s.cameras.main, []).length) return true;
+    }
+    return false;
+  });
   attachScaler(game);
   attachLandscapeFill(game);
   installTouchDirector(game);

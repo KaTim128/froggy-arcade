@@ -25,6 +25,14 @@
  * so up-and-left is up-and-left either way.  It only shows the arrows the game
  * in front of it reads; a one-axis game gets two.
  *
+ * AND IT FLOATS.  The eight arrows sit on a ring round the middle, and the
+ * ring goes wherever the thumb does: put a thumb down anywhere on the left
+ * half of the screen and the pad comes to it, centred right under it, so
+ * there is no spot to find without looking.  Lift it and the pad goes back to
+ * rest, quieter, in its corner (where a thumb straight on an arrow still
+ * presses that arrow).  A thumb on something in the game that is there to be
+ * tapped -- a cabinet, the counter -- is the game's, not the pad's.
+ *
  * THE GAME GETS THE WHOLE SCREEN, AND THE CONTROLS FLOAT ON IT.  Nothing is
  * reserved for them: the picture is fitted as large as the glass allows, and
  * the pad and the buttons sit in the bottom corners as an overlay, with no
@@ -204,47 +212,69 @@ const STYLE = `
 #touch-controls .tc-left { left: var(--tc-left, 16px); }
 #touch-controls .tc-right { right: var(--tc-right, 16px); }
 
-/* The arrow pad: a ring of eight arrows round an empty middle.  The pad
-   itself takes the touch, so a thumb can slide from arrow to arrow without
-   lifting; the arrows are only what it looks like. */
+/* The arrow pad: a ring of eight arrows round an empty middle, each one on
+   the circle at its own compass point.  The pad itself takes the touch, so a
+   thumb can slide from arrow to arrow without lifting; the arrows are only
+   what it looks like.  It FLOATS: a thumb put down anywhere on the left half
+   of the screen brings the ring there, centred under it (see floatPad), and
+   it goes back to rest the moment the thumb comes up. */
 #touch-controls .tc-dpad {
   position: relative; pointer-events: auto; touch-action: none;
   width: var(--tc-stick, 150px); height: var(--tc-stick, 150px);
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  gap: 4px;
+  border-radius: 50%;
+  /* each arrow a circle on a ring: sized so no two of them ever touch, the
+     diagonals a little smaller, and all of them inside the pad's own circle */
+  --k: calc(var(--tc-stick, 150px) * 0.27);
+  --rr: calc(var(--tc-stick, 150px) * 0.36);
+  --rd: calc(var(--tc-stick, 150px) * 0.36 * 0.7071);
+}
+#touch-controls .tc-dpad::before {
+  /* the ring the arrows sit on */
+  content: ''; position: absolute; inset: 9%; border-radius: 50%;
+  border: 2px solid rgba(70, 196, 189, 0.22);
+  pointer-events: none;
 }
 #touch-controls .tc-dkey {
   pointer-events: none;
+  position: absolute; left: 50%; top: 50%;
+  width: var(--k); height: var(--k);
+  margin: calc(var(--k) / -2) 0 0 calc(var(--k) / -2);
   display: flex; align-items: center; justify-content: center;
-  border-radius: 12px;
+  border-radius: 50%;
   background: rgba(20, 26, 36, 0.74);
   border: 2px solid rgba(70, 196, 189, 0.55);
-  color: #46c4bd; font-size: calc(var(--tc-stick, 150px) * 0.17); line-height: 1;
-  padding: 0;
+  color: #46c4bd; font-size: calc(var(--tc-stick, 150px) * 0.14); line-height: 1;
+  padding: 0; box-sizing: border-box;
 }
 #touch-controls .tc-dkey.diag {
+  width: calc(var(--k) * 0.8); height: calc(var(--k) * 0.8);
+  margin: calc(var(--k) * -0.4) 0 0 calc(var(--k) * -0.4);
   background: rgba(20, 26, 36, 0.5);
   border-color: rgba(70, 196, 189, 0.3);
-  font-size: calc(var(--tc-stick, 150px) * 0.13);
+  font-size: calc(var(--tc-stick, 150px) * 0.11);
 }
 #touch-controls .tc-dkey.down { background: rgba(255, 212, 94, 0.85); color: #141a24; border-color: rgba(255, 240, 201, 0.9); }
 #touch-controls .tc-dhub {
-  grid-area: 2 / 2; border-radius: 50%; margin: 18%;
+  position: absolute; left: 50%; top: 50%;
+  width: 26%; height: 26%; transform: translate(-50%, -50%);
+  border-radius: 50%;
   background: rgba(70, 196, 189, 0.16); border: 1px solid rgba(70, 196, 189, 0.3);
   pointer-events: none;
 }
 /* A display of flex beats the [hidden] default, so the rule has to say so. */
 #touch-controls .tc-dkey[hidden] { display: none; }
-#touch-controls .tc-dkey.n { grid-area: 1 / 2; }
-#touch-controls .tc-dkey.w { grid-area: 2 / 1; }
-#touch-controls .tc-dkey.e { grid-area: 2 / 3; }
-#touch-controls .tc-dkey.s { grid-area: 3 / 2; }
-#touch-controls .tc-dkey.nw { grid-area: 1 / 1; }
-#touch-controls .tc-dkey.ne { grid-area: 1 / 3; }
-#touch-controls .tc-dkey.sw { grid-area: 3 / 1; }
-#touch-controls .tc-dkey.se { grid-area: 3 / 3; }
+#touch-controls .tc-dkey.n { transform: translate(0, calc(var(--rr) * -1)); }
+#touch-controls .tc-dkey.s { transform: translate(0, var(--rr)); }
+#touch-controls .tc-dkey.w { transform: translate(calc(var(--rr) * -1), 0); }
+#touch-controls .tc-dkey.e { transform: translate(var(--rr), 0); }
+#touch-controls .tc-dkey.nw { transform: translate(calc(var(--rd) * -1), calc(var(--rd) * -1)); }
+#touch-controls .tc-dkey.ne { transform: translate(var(--rd), calc(var(--rd) * -1)); }
+#touch-controls .tc-dkey.sw { transform: translate(calc(var(--rd) * -1), var(--rd)); }
+#touch-controls .tc-dkey.se { transform: translate(var(--rd), var(--rd)); }
+/* Floating under a thumb: fully there, whatever it was at rest. */
+#touch-controls .tc-dpad.floating { opacity: 1 !important; z-index: 2; }
+/* At rest, where a thumb can float it from: a little quieter. */
+#touch-controls .tc-dpad.rest { opacity: 0.55; }
 
 #touch-controls .tc-pads {
   display: grid; gap: var(--tc-gap, 10px);
@@ -572,6 +602,14 @@ class TouchControls {
   private lookX = 0;
   private lookY = 0;
   private band = 0;
+  /**
+   * Asked before the pad floats under a thumb: is there something in the game
+   * right there to tap (a cabinet, a counter, a card)?  Then the touch is the
+   * game's and the pad stays put.  Set by the scene manager, which knows the game.
+   */
+  private tapTarget: ((x: number, y: number) => boolean) | null = null;
+  /** How far the pad is from its rest spot while it floats under a thumb (CSS px). */
+  private floatAt: { dx: number; dy: number } | null = null;
 
   /** No-op on anything without a thumb on it. */
   mount(): void {
@@ -590,7 +628,7 @@ class TouchControls {
       '<div class="tc-lookzone" hidden><div class="tc-hint">' +
       LOOK_HINT +
       '<span>DRAG TO LOOK</span></div></div>' +
-      '<div class="tc-zone tc-left"><div class="tc-dpad">' +
+      '<div class="tc-zone tc-left"><div class="tc-dpad rest">' +
       PAD.map(([cls, glyph]) => `<div class="tc-dkey ${cls}${cls.length > 1 ? ' diag' : ''}">${glyph}</div>`).join('') +
       '<div class="tc-dhub"></div>' +
       '</div><div class="tc-joy" hidden><div class="tc-knob"></div></div></div>' +
@@ -681,6 +719,11 @@ class TouchControls {
             .map((b) => b.className.split(' ')[1]),
       };
     }
+  }
+
+  /** See `tapTarget`. */
+  setTapTargets(fn: (x: number, y: number) => boolean): void {
+    this.tapTarget = fn;
   }
 
   mounted(): boolean {
@@ -828,6 +871,7 @@ class TouchControls {
     this.joyRelease();
     for (const k of [...this.held]) this.up(k);
     this.padTouches.clear();
+    this.restPad();
     this.lookTouch = null;
     this.root?.querySelectorAll('.down').forEach((el) => el.classList.remove('down'));
   }
@@ -910,7 +954,7 @@ class TouchControls {
     const per = 320 / pic.width;
     const reach = (el: HTMLElement | null, side: 'l' | 'r'): number => {
       if (!el || el.offsetParent === null) return 0;
-      const r = el.getBoundingClientRect();
+      const r = this.restRect(el);
       if (r.width === 0 || r.top > pic.bottom || r.bottom < pic.top) return 0;
       return Math.max(0, side === 'l' ? r.right - pic.left : pic.right - r.left) * per;
     };
@@ -1085,6 +1129,7 @@ class TouchControls {
     if (this.stickHeld) {
       for (const k of [...this.held]) this.up(k);
       this.padTouches.clear();
+      this.restPad();
       this.root.querySelectorAll('.down').forEach((el) => el.classList.remove('down'));
     }
   }
@@ -1320,7 +1365,7 @@ class TouchControls {
     let controlsTop = window.innerHeight;
     for (const el of [this.dpad, this.pads] as Array<HTMLElement | null>) {
       if (!el) continue;
-      const r = el.getBoundingClientRect();
+      const r = this.restRect(el);
       if (r.height > 0) controlsTop = Math.min(controlsTop, r.top);
     }
     const safe = safeInsets();
@@ -1399,8 +1444,31 @@ class TouchControls {
       for (const t of Array.from(e.changedTouches)) mine = this.padTouches.delete(t.identifier) || mine;
       if (!mine) return;
       this.aimPad();
+      // the last thumb off it: the pad goes back to where it rests
+      if (!this.padTouches.size) this.restPad();
       e.preventDefault();
     };
+    // ---- THE FLOATING PAD.  The first thumb down anywhere on the left half
+    // of the screen -- not on a button, not on something in the game that is
+    // there to be tapped -- brings the ring to it, centred right under the
+    // thumb, and from there it steers like the pad always has.  Caught on the
+    // way down (capture), before the picture or the look pad can take it.
+    window.addEventListener(
+      'touchstart',
+      (e: TouchEvent) => {
+        if (this.padTouches.size || !this.canFloat()) return;
+        for (const t of Array.from(e.changedTouches)) {
+          if (!this.floatsFrom(t.clientX, t.clientY, e.target)) continue;
+          this.floatPad(t.clientX, t.clientY);
+          this.padTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+          this.aimPad();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+      },
+      { passive: false, capture: true },
+    );
     el.addEventListener('touchstart', start, { passive: false });
     window.addEventListener('touchmove', move, { passive: false });
     window.addEventListener('touchend', end, { passive: false });
@@ -1419,8 +1487,71 @@ class TouchControls {
       this.aimPad();
     });
     window.addEventListener('mouseup', () => {
-      if (this.padTouches.delete(-1)) this.aimPad();
+      if (!this.padTouches.delete(-1)) return;
+      this.aimPad();
+      if (!this.padTouches.size) this.restPad();
     });
+  }
+
+  /** Whether the arrow pad is up right now and free to follow a thumb. */
+  private canFloat(): boolean {
+    const pad = this.dpad;
+    if (!this.root || this.root.hidden || !pad || pad.hidden) return false;
+    if (!this.layout.stick || this.layout.joystick || this.layout.cross || this.stickHeld) return false;
+    const zoneL = this.root.querySelector('.tc-left') as HTMLElement | null;
+    return zoneL?.style.visibility !== 'hidden';
+  }
+
+  /**
+   * Whether a thumb put down here brings the pad: on the left half of the
+   * screen, clear of the top strip (the HUD, the game's own QUIT), not on one
+   * of the buttons, and not on something in the game that is there to tap.
+   */
+  private floatsFrom(x: number, y: number, target: EventTarget | null): boolean {
+    if (x > window.innerWidth / 2) return false;
+    const safe = safeInsets();
+    if (y < safe.top + window.innerHeight * 0.14) return false;
+    const el = target instanceof Element ? target : null;
+    // a button, the gear, the cross: theirs -- and the pad where it rests:
+    // a thumb straight on one of its arrows presses that arrow, as it always has
+    if (el?.closest('.tc-btn, .tc-corner, .tc-xbtn, .tc-joy, .tc-dpad')) return false;
+    // only the picture, the black round it, or the overlay's own empty parts
+    // (a modal or a text box laid over the game is never the pad's)
+    if (el && !el.closest('#touch-controls') && !el.closest('#game-root') && el !== document.body && el !== document.documentElement) return false;
+    if (this.tapTarget?.(x, y)) return false;
+    return true;
+  }
+
+  /** Bring the pad to (x, y), centred on it -- the whole ring kept on the screen. */
+  private floatPad(x: number, y: number): void {
+    const pad = this.dpad as HTMLElement;
+    this.restPad();
+    const r = pad.getBoundingClientRect();
+    const half = r.width / 2;
+    const safe = safeInsets();
+    const cx = Math.min(Math.max(x, safe.left + half + 2), window.innerWidth - safe.right - half - 2);
+    const cy = Math.min(Math.max(y, safe.top + half + 2), window.innerHeight - safe.bottom - half - 2);
+    this.floatAt = { dx: Math.round(cx - (r.left + half)), dy: Math.round(cy - (r.top + half)) };
+    pad.style.transform = `translate(${this.floatAt.dx}px, ${this.floatAt.dy}px)`;
+    pad.classList.add('floating');
+    pad.classList.remove('rest');
+  }
+
+  /** Back to its rest spot, the moment no thumb is on it. */
+  private restPad(): void {
+    const pad = this.dpad;
+    if (!pad) return;
+    this.floatAt = null;
+    pad.style.transform = '';
+    pad.classList.remove('floating');
+    pad.classList.add('rest');
+  }
+
+  /** Where `el` sits at rest: the arrow pad measured where it rests, not where a thumb floated it. */
+  private restRect(el: HTMLElement): DOMRect {
+    const b = el.getBoundingClientRect();
+    const f = el === this.dpad && this.floatAt ? this.floatAt : null;
+    return f ? new DOMRect(b.left - f.dx, b.top - f.dy, b.width, b.height) : b;
   }
 
   /**
