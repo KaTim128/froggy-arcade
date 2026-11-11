@@ -637,7 +637,7 @@ function groundShadow(scene: Phaser.Scene, x: number, w: number): void {
  *
  * TEXTURED, AND NOT THE COLOUR OF THE LAWN (user, 4 Nov).  A dark outline
  * all the way round, a deeper jade skin with darker blotches and fine
- * speckle, a warm yellow belly, orange toe pads and a green eye ring -- so he
+ * speckle, a warm yellow belly, orange toe pads and eyes set in green lids -- so he
  * reads against the grass rather than melting into it.  The eyes stay where
  * they were (-6/6, -23): the status marks sit over them.
  */
@@ -678,11 +678,15 @@ function makeFrog(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameO
   g.lineStyle(1, 0xa8f0b8, 0.7).beginPath();
   g.arc(-1, -13, 10.5, Math.PI * 0.95, Math.PI * 1.2);
   g.strokePath();
-  // the eyes LAST, each in its own dark rim: nothing on the body -- the lit
-  // edge, a blotch, a speck -- is ever drawn across them (user, 4 Nov)
-  g.fillStyle(0x10240e, 1).fillCircle(-6, -23, 5.2).fillCircle(6, -23, 5.2);
-  // a green ring (not yellow -- user, 4 Nov), cream, black, a glint
-  g.fillStyle(0x3aa860, 1).fillCircle(-6, -23, 4.4).fillCircle(6, -23, 4.4);
+  // the eyes LAST: nothing on the body -- the lit edge, a blotch, a speck --
+  // is ever drawn across them (user, 4 Nov).  Each sits in a bulge of the
+  // frog's own green skin, not a dark rim and a bright ring, which read as a
+  // pair of glasses (user, 11 Nov): a shaded lid, lit along its top, that the
+  // eyeball looks out of.  Only the silhouette's outer edge stays dark.
+  g.fillStyle(skinDark, 1).fillCircle(-6, -23, 5).fillCircle(6, -23, 5);
+  g.fillStyle(skin, 1).fillCircle(-6, -23.4, 4.6).fillCircle(6, -23.4, 4.6);
+  g.fillStyle(skinLit, 1).fillEllipse(-6.4, -26.4, 5, 2).fillEllipse(5.6, -26.4, 5, 2);
+  // cream, black, a glint
   g.fillStyle(0xfff4d8, 1).fillCircle(-6, -23, 3.4).fillCircle(6, -23, 3.4);
   g.fillStyle(PALETTE.black, 1).fillCircle(-5, -23, 2).fillCircle(7, -23, 2);
   g.fillStyle(0xffffff, 1).fillRect(-7, -25, 1, 1).fillRect(5, -25, 1, 1);
