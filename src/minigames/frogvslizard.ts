@@ -1647,19 +1647,25 @@ function drawAim(): void {
   const x1 = x0 + Math.cos(aim) * len;
   const y1 = y0 + Math.sin(aim) * len;
   const colour = charging ? PALETTE.gold : PALETTE.cream;
-  aimG.lineStyle(charging ? 2 : 1, colour, charging ? 1 : 0.75);
-  aimG.beginPath();
-  aimG.moveTo(x0, y0);
-  aimG.lineTo(x1, y1);
-  aimG.strokePath();
+  // EASY TO SEE ON THE BRIGHT SKY (user, 11 Nov): the arrow and the dots
+  // are solid, each laid over a dark edge, so they read on the sky, the
+  // clouds and the grass alike.
+  const edge = 0x141a24;
   const head = 5;
   const a = Math.PI * 0.8;
-  aimG.beginPath();
-  aimG.moveTo(x1, y1);
-  aimG.lineTo(x1 + Math.cos(aim + a) * head, y1 + Math.sin(aim + a) * head);
-  aimG.moveTo(x1, y1);
-  aimG.lineTo(x1 + Math.cos(aim - a) * head, y1 + Math.sin(aim - a) * head);
-  aimG.strokePath();
+  const arrow = (w: number, c: number, alpha: number): void => {
+    aimG!.lineStyle(w, c, alpha);
+    aimG!.beginPath();
+    aimG!.moveTo(x0, y0);
+    aimG!.lineTo(x1, y1);
+    aimG!.moveTo(x1, y1);
+    aimG!.lineTo(x1 + Math.cos(aim + a) * head, y1 + Math.sin(aim + a) * head);
+    aimG!.moveTo(x1, y1);
+    aimG!.lineTo(x1 + Math.cos(aim - a) * head, y1 + Math.sin(aim - a) * head);
+    aimG!.strokePath();
+  };
+  arrow(charging ? 4 : 3, edge, 0.6);
+  arrow(charging ? 2 : 1.5, colour, 1);
 
   // the still-air arc, in dots
   const speed = THROW_MIN + (charging ? power : 0.5) * (THROW_MAX - THROW_MIN);
@@ -1667,7 +1673,7 @@ function drawAim(): void {
   let py = y0;
   let vx = Math.cos(aim) * speed;
   let vy = Math.sin(aim) * speed;
-  aimG.fillStyle(colour, charging ? 0.85 : 0.4);
+  const dots: Array<[number, number]> = [];
   for (let i = 0; i < 22; i++) {
     for (let k = 0; k < 4; k++) {
       const h = 0.018;
@@ -1676,8 +1682,18 @@ function drawAim(): void {
       py += vy * h;
     }
     if (py > GROUND_Y || px > GAME_W) break;
-    aimG.fillCircle(px, py, 1);
+    dots.push([px, py]);
   }
+  // each dot a crisp pixel bead -- a light 2x2 in a dark 4x4, on whole
+  // pixels (round dots this small came out lumpy) -- fading a little
+  // towards the far end
+  dots.forEach(([dx, dy], i) => {
+    const fade = 1 - (i / Math.max(1, dots.length)) * 0.35;
+    const qx = Math.round(dx);
+    const qy = Math.round(dy);
+    aimG!.fillStyle(edge, 0.65 * fade).fillRect(qx - 2, qy - 2, 4, 4);
+    aimG!.fillStyle(colour, fade).fillRect(qx - 1, qy - 1, 2, 2);
+  });
 }
 
 // -------------------------------------------------------------- the lizard
