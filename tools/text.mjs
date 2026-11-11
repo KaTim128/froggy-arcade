@@ -166,7 +166,8 @@ try {
   // "SETTINGS" is gold on the flat ink panel, so every pixel of it must be one
   // of exactly those two colours.  Any blend is antialiasing.
   console.log('\nAR-2  the text is 1-bit, not antialiased');
-  await page.mouse.click(640, 360 + (148 - 90) * 4); // SETTINGS
+  // SETTINGS sits beside PROFILES under START (game x 192, y 128)
+  await page.mouse.click(192 * 4, 360 + (128 - 90) * 4);
   await sleep(900);
 
   const b64 = await page.screenshot({ encoding: 'base64' });
